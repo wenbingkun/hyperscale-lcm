@@ -1,9 +1,12 @@
 package com.sc.lcm.core.api;
 
+import io.quarkus.security.Authenticated;
 import io.smallrye.jwt.build.Jwt;
 import io.smallrye.mutiny.Uni;
 import jakarta.annotation.security.PermitAll;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +26,9 @@ import java.util.Set;
 @PermitAll
 @Slf4j
 public class AuthResource {
+
+    @Inject
+    JsonWebToken jwt;
 
     /**
      * 登录并获取 JWT Token (开发用)
@@ -59,10 +65,33 @@ public class AuthResource {
      */
     @POST
     @Path("/refresh")
-    public Uni<Response> refresh(@HeaderParam("Authorization") String authHeader) {
-        // TODO: 验证旧 Token 并生成新 Token
-        return Uni.createFrom().item(Response.status(Response.Status.NOT_IMPLEMENTED)
-                .entity(new ErrorResponse("Token refresh not implemented"))
+    @Authenticated
+    @Consumes(MediaType.WILDCARD)
+    public Uni<Response> refresh() {
+        if (jwt == null || jwt.getName() == null) {
+            log.warn("❌ Token refresh failed: No valid principal found in token");
+            return Uni.createFrom().item(Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(new ErrorResponse("Invalid or missing token"))
+                    .build());
+        }
+
+        String username = jwt.getName();
+        Set<String> roles = jwt.getGroups();
+        String tenantId = jwt.getClaim("tenant_id");
+
+        log.info("🔄 Refreshing token for user: {}, roles: {}, tenant: {}", username, roles, tenantId);
+
+        // 生成新 JWT Token
+        String newToken = Jwt.issuer("https://lcm.example.com")
+                .upn(username)
+                .groups(roles)
+                .claim("tenant_id", tenantId != null ? tenantId : "default")
+                .expiresIn(Duration.ofHours(8))
+                .sign();
+
+        String primaryRole = roles != null && !roles.isEmpty() ? roles.iterator().next() : "USER";
+
+        return Uni.createFrom().item(Response.ok(new TokenResponse(newToken, primaryRole, 28800))
                 .build());
     }
 
