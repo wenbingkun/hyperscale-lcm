@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hyperscale-lcm-core
+  labels:
+    app: hyperscale-lcm
+    component: core
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hyperscale-lcm
+      component: core
+  template:
+    metadata:
+      labels:
+        app: hyperscale-lcm
+        component: core
+    spec:
+      containers:
+        - name: core
+          image: hyperscale-lcm/core:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 9000
+          env:
+            - name: DB_REACTIVE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hyperscale-lcm-secrets
+                  key: db-reactive-url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: hyperscale-lcm-secrets
+                  key: db-username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hyperscale-lcm-secrets
+                  key: db-password
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperscale-lcm-config
+                  key: redis-url
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperscale-lcm-config
+                  key: kafka-bootstrap-servers
+            - name: OTEL_EXPORTER_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: hyperscale-lcm-config
+                  key: otel-exporter-endpoint
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: certs
+              mountPath: /app/certs
+              readOnly: true
+      volumes:
+        - name: certs
+          secret:
+            secretName: hyperscale-lcm-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hyperscale-lcm-core
+  labels:
+    app: hyperscale-lcm
+    component: core
+spec:
+  selector:
+    app: hyperscale-lcm
+    component: core
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 9000
+      targetPort: 9000
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hyperscale-lcm-core-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hyperscale-lcm-core
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

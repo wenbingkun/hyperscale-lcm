@@ -1,0 +1,91 @@
+# ============================================
+# Hyperscale LCM .gitignore
+# ============================================
+
+# ============ Java / Gradle ============
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# ============ Go ============
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+satellite/satellite
+satellite/loadgen
+satellite/rogue_client
+
+# Test binary
+*.test
+
+# Output of go build
+*.out
+
+# Dependency directories
+vendor/
+
+# ============ Node / React ============
+node_modules/
+dist/
+.cache/
+.parcel-cache/
+*.local
+
+# ============ Environment ============
+.env
+.env.local
+.env.*.local
+*.pem
+!core/src/main/resources/META-INF/resources/*.pem
+
+# ============ OS Files ============
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ============ Docker ============
+docker-compose.override.yml
+
+# ============ Kubernetes Secrets ============
+# 不提交真实的 secrets
+k8s/*-secrets.yaml
+!k8s/secrets.yaml
+
+# ============ Logs ============
+logs/
+*.log
+
+# ============ Coverage ============
+coverage/
+*.lcov
+htmlcov/
+
+# ============ Temporary ============
+tmp/
+temp/
+*.tmp
+*.bak

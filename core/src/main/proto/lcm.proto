@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package lcm;
+
+option java_multiple_files = true;
+option java_package = "com.sc.lcm.core.grpc";
+option java_outer_classname = "LcmProto";
+option go_package = "github.com/sc-lcm/satellite/pkg/grpc;lcm";
+
+service LcmService {
+    // Satellite registers itself to the Core upon startup
+    rpc RegisterSatellite (RegisterRequest) returns (RegisterResponse);
+
+    // Periodic heartbeat to keep status online
+    rpc SendHeartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+
+    // Report discovered assets (e.g. from network scan)
+    rpc ReportDiscovery (DiscoveryRequest) returns (DiscoveryResponse);
+
+    // Persistent bidirectional stream for command push
+    rpc ConnectStream (stream StreamRequest) returns (stream StreamResponse);
+}
+
+message RegisterRequest {
+    string hostname = 1;
+    string ip_address = 2;
+    string os_version = 3;
+    string agent_version = 4;
+}
+
+message RegisterResponse {
+    bool success = 1;
+    string message = 2;
+    string assigned_id = 3; // Core assigns a unique ID to the satellite
+}
+
+message HeartbeatRequest {
+    string satellite_id = 1;
+    double load_avg = 2; // CPU Load Average (1 min)
+    uint64 memory_used_bytes = 3; 
+}
+
+message HeartbeatResponse {
+    bool success = 1;
+}
+
+message DiscoveryRequest {
+    string satellite_id = 1;
+    string discovered_ip = 2;
+    string mac_address = 3; // Optional
+    string discovery_method = 4; // e.g. "PING", "ARP", "DHCP"
+}
+
+message DiscoveryResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message StreamRequest {
+    string satellite_id = 1;
+    oneof payload {
+        bool init = 2; // Handshake
+        JobStatusUpdate status_update = 3;
+    }
+}
+
+message JobStatusUpdate {
+    string job_id = 1;
+    JobStatus status = 2;
+    string message = 3; // logs or error message
+    int32 exit_code = 4;
+}
+
+enum JobStatus {
+    PENDING = 0;
+    RUNNING = 1;
+    COMPLETED = 2;
+    FAILED = 3;
+}
+
+message StreamResponse {
+    string command_id = 1;
+    string command_type = 2; // e.g. "EXEC_SHELL"
+    string payload = 3; // e.g. "echo Hello"
+}

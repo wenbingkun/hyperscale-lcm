@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hyperscale-lcm-config
+  labels:
+    app: hyperscale-lcm
+data:
+  # Redis 连接
+  redis-url: "redis://redis-master.default.svc.cluster.local:6379"
+  
+  # Kafka 连接
+  kafka-bootstrap-servers: "kafka.default.svc.cluster.local:9092"
+  
+  # Core gRPC 地址 (供 Satellite 使用)
+  core-grpc-address: "hyperscale-lcm-core.default.svc.cluster.local:9000"
+  
+  # OpenTelemetry 导出器
+  otel-exporter-endpoint: "http://jaeger-collector.observability.svc.cluster.local:4317"
+  
+  # CORS 允许的源
+  cors-origins: "http://localhost:5173,https://dashboard.example.com"

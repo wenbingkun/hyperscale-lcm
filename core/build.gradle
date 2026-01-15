@@ -1,0 +1,102 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version '3.6.4'
+    id 'eclipse'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    
+    // Web & API
+    implementation 'io.quarkus:quarkus-resteasy-reactive-jackson'
+    implementation 'io.quarkus:quarkus-smallrye-openapi'
+    implementation 'io.quarkus:quarkus-hibernate-validator'
+    implementation 'io.quarkus:quarkus-grpc'
+    
+    // DB & ORM - Reactive (Non-blocking)
+    implementation 'io.quarkus:quarkus-hibernate-reactive-panache'
+    implementation 'io.quarkus:quarkus-reactive-pg-client'
+    
+    // AI Scheduling (Timefold)
+    implementation 'ai.timefold.solver:timefold-solver-quarkus:1.4.0'
+    
+    // Observability
+    implementation 'io.quarkus:quarkus-micrometer-registry-prometheus'
+    implementation 'io.quarkus:quarkus-smallrye-health'
+    
+    // Distributed Tracing (OpenTelemetry)
+    implementation 'io.quarkus:quarkus-opentelemetry'
+
+    // Middleware
+    implementation 'io.quarkus:quarkus-redis-client'
+    implementation 'io.quarkus:quarkus-smallrye-reactive-messaging-kafka'
+    implementation 'io.quarkus:quarkus-kafka-client'
+    implementation 'io.quarkus:quarkus-flyway'
+    // Flyway needs JDBC for migrations
+    implementation 'io.quarkus:quarkus-jdbc-postgresql'
+
+    // Utilities
+    implementation 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+    
+    // Timefold Constraint Verifier for testing
+    testImplementation 'ai.timefold.solver:timefold-solver-test:1.4.0'
+    
+    // Scheduler for background tasks
+    implementation 'io.quarkus:quarkus-scheduler'
+    
+    // Resilience (Rate Limiting & Circuit Breaker)
+    implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
+    
+    // WebSocket for real-time Dashboard
+    implementation 'io.quarkus:quarkus-websockets'
+    
+    // Metrics (Prometheus)
+    implementation 'io.quarkus:quarkus-micrometer-registry-prometheus'
+    
+    // Security (JWT + RBAC)
+    implementation 'io.quarkus:quarkus-smallrye-jwt'
+    implementation 'io.quarkus:quarkus-smallrye-jwt-build'
+    
+    // OpenAPI / Swagger UI (P7-2)
+    implementation 'io.quarkus:quarkus-smallrye-openapi'
+    
+    // Health Checks (P6-5)
+    implementation 'io.quarkus:quarkus-smallrye-health'
+}
+
+group 'com.sc.lcm'
+version '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+test {
+    systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
+}
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs += 'build/generated/sources/quarkus/grpc'
+            srcDirs += 'build/classes/java/quarkus-generated-sources/grpc'
+        }
+    }
+}
