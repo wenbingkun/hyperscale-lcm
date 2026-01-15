@@ -56,7 +56,8 @@ dependencies {
     // Resilience (Rate Limiting & Circuit Breaker)
     implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
     
-    // WebSocket for real-time Dashboard
+    // WebSocket for real-time Dashboard (classic Jakarta WebSocket API)
+    implementation 'io.quarkus:quarkus-undertow'
     implementation 'io.quarkus:quarkus-websockets'
     
     // Metrics (Prometheus)
@@ -96,7 +97,6 @@ sourceSets {
     main {
         java {
             srcDirs += 'build/generated/sources/quarkus/grpc'
-            srcDirs += 'build/classes/java/quarkus-generated-sources/grpc'
         }
     }
 }
