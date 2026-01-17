@@ -1,12 +1,19 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Satellite, Cpu, Settings, Activity } from 'lucide-react';
+import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2 } from 'lucide-react';
 
 interface LayoutProps {
     children: React.ReactNode;
 }
 
 export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
+    const navLinkClass = ({ isActive }: { isActive: boolean }) => `
+        flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+        ${isActive
+            ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.05)] border border-white/5'
+            : 'text-gray-400 hover:text-cyan-400 hover:bg-white/5'}
+    `;
+
     return (
         <div className="min-h-screen flex flex-col bg-[url('/grid-pattern.svg')] bg-fixed">
             {/* Header */}
@@ -22,41 +29,25 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
 
                 <nav className="hidden md:flex items-center gap-1">
-                    <NavLink
-                        to="/"
-                        className={({ isActive }) => `
-                            flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                            ${isActive
-                                ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.05)] border border-white/5'
-                                : 'text-gray-400 hover:text-cyan-400 hover:bg-white/5'}
-                        `}
-                    >
+                    <NavLink to="/" className={navLinkClass}>
                         <LayoutDashboard size={18} />
                         Overview
                     </NavLink>
-                    <NavLink
-                        to="/satellites"
-                        className={({ isActive }) => `
-                            flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                            ${isActive
-                                ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.05)] border border-white/5'
-                                : 'text-gray-400 hover:text-cyan-400 hover:bg-white/5'}
-                        `}
-                    >
+                    <NavLink to="/satellites" className={navLinkClass}>
                         <Satellite size={18} />
                         Satellites
                     </NavLink>
-                    <NavLink
-                        to="/jobs"
-                        className={({ isActive }) => `
-                            flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
-                            ${isActive
-                                ? 'bg-white/10 text-white shadow-[0_0_10px_rgba(255,255,255,0.05)] border border-white/5'
-                                : 'text-gray-400 hover:text-cyan-400 hover:bg-white/5'}
-                        `}
-                    >
+                    <NavLink to="/jobs" className={navLinkClass}>
                         <Cpu size={18} />
                         Jobs
+                    </NavLink>
+                    <NavLink to="/discovery" className={navLinkClass}>
+                        <Wifi size={18} />
+                        Discovery
+                    </NavLink>
+                    <NavLink to="/tenants" className={navLinkClass}>
+                        <Building2 size={18} />
+                        Tenants
                     </NavLink>
                 </nav>
 

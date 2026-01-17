@@ -5,6 +5,8 @@ import { SatellitesPage } from './pages/SatellitesPage';
 import { SatelliteDetailPage } from './pages/SatelliteDetailPage';
 import { JobsPage } from './pages/JobsPage';
 import { JobDetailPage } from './pages/JobDetailPage';
+import { DiscoveryPage } from './pages/DiscoveryPage';
+import { TenantsPage } from './pages/TenantsPage';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 
 function App() {
@@ -18,6 +20,8 @@ function App() {
             <Route path="/satellites/:id" element={<SatelliteDetailPage />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:id" element={<JobDetailPage />} />
+            <Route path="/discovery" element={<DiscoveryPage />} />
+            <Route path="/tenants" element={<TenantsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </DashboardLayout>
