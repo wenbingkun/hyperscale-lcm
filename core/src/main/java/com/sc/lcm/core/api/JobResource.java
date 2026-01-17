@@ -166,20 +166,13 @@ public class JobResource {
         @GET
         @Path("/stats")
         public Uni<JobStats> getJobStats() {
-                return Uni.combine().all()
-                                .unis(
-                                                Job.countByStatus(JobStatus.PENDING),
-                                                Job.countByStatus(JobStatus.SCHEDULED),
-                                                Job.countByStatus(JobStatus.RUNNING),
-                                                Job.countByStatus(JobStatus.COMPLETED),
-                                                Job.countByStatus(JobStatus.FAILED))
-                                .asTuple()
-                                .onItem().transform(tuple -> new JobStats(
-                                                tuple.getItem1(),
-                                                tuple.getItem2(),
-                                                tuple.getItem3(),
-                                                tuple.getItem4(),
-                                                tuple.getItem5()));
+                // Execute sequentially to avoid concurrent session usage issues
+                return Job.countByStatus(JobStatus.PENDING).flatMap(pending -> Job.countByStatus(JobStatus.SCHEDULED)
+                                .flatMap(scheduled -> Job.countByStatus(JobStatus.RUNNING).flatMap(running -> Job
+                                                .countByStatus(JobStatus.COMPLETED)
+                                                .flatMap(completed -> Job.countByStatus(JobStatus.FAILED)
+                                                                .map(failed -> new JobStats(pending, scheduled, running,
+                                                                                completed, failed))))));
         }
 
         // ============== DTO Records ==============

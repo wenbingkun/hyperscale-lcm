@@ -7,6 +7,7 @@ export const JobSubmissionForm: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const [formData, setFormData] = useState({
+        name: '',
         cpuCores: 4,
         memoryGb: 16,
         gpuCount: 1
@@ -18,9 +19,14 @@ export const JobSubmissionForm: React.FC = () => {
         setSuccess(false);
 
         try {
-            await submitJob(formData);
+            await submitJob({
+                ...formData,
+                name: formData.name || `Job-${Date.now()}` // Default name if empty
+            });
             setSuccess(true);
             setTimeout(() => setSuccess(false), 3000);
+            // Reset form but keep defaults
+            setFormData(prev => ({ ...prev, name: '' }));
         } catch (err) {
             console.error(err);
             alert("Failed to submit job");
@@ -32,6 +38,16 @@ export const JobSubmissionForm: React.FC = () => {
     return (
         <GlassCard title="Submit AI Training Job">
             <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm text-gray-400 mb-1">Job Name</label>
+                    <input
+                        type="text"
+                        placeholder="e.g. LLM-Training-v1"
+                        value={formData.name}
+                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors placeholder:text-gray-600"
+                    />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label className="block text-sm text-gray-400 mb-1">CPU Cores</label>
@@ -40,7 +56,7 @@ export const JobSubmissionForm: React.FC = () => {
                             min="1"
                             value={formData.cpuCores}
                             onChange={e => setFormData({ ...formData, cpuCores: parseInt(e.target.value) })}
-                            className="w-full bg-black/30 border border-gray-700 rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
+                            className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
                         />
                     </div>
                     <div>
@@ -50,7 +66,7 @@ export const JobSubmissionForm: React.FC = () => {
                             min="1"
                             value={formData.memoryGb}
                             onChange={e => setFormData({ ...formData, memoryGb: parseInt(e.target.value) })}
-                            className="w-full bg-black/30 border border-gray-700 rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
+                            className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
                         />
                     </div>
                     <div>
@@ -60,7 +76,7 @@ export const JobSubmissionForm: React.FC = () => {
                             min="0"
                             value={formData.gpuCount}
                             onChange={e => setFormData({ ...formData, gpuCount: parseInt(e.target.value) })}
-                            className="w-full bg-black/30 border border-gray-700 rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
+                            className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
                         />
                     </div>
                 </div>
