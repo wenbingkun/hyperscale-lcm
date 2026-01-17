@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { GlassCard } from './GlassCard';
 import { fetchSatellites } from '../api/client';
 import type { Satellite } from '../api/client';
@@ -43,11 +44,15 @@ export const SatelliteTable: React.FC = () => {
                                 </tr>
                             ) : (
                                 satellites.map((sat) => (
-                                    <tr key={sat.id} className="border-b border-gray-800/50 hover:bg-white/5 transition-colors">
+                                    <tr key={sat.id} className="border-b border-gray-800/50 hover:bg-white/5 transition-colors cursor-pointer group">
                                         <td className="py-3">
                                             <span className={`inline-flex h-2.5 w-2.5 rounded-full ${sat.status === 'ONLINE' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]' : 'bg-red-500'}`}></span>
                                         </td>
-                                        <td className="py-3 font-medium text-white">{sat.hostname}</td>
+                                        <td className="py-3 font-medium text-white">
+                                            <Link to={`/satellites/${sat.id}`} className="hover:text-cyan-400 transition-colors">
+                                                {sat.hostname}
+                                            </Link>
+                                        </td>
                                         <td className="py-3 text-cyan-300 font-mono text-sm">{sat.ipAddress}</td>
                                         <td className="py-3 text-gray-400 text-sm">{sat.osVersion}</td>
                                         <td className="py-3 text-gray-500 text-xs font-mono">{new Date(sat.lastHeartbeat).toLocaleTimeString()}</td>

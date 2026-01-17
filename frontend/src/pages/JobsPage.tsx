@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { GlassCard } from '../components/GlassCard';
 import { fetchJobs, type Job } from '../api/client';
-import { RefreshCcw, Search } from 'lucide-react';
+import { RefreshCcw, Search, ExternalLink } from 'lucide-react';
 
 export const JobsPage: React.FC = () => {
     const [jobs, setJobs] = useState<Job[]>([]);
@@ -78,10 +79,13 @@ export const JobsPage: React.FC = () => {
                                 jobs.map((job) => (
                                     <tr key={job.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
                                         <td className="py-4 px-4 pl-6">
-                                            <div className="font-medium text-white group-hover:text-cyan-400 transition-colors">
-                                                {job.name || 'Untitled Job'}
-                                            </div>
-                                            <div className="text-xs text-gray-500 font-mono mt-1">{job.id.substring(0, 8)}...</div>
+                                            <Link to={`/jobs/${job.id}`} className="block">
+                                                <div className="font-medium text-white group-hover:text-cyan-400 transition-colors flex items-center gap-2">
+                                                    {job.name || 'Untitled Job'}
+                                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                                <div className="text-xs text-gray-500 font-mono mt-1">{job.id.substring(0, 8)}...</div>
+                                            </Link>
                                         </td>
                                         <td className="py-4 px-4">
                                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(job.status)}`}>
@@ -89,7 +93,11 @@ export const JobsPage: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="py-4 px-4 text-sm text-gray-300 font-mono">
-                                            {job.assignedNodeId ? job.assignedNodeId.substring(0, 12) : '-'}
+                                            {job.assignedNodeId ? (
+                                                <Link to={`/satellites/${job.assignedNodeId}`} className="hover:text-cyan-400">
+                                                    {job.assignedNodeId.substring(0, 12)}
+                                                </Link>
+                                            ) : '-'}
                                         </td>
                                         <td className="py-4 px-4 text-sm text-gray-400">
                                             {job.scheduledAt ? new Date(job.scheduledAt).toLocaleString() : '-'}
