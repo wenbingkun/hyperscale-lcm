@@ -107,6 +107,7 @@ public class JobResource {
         /**
          * 取消作业 (仅 ADMIN 和 OPERATOR)
          */
+        @SuppressWarnings("unused")
         @DELETE
         @Path("/{id}")
         @RolesAllowed({ "ADMIN", "OPERATOR" })
