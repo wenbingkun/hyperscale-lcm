@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
-import { Wifi, Check, X, Plus, RefreshCw, Monitor } from 'lucide-react';
+import { Wifi, Check, X, RefreshCw, Monitor, Play, Square, Search } from 'lucide-react';
 
 interface DiscoveredDevice {
     id: string;
@@ -13,12 +13,26 @@ interface DiscoveredDevice {
     discoveredAt: string;
 }
 
+interface ScanJob {
+    id: string;
+    target: string;
+    status: string;
+    progressPercent: number;
+    scannedCount: number;
+    totalIps: number;
+    discoveredCount: number;
+}
+
 const API_BASE = 'http://localhost:8080';
 
 export const DiscoveryPage: React.FC = () => {
     const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
     const [loading, setLoading] = useState(true);
     const [pendingCount, setPendingCount] = useState(0);
+    const [showScanModal, setShowScanModal] = useState(false);
+    const [scanTarget, setScanTarget] = useState('');
+    const [scanPorts, setScanPorts] = useState('22,8080,9000,623');
+    const [runningScan, setRunningScan] = useState<ScanJob | null>(null);
 
     const loadDevices = async () => {
         try {
@@ -51,10 +65,78 @@ export const DiscoveryPage: React.FC = () => {
         }
     };
 
+    const checkRunningScan = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_BASE}/api/scan/running`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setRunningScan(data.running ? data.job : null);
+            }
+        } catch (error) {
+            console.error('Failed to check running scan:', error);
+        }
+    };
+
     useEffect(() => {
         loadDevices();
         loadPendingCount();
+        checkRunningScan();
+
+        // Poll for running scan status
+        const interval = setInterval(() => {
+            checkRunningScan();
+            if (runningScan) {
+                loadDevices();
+                loadPendingCount();
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
     }, []);
+
+    const startScan = async () => {
+        if (!scanTarget) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${API_BASE}/api/scan`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    target: scanTarget,
+                    ports: scanPorts
+                })
+            });
+            if (response.ok) {
+                setShowScanModal(false);
+                setScanTarget('');
+                checkRunningScan();
+            }
+        } catch (error) {
+            console.error('Failed to start scan:', error);
+        }
+    };
+
+    const cancelScan = async () => {
+        if (!runningScan) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            await fetch(`${API_BASE}/api/scan/${runningScan.id}/cancel`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setRunningScan(null);
+        } catch (error) {
+            console.error('Failed to cancel scan:', error);
+        }
+    };
 
     const approveDevice = async (id: string) => {
         const token = localStorage.getItem('token');
@@ -91,21 +173,21 @@ export const DiscoveryPage: React.FC = () => {
             <header className="flex items-center justify-between">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Device Discovery</h2>
-                    <p className="text-gray-400 mt-1">Manage discovered devices and approve for onboarding</p>
+                    <p className="text-gray-400 mt-1">Scan networks and manage discovered devices</p>
                 </div>
                 <div className="flex gap-3">
                     {pendingCount > 0 && (
                         <div className="px-4 py-2 rounded-lg bg-yellow-500/20 border border-yellow-500/30 text-yellow-400">
-                            <span className="font-bold">{pendingCount}</span> pending approval
+                            <span className="font-bold">{pendingCount}</span> pending
                         </div>
                     )}
                     <button
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/30 transition-colors opacity-50 cursor-not-allowed"
-                        disabled
-                        title="Coming soon"
+                        onClick={() => setShowScanModal(true)}
+                        disabled={!!runningScan}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-colors disabled:opacity-50"
                     >
-                        <Plus size={18} />
-                        Add Device
+                        <Search size={18} />
+                        Scan Network
                     </button>
                     <button
                         onClick={loadDevices}
@@ -116,7 +198,96 @@ export const DiscoveryPage: React.FC = () => {
                 </div>
             </header>
 
-            <GlassCard className="min-h-[500px]">
+            {/* Running Scan Progress */}
+            {runningScan && (
+                <GlassCard className="!p-4 border-l-4 border-l-purple-500">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 rounded-lg bg-purple-500/20">
+                                <Search size={20} className="text-purple-400 animate-pulse" />
+                            </div>
+                            <div>
+                                <p className="text-white font-medium">Scanning: {runningScan.target}</p>
+                                <p className="text-sm text-gray-400">
+                                    {runningScan.scannedCount} / {runningScan.totalIps} IPs •
+                                    {runningScan.discoveredCount} discovered
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="w-48">
+                                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-purple-500 transition-all"
+                                        style={{ width: `${runningScan.progressPercent}%` }}
+                                    />
+                                </div>
+                                <p className="text-xs text-center text-gray-400 mt-1">{runningScan.progressPercent}%</p>
+                            </div>
+                            <button
+                                onClick={cancelScan}
+                                className="p-2 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                            >
+                                <Square size={16} />
+                            </button>
+                        </div>
+                    </div>
+                </GlassCard>
+            )}
+
+            {/* Scan Modal */}
+            {showScanModal && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+                    <GlassCard className="w-full max-w-lg">
+                        <h3 className="text-lg font-semibold text-white mb-4">Start Network Scan</h3>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-2">Target (CIDR or IP Range)</label>
+                                <input
+                                    type="text"
+                                    value={scanTarget}
+                                    onChange={(e) => setScanTarget(e.target.value)}
+                                    placeholder="e.g., 192.168.1.0/24 or 10.0.0.1-10.0.0.100"
+                                    className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-2">Ports to Scan</label>
+                                <input
+                                    type="text"
+                                    value={scanPorts}
+                                    onChange={(e) => setScanPorts(e.target.value)}
+                                    placeholder="22,8080,9000,623"
+                                    className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">SSH (22), HTTP (8080), gRPC (9000), IPMI (623)</p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => setShowScanModal(false)}
+                                className="flex-1 px-4 py-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={startScan}
+                                disabled={!scanTarget}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-500 text-white hover:bg-purple-600 disabled:opacity-50"
+                            >
+                                <Play size={18} />
+                                Start Scan
+                            </button>
+                        </div>
+                    </GlassCard>
+                </div>
+            )}
+
+            {/* Devices Table */}
+            <GlassCard className="min-h-[400px]">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
@@ -136,6 +307,7 @@ export const DiscoveryPage: React.FC = () => {
                                     <td colSpan={7} className="py-12 text-center text-gray-500">
                                         <Wifi size={48} className="mx-auto mb-4 opacity-30" />
                                         No devices discovered yet
+                                        <p className="text-sm mt-2">Start a network scan to discover devices</p>
                                     </td>
                                 </tr>
                             ) : (
