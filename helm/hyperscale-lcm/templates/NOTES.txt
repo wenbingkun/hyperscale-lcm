@@ -1,0 +1,25 @@
+1. Hyperscale LCM 已部署!
+
+访问应用:
+{{- if .Values.ingress.enabled }}
+  http://{{ (index .Values.ingress.hosts 0).host }}
+{{- else }}
+  kubectl port-forward svc/{{ .Release.Name }}-frontend 8080:80 -n {{ .Release.Namespace }}
+  然后访问: http://localhost:8080
+{{- end }}
+
+2. 获取 API 端点:
+{{- if .Values.ingress.enabled }}
+  http://{{ (index .Values.ingress.hosts 0).host }}/api
+{{- else }}
+  kubectl port-forward svc/{{ .Release.Name }}-core 8080:8080 -n {{ .Release.Namespace }}
+{{- end }}
+
+3. 查看 Pod 状态:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+4. 查看日志:
+  kubectl logs -f deployment/{{ .Release.Name }}-core -n {{ .Release.Namespace }}
+
+5. Swagger API 文档:
+  http://{{ (index .Values.ingress.hosts 0).host }}/q/swagger-ui

@@ -1,0 +1,63 @@
+{{- if .Values.satellite.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ .Release.Name }}-satellite
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: satellite
+spec:
+  selector:
+    matchLabels:
+      {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.satellite.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.satellite.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: satellite
+          image: {{ include "hyperscale-lcm.image" .Values.satellite.image }}
+          imagePullPolicy: {{ .Values.satellite.image.pullPolicy }}
+          env:
+            - name: CORE_HOST
+              value: {{ .Release.Name }}-core
+            - name: CORE_GRPC_PORT
+              value: {{ .Values.core.service.grpcPort | quote }}
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            {{- toYaml .Values.satellite.resources | nindent 12 }}
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+      hostNetwork: true
+      hostPID: true
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: host-proc
+          hostPath:
+            path: /proc
+{{- end }}

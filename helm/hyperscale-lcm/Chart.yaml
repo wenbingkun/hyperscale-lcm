@@ -1,0 +1,31 @@
+apiVersion: v2
+name: hyperscale-lcm
+description: Hyperscale Lifecycle Management - GPU 集群作业调度与容器编排平台
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - gpu
+  - kubernetes
+  - scheduling
+  - lifecycle-management
+  - distributed-computing
+
+maintainers:
+  - name: SC Team
+    email: team@sc.com
+
+dependencies:
+  - name: postgresql
+    version: "15.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "18.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: kafka
+    version: "26.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: kafka.enabled

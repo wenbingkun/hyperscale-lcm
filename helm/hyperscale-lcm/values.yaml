@@ -1,0 +1,192 @@
+# 全局配置
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# ============== Core 服务配置 ==============
+core:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    repository: hyperscale-lcm/core
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    httpPort: 8080
+    grpcPort: 9000
+  
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  
+  # 自动扩缩
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+  
+  # 健康检查
+  health:
+    liveness:
+      path: /q/health/live
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    readiness:
+      path: /q/health/ready
+      initialDelaySeconds: 10
+      periodSeconds: 5
+  
+  # 环境变量
+  env:
+    QUARKUS_PROFILE: prod
+    JAVA_OPTS: "-Xms512m -Xmx2g"
+
+# ============== Frontend 配置 ==============
+frontend:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    repository: hyperscale-lcm/frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    port: 80
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  
+  # API 代理配置
+  apiProxy:
+    backend: http://{{ .Release.Name }}-core:8080
+
+# ============== Satellite DaemonSet 配置 ==============
+satellite:
+  enabled: true
+  
+  image:
+    repository: hyperscale-lcm/satellite
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Core 服务地址
+  core:
+    host: "{{ .Release.Name }}-core"
+    grpcPort: 9000
+  
+  # 节点选择器
+  nodeSelector: {}
+  
+  # 容忍度 (用于 GPU 节点)
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+# ============== Ingress 配置 ==============
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/websocket-services: "{{ .Release.Name }}-core"
+  hosts:
+    - host: lcm.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: core
+        - path: /ws
+          pathType: Prefix
+          service: core
+  tls: []
+
+# ============== 基础设施依赖 ==============
+postgresql:
+  enabled: true
+  auth:
+    username: lcm
+    password: lcm123
+    database: lcm
+  primary:
+    persistence:
+      size: 20Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: redis123
+  master:
+    persistence:
+      size: 5Gi
+
+kafka:
+  enabled: false
+  # 如需启用 Kafka
+  # listeners:
+  #   client:
+  #     protocol: PLAINTEXT
+
+# ============== 监控配置 ==============
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+  
+  # Grafana Dashboard
+  grafana:
+    enabled: true
+    dashboards:
+      - name: hyperscale-lcm
+
+# ============== 安全配置 ==============
+security:
+  # mTLS 配置
+  mtls:
+    enabled: false
+    secretName: lcm-tls
+  
+  # JWT 配置
+  jwt:
+    secret: ""  # 留空则自动生成
+    issuer: "hyperscale-lcm"
+    expiration: 3600
+
+# ============== 共享配置 ==============
+configMap:
+  # 应用配置
+  LCM_CLUSTER_NAME: "production"
+  LCM_LOG_LEVEL: "INFO"
+
+secrets:
+  # 敏感配置 (base64 编码)
+  adminPassword: ""  # 留空则自动生成

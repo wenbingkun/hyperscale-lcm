@@ -1,0 +1,106 @@
+{{- if .Values.core.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  {{- if not .Values.core.autoscaling.enabled }}
+  replicas: {{ .Values.core.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: core
+          image: {{ include "hyperscale-lcm.image" .Values.core.image }}
+          imagePullPolicy: {{ .Values.core.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: jdbc:postgresql://{{ .Release.Name }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
+            - name: QUARKUS_DATASOURCE_USERNAME
+              value: {{ .Values.postgresql.auth.username }}
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-postgresql
+                  key: password
+            - name: QUARKUS_REDIS_HOSTS
+              value: redis://{{ .Release.Name }}-redis-master:6379
+            {{- range $key, $value := .Values.core.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.core.health.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.core.health.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.core.health.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.core.health.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.core.health.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.core.health.readiness.periodSeconds }}
+          resources:
+            {{- toYaml .Values.core.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.core.service.type }}
+  ports:
+    - port: {{ .Values.core.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.core.service.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 4 }}
+{{- if .Values.core.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-core
+  minReplicas: {{ .Values.core.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.core.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.core.autoscaling.targetCPUUtilization }}
+{{- end }}
+{{- end }}
