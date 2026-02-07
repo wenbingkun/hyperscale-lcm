@@ -86,5 +86,18 @@ func handleCommand(resp *pb.StreamResponse, satelliteId string, dockerExec *dock
 				},
 			})
 		}
+	} else if resp.CommandType == "PING" {
+		log.Printf("🏓 PING received from Core")
+		stream.Send(&pb.StreamRequest{
+			SatelliteId: satelliteId,
+			Payload: &pb.StreamRequest_StatusUpdate{
+				StatusUpdate: &pb.JobStatusUpdate{
+					JobId:    resp.CommandId,
+					Status:   pb.JobStatus_COMPLETED,
+					Message:  "PONG",
+					ExitCode: 0,
+				},
+			},
+		})
 	}
 }
