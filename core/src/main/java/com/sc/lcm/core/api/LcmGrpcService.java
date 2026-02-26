@@ -69,12 +69,10 @@ public class LcmGrpcService implements LcmService {
     @RateLimit(value = 2000, window = 1, windowUnit = ChronoUnit.SECONDS)
     @Bulkhead(value = 200)
     public Uni<com.sc.lcm.core.grpc.HeartbeatResponse> sendHeartbeat(com.sc.lcm.core.grpc.HeartbeatRequest request) {
-        stateCache.updateHeartbeat(request.getSatelliteId());
-
         log.debug("💓 Heartbeat received for satellite: {}", request.getSatelliteId());
 
-        return Uni.createFrom().item(
-                com.sc.lcm.core.grpc.HeartbeatResponse.newBuilder()
+        return stateCache.updateHeartbeatReactive(request.getSatelliteId())
+                .replaceWith(() -> com.sc.lcm.core.grpc.HeartbeatResponse.newBuilder()
                         .setSuccess(true)
                         .build());
     }

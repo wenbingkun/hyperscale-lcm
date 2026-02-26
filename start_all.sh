@@ -20,6 +20,14 @@ sleep 5
 
 # 2. Core Service
 echo "☕ Starting Core Service (Java/Quarkus)..."
+# Resolve absolute path for certs to avoid any CWD issues
+export CERTS_ABS_PATH=$(readlink -f certs)
+echo "   Using Certs Path: $CERTS_ABS_PATH"
+
+export GRPC_CERT_PATH="$CERTS_ABS_PATH/server.pem"
+export GRPC_KEY_PATH="$CERTS_ABS_PATH/server-pkcs8.key"
+export GRPC_TRUSTSTORE_PATH="$CERTS_ABS_PATH/truststore.jks"
+
 cd core
 if [ ! -x "./gradlew" ]; then
     chmod +x gradlew

@@ -9,15 +9,22 @@ import io.quarkus.redis.datasource.value.SetArgs;
 public class SatelliteStateCache {
 
     private final ValueCommands<String, Long> heartbeatCommands;
+    private final io.quarkus.redis.datasource.value.ReactiveValueCommands<String, Long> reactiveHeartbeatCommands;
 
     // We can inject RedisDataSource directly
-    public SatelliteStateCache(RedisDataSource ds) {
+    public SatelliteStateCache(RedisDataSource ds, io.quarkus.redis.datasource.ReactiveRedisDataSource reactiveDs) {
         this.heartbeatCommands = ds.value(Long.class);
+        this.reactiveHeartbeatCommands = reactiveDs.value(Long.class);
     }
 
     public void updateHeartbeat(String satelliteId) {
         // Set heartbeat timestamp (TTL 5 minutes)
         heartbeatCommands.set("satellite:" + satelliteId + ":heartbeat", System.currentTimeMillis(),
+                new SetArgs().ex(300));
+    }
+
+    public io.smallrye.mutiny.Uni<Void> updateHeartbeatReactive(String satelliteId) {
+        return reactiveHeartbeatCommands.set("satellite:" + satelliteId + ":heartbeat", System.currentTimeMillis(),
                 new SetArgs().ex(300));
     }
 
