@@ -34,6 +34,10 @@ public class JobExecutionService {
     Emitter<String> jobExecutionEmitter;
 
     @Inject
+    @Channel("job-status-dlq-out")
+    Emitter<String> dlqEmitter;
+
+    @Inject
     DashboardWebSocket dashboardWebSocket;
 
     @Inject
@@ -87,7 +91,8 @@ public class JobExecutionService {
             return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
                     .onItem().transformToUni(job -> {
                         if (job == null) {
-                            log.warn("Job not found: {}", callback.jobId());
+                            log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
+                            dlqEmitter.send(message);
                             return Uni.createFrom().voidItem();
                         }
 
@@ -122,10 +127,14 @@ public class JobExecutionService {
                                     .subscribe().with(v -> {
                                     }, e -> log.error("Audit log failed", e));
                         }
-                    });
+                    }).onFailure().invoke(err -> {
+                        log.error("❌ Database or business logic failure processing callback, routing to DLQ", err);
+                        dlqEmitter.send(message);
+                    }).onFailure().recoverWithNull();
 
-        } catch (JsonProcessingException e) {
-            log.error("❌ Failed to parse job status callback", e);
+        } catch (Exception e) {
+            log.error("❌ Failed to parse or process job status callback, sending to DLQ", e);
+            dlqEmitter.send(message);
             return Uni.createFrom().voidItem();
         }
     }

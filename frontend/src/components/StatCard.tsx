@@ -1,8 +1,9 @@
 import React from 'react';
 import { GlassCard } from './GlassCard';
 import { ArrowUpRight, ArrowDownRight, Activity } from 'lucide-react';
+import type { HTMLMotionProps } from 'framer-motion';
 
-interface StatCardProps {
+interface StatCardProps extends Omit<HTMLMotionProps<"div">, "children"> {
     title: string;
     value: string;
     unit?: string;
@@ -19,7 +20,8 @@ export const StatCard: React.FC<StatCardProps> = ({
     subtext,
     trend,
     icon,
-    accentColor = 'cyan'
+    accentColor = 'cyan',
+    ...motionProps
 }) => {
 
     const getAccentClass = () => {
@@ -33,7 +35,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     };
 
     return (
-        <GlassCard className="glass-card-hover h-full">
+        <GlassCard className="glass-card-hover h-full" {...motionProps}>
             <div className="flex justify-between items-start mb-2">
                 <span className="text-gray-400 text-sm font-medium uppercase tracking-wider">{title}</span>
                 {icon && <div className={`text-${accentColor}-400 opacity-80`}>{icon}</div>}

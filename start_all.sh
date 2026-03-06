@@ -45,6 +45,13 @@ cd satellite
 nohup go run ./cmd/satellite > ../satellite.log 2>&1 &
 SAT_PID=$!
 echo "   Satellite Service PID: $SAT_PID (Logs: satellite.log)"
+
+echo "🛰️ Starting Mock Satellites..."
+for i in {1..4}; do
+    LCM_MOCK_HOSTNAME="mock-node-0$i" nohup go run ./cmd/satellite > ../satellite_mock_$i.log 2>&1 &
+    MOCK_PID=$!
+    echo "   Mock Satellite $i PID: $MOCK_PID"
+done
 cd ..
 
 # 4. Frontend
@@ -65,3 +72,7 @@ echo "   Core API: http://localhost:8080"
 echo "   Frontend: http://localhost:5173"
 echo "   Logs: core.log, satellite.log, frontend.log"
 echo "   Run 'tail -f *.log' to monitor logs."
+
+echo "⏳ Waiting 10s for Core to be fully ready before generating mock data..."
+(sleep 10 && cd scripts/loadgen && go run main.go > ../../loadgen.log 2>&1 && echo "✅ Mock jobs generated (Logs: loadgen.log)") &
+

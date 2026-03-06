@@ -26,12 +26,12 @@ type Collector struct {
 
 // NewCollector initializes a new Redfish telemetry collector
 func NewCollector() *Collector {
-	bmcIP := os.Getenv("BMC_IP")
-	bmcUser := os.Getenv("BMC_USER")
-	bmcPass := os.Getenv("BMC_PASSWORD")
+	bmcIP := os.Getenv("LCM_BMC_IP")
+	bmcUser := os.Getenv("LCM_BMC_USER")
+	bmcPass := os.Getenv("LCM_BMC_PASSWORD")
 
 	if bmcIP == "" {
-		log.Println("⚠️ BMC_IP not set. Redfish collector will run in MOCK mode.")
+		log.Println("⚠️ LCM_BMC_IP not set. Redfish collector will run in MOCK mode.")
 		return &Collector{mock: true}
 	}
 

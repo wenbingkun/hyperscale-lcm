@@ -77,7 +77,7 @@ func main() {
 }
 
 func login() string {
-	reqBody, _ := json.Marshal(AuthRequest{Username: "admin", Password: "changeit"})
+	reqBody, _ := json.Marshal(AuthRequest{Username: "admin", Password: "admin123"})
 	resp, err := http.Post(baseURL+"/api/auth/login", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil || resp.StatusCode != 200 {
 		return ""

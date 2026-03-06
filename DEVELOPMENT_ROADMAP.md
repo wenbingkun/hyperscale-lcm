@@ -25,60 +25,58 @@
     *   [x] mTLS 证书自动生成。
     *   [x] 万级节点负载测试工具 (loadgen)。
 
-## 📅 阶段二：主动发现与深度采集 (Active Discovery & Deep Inspection) [当前阶段]
+## 📅 阶段二：主动发现与深度采集 (Active Discovery & Deep Inspection) [完成度 ~90%]
 **目标**: 实现"零接触"纳管，自动发现网络中的新设备并获取详细硬件信息。
 *   **Satellite**:
     *   [x] 实现网络扫描器（Ping Scan）。
     *   [x] 发现事件通过 gRPC 上报 Core。
-    *   [/] **真实指标采集** — 替换 Mock 心跳数据。
-    *   [ ] 实现 DHCP Listener，捕获新设备上线。
-    *   [ ] 实现 Redfish Client，远程获取 BMC 信息（电源、温度）。
+    *   [x] **真实指标采集** — 替换 Mock 心跳数据。
+    *   [ ] 实现 DHCP Listener，捕获新设备上线 (Optional)。
+    *   [x] 实现 Redfish Client，远程获取 BMC 信息（电源、温度）。
 *   **Core**:
-    *   [/] **DiscoveredDevice 持久化** — 补全 reportDiscovery TODO。
-    *   [/] **Node 实体与 Satellite 硬件数据同步**。
-    *   [ ] 实现"待纳管设备池" (Discovered Pool) 审批流程。
-    *   [ ] 纳管策略引擎（自动/手动批准）。
+    *   [x] **DiscoveredDevice 持久化** — 补全 reportDiscovery TODO。
+    *   [x] **Node 实体与 Satellite 硬件数据同步**。
+    *   [x] 实现"待纳管设备池" (Discovered Pool) 审批流程。
+    *   [x] 纳管策略引擎（自动/手动批准）。
 
-## 📅 阶段三：智能调度与资源池化 (Intelligent Scheduling)
+## 📅 阶段三：智能调度与资源池化 (Intelligent Scheduling) [完成度 ~80%]
 **目标**: 实现基于 Timefold 的 AI 算力调度。
 *   **Core**:
     *   [x] GPU 拓扑模型 (NVLink, NVSwitch, IB Fabric 建模)。
     *   [x] Timefold 约束求解器集成（GPU 型号匹配、拓扑感知）。
     *   [x] PartitionedSchedulingService 分区调度框架。
-    *   [ ] 完善分区并行调度（按 Zone 分片）。
-    *   [ ] 独立调度 API：`POST /api/v1/allocations`。
+    *   [ ] 完善分区并行调度（按 Zone 分片）(Optional)。
+    *   [x] 独立调度 API：`POST /api/v1/allocations`。
 
-## 📅 阶段四：执行与交付 (Execution & Delivery)
+## 📅 阶段四：执行与交付 (Execution & Delivery) [完成度 ~80%]
 **目标**: 闭环"分配-执行"流程。
 *   **Execution**:
     *   [x] Docker 容器执行 + Kafka 状态回调。
-    *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
+    *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发 (Optional)。
     *   [ ] (高级) 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
 *   **Frontend**:
     *   [x] React Dashboard 大屏（7 页面 + 5 组件 + WebSocket）。
-    *   [ ] 前端登录流程 + Token 管理。
-    *   [ ] 调度结果可视化（拓扑图）。
+    *   [x] 前端登录流程 + Token 管理。
+    *   [x] 强化 UI/UX 动效与 Redfish 深层指标展示。
+    *   [ ] 调度结果可视化（拓扑图展示分配情况）。
 
-## 📅 阶段五：生产就绪 (Production Ready)
+## 📅 阶段五：生产就绪 (Production Ready) [当前阶段]
 **目标**: 达到可部署的 MVP 水平。
 *   **DevOps**:
     *   [x] Kubernetes 清单（Deployment, DaemonSet, ConfigMap, Secrets）。
     *   [x] Helm Chart 打包。
-    *   [ ] CI/CD 流水线 (GitHub Actions)。
-    *   [ ] 性能基准测试自动化。
+    *   [x] CI/CD 流水线 (GitHub Actions)。
+    *   [x] 性能基准测试自动化 (Loadgen)。
 *   **质量**:
     *   [x] 基础测试套件（Auth, Job, Satellite, StateCache, ConstraintProvider）。
-    *   [ ] 集成测试覆盖率 > 60%。
-    *   [ ] E2E 测试（Playwright）。
+    *   [ ] 集成测试覆盖率提升。
+    *   [ ] OpenTelemetry 链路追踪完全恢复与串联。
 
 ---
 
 ## 🎯 即将开始的开发任务 (Current Sprint)
-重点攻克 **阶段二** 核心功能闭环：
-1.  ✅ ~~定义 `lcm.proto` 通信协议。~~
-2.  ✅ ~~实现 Satellite 向 Core 注册的流程。~~
-3.  ✅ ~~Core 端将注册上来的卫星节点持久化到 PostgreSQL。~~
-4.  🔥 实现 DiscoveredDevice 持久化。
-5.  🔥 Satellite 真实指标采集替换 Mock 数据。
-6.  🔥 Node 实体与 Satellite 硬件规格同步。
-7.  🔥 补充核心服务测试覆盖。
+重点攻克 **Sprint 5: 稳定性加固与追踪 (System Hardening & Tracing)**
+1.  **OpenTelemetry 取消注释与连通**：恢复 Go Satellite 和 Java Core 的分布式追踪能力。
+2.  **配置化管理**：Satellite 全局环境变量化，替换硬编码参数。
+3.  **完善测试**：补充 `AlertService`, `AuditService` 以及 gRPC 集成层测试。
+4.  **死信队列/异常处理机制加固**：保障消息管道健壮性。

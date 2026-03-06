@@ -16,8 +16,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
-	// OTel instrumentation is commented out due to network download restrictions
-	// "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	// OTel instrumentation
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
 	"github.com/sc-lcm/satellite/pkg/docker"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
@@ -37,7 +37,7 @@ var kaParams = keepalive.ClientParameters{
 
 // getCertDir 获取证书目录，支持环境变量覆盖
 func getCertDir() string {
-	certDir := os.Getenv("CERT_DIR")
+	certDir := os.Getenv("LCM_CERTS_DIR")
 	if certDir == "" {
 		certDir = defaultCertDir
 	}
@@ -47,23 +47,20 @@ func getCertDir() string {
 func main() {
 	log.Println("Starting Satellite Agent...")
 
-	// OpenTelemetry is disabled due to network download restrictions
-	/*
-		shutdownTracer, err := initTracer()
-		if err != nil {
-			log.Printf("⚠️ Failed to initialize tracer: %v", err)
-		} else {
-			defer shutdownTracer(context.Background())
-			log.Println("✨ OpenTelemetry Tracer initialized")
-		}
-	*/
+	shutdownTracer, err := initTracer()
+	if err != nil {
+		log.Printf("⚠️ Failed to initialize tracer: %v", err)
+	} else {
+		defer shutdownTracer(context.Background())
+		log.Println("✨ OpenTelemetry Tracer initialized")
+	}
 
 	// 设置优雅关闭信号处理
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	// Get Core address from env or default
-	address := os.Getenv("CORE_ADDRESS")
+	address := os.Getenv("LCM_CORE_ADDR")
 	if address == "" {
 		address = defaultAddress
 	}
@@ -102,11 +99,11 @@ func main() {
 		ServerName:   "localhost", // Must match SAN in server cert
 	})
 
-	// Connect to Core via gRPC with mTLS, KeepAlive, and OpenTelemetry (OTel disabled)
+	// Connect to Core via gRPC with mTLS, KeepAlive, and OpenTelemetry
 	conn, err := grpc.Dial(address,
 		grpc.WithTransportCredentials(creds),
 		grpc.WithKeepaliveParams(kaParams),
-		// grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)

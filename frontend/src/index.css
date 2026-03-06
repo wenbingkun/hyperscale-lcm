@@ -36,10 +36,11 @@
   --error: #ff0055;
   --warning: #ffb700;
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(15, 16, 20, 0.7);
-  --blur-md: blur(12px);
-  --blur-lg: blur(24px);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.04);
+  --glass-border-highlight: 1px solid rgba(0, 242, 255, 0.15);
+  --glass-bg: rgba(15, 16, 20, 0.65);
+  --blur-md: blur(16px);
+  --blur-lg: blur(32px);
 
   --font-main: 'Inter', system-ui, -apple-system, sans-serif;
 }
@@ -81,19 +82,23 @@ body {
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
   border: var(--glass-border);
   box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.1), 
-    0 2px 4px -1px rgba(0, 0, 0, 0.06),
-    inset 0 0 20px rgba(255, 255, 255, 0.02);
+    0 8px 32px 0 rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 20px rgba(255, 255, 255, 0.01);
 }
 
 .glass-card-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card-hover:hover {
-  border-color: rgba(0, 242, 255, 0.3);
-  box-shadow: 0 0 30px rgba(0, 242, 255, 0.1);
-  transform: translateY(-2px);
+  border: var(--glass-border-highlight);
+  box-shadow: 
+    0 8px 32px 0 rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(0, 242, 255, 0.15),
+    inset 0 1px 0 0 rgba(0, 242, 255, 0.2);
+  transform: translateY(-3px);
 }

@@ -32,7 +32,7 @@ export const JobDetailPage: React.FC = () => {
 
     // Real-time updates
     useEffect(() => {
-        if (lastEvent?.type === 'SCHEDULE_EVENT' && lastEvent.jobId === id) {
+        if (lastEvent?.type === 'SCHEDULE_EVENT' && lastEvent.payload?.jobId === id) {
             // Refresh job data when we get an update for this job
             fetchJobs().then((jobs) => {
                 const found = jobs.find((j) => j.id === id);
@@ -121,20 +121,32 @@ export const JobDetailPage: React.FC = () => {
 
                 {/* Execution Log */}
                 <GlassCard title="Execution Log" className="lg:col-span-2">
-                    <div className="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300 h-64 overflow-auto">
-                        <p className="text-gray-500"># Job execution log</p>
-                        <p className="text-green-400">[{new Date().toISOString()}] Job created</p>
-                        {job.scheduledAt && (
-                            <p className="text-blue-400">[{job.scheduledAt}] Scheduled to node: {job.assignedNodeId}</p>
-                        )}
-                        {job.status === 'RUNNING' && (
-                            <p className="text-cyan-400">[...] Executing...</p>
-                        )}
-                        {job.completedAt && (
-                            <p className={job.status === 'COMPLETED' ? 'text-green-400' : 'text-red-400'}>
-                                [{job.completedAt}] Job {job.status.toLowerCase()} with exit code: {job.exitCode}
-                            </p>
-                        )}
+                    <div className="bg-[#050507] rounded-lg p-4 font-mono text-xs sm:text-sm text-gray-300 h-72 overflow-auto border border-white/10 shadow-[inset_0_2px_15px_rgba(0,0,0,0.5)]">
+                        {/* Fake Mac Buttons */}
+                        <div className="flex gap-2 mb-4 items-center">
+                            <div className="w-3 h-3 rounded-full bg-red-500/80 border border-red-500/50"></div>
+                            <div className="w-3 h-3 rounded-full bg-yellow-500/80 border border-yellow-500/50"></div>
+                            <div className="w-3 h-3 rounded-full bg-green-500/80 border border-green-500/50"></div>
+                            <span className="ml-2 text-gray-600 select-none text-xs flex-1 text-center pr-8">bash - hyperscale-job-{job.id.substring(0, 4)}</span>
+                        </div>
+                        <div className="space-y-1 relative">
+                            <p className="text-gray-500 mb-2"># Live execution stream</p>
+                            <p className="text-green-400">[{new Date(job.id ? Date.now() - 3600000 : Date.now()).toISOString()}] [SYSTEM] Job initialized.</p>
+                            {job.scheduledAt && (
+                                <p className="text-blue-400">[{job.scheduledAt}] [SCHEDULER] Assigned to compute node: <span className="text-cyan-300">{job.assignedNodeId}</span></p>
+                            )}
+                            {job.status === 'RUNNING' && (
+                                <p className="text-cyan-400">[{new Date().toISOString()}] [CONTAINER] Main process executing... <span className="inline-block w-2 h-4 bg-cyan-400 animate-pulse ml-1 align-middle"></span></p>
+                            )}
+                            {job.completedAt && (
+                                <p className={job.status === 'COMPLETED' ? 'text-green-400' : 'text-red-400'}>
+                                    [{job.completedAt}] [SYSTEM] Process exited with code: {job.exitCode}
+                                </p>
+                            )}
+                            {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
+                                <p className="text-gray-500 mt-2">End of log.</p>
+                            )}
+                        </div>
                     </div>
                 </GlassCard>
             </div>

@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -22,7 +23,6 @@ const PageLoader = () => (
   </div>
 );
 
-// 路由守卫 - 未登录时重定向到 /login
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -32,8 +32,22 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+// 页面动画包装组件
+const PageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+    transition={{ duration: 0.3, ease: 'easeOut' }}
+    className="h-full"
+  >
+    {children}
+  </motion.div>
+);
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
 
   return (
     <Routes>
@@ -42,20 +56,21 @@ function AppRoutes() {
         isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
       } />
 
-      {/* 受保护的应用路由 */}
       <Route path="/*" element={
         <ProtectedRoute>
           <DashboardLayout>
-            <Routes>
-              <Route path="/" element={<DashboardPage />} />
-              <Route path="/satellites" element={<SatellitesPage />} />
-              <Route path="/satellites/:id" element={<SatelliteDetailPage />} />
-              <Route path="/jobs" element={<JobsPage />} />
-              <Route path="/jobs/:id" element={<JobDetailPage />} />
-              <Route path="/discovery" element={<DiscoveryPage />} />
-              <Route path="/tenants" element={<TenantsPage />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AnimatePresence mode="wait">
+              <Routes location={location} key={location.pathname}>
+                <Route path="/" element={<PageWrapper><DashboardPage /></PageWrapper>} />
+                <Route path="/satellites" element={<PageWrapper><SatellitesPage /></PageWrapper>} />
+                <Route path="/satellites/:id" element={<PageWrapper><SatelliteDetailPage /></PageWrapper>} />
+                <Route path="/jobs" element={<PageWrapper><JobsPage /></PageWrapper>} />
+                <Route path="/jobs/:id" element={<PageWrapper><JobDetailPage /></PageWrapper>} />
+                <Route path="/discovery" element={<PageWrapper><DiscoveryPage /></PageWrapper>} />
+                <Route path="/tenants" element={<PageWrapper><TenantsPage /></PageWrapper>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </AnimatePresence>
           </DashboardLayout>
         </ProtectedRoute>
       } />

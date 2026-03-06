@@ -1,25 +1,27 @@
 import React from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { motion, type HTMLMotionProps } from 'framer-motion';
 
-function cn(...inputs: ClassValue[]) {
+export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-interface GlassCardProps {
+export interface GlassCardProps extends Omit<HTMLMotionProps<"div">, "children"> {
   children: React.ReactNode;
   className?: string;
   title?: string;
 }
 
-export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', title }) => {
+export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', title, ...motionProps }) => {
   return (
-    <div
+    <motion.div
       className={cn(
         "glass-panel p-6 relative overflow-hidden group transition-all duration-300",
         "hover:shadow-[0_0_30px_rgba(0,242,255,0.1)] hover:border-white/20",
         className
       )}
+      {...motionProps}
     >
       {/* Glow Effect Gradient */}
       <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-primary/5 blur-[100px] -translate-y-1/2 translate-x-1/2 rounded-full pointer-events-none" />
@@ -32,6 +34,6 @@ export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', 
       <div className="relative z-10">
         {children}
       </div>
-    </div>
+    </motion.div>
   );
 };

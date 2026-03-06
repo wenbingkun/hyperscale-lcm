@@ -179,7 +179,7 @@ export const SatelliteDetailPage: React.FC = () => {
 
     // Real-time updates
     useEffect(() => {
-        if (lastEvent?.type === 'NODE_STATUS' && lastEvent.nodeId === id) {
+        if (lastEvent?.type === 'NODE_STATUS' && lastEvent.payload?.nodeId === id) {
             fetchSatellites().then((satellites) => {
                 const found = satellites.find((s) => s.id === id);
                 if (found) setSatellite(found);
@@ -249,6 +249,24 @@ export const SatelliteDetailPage: React.FC = () => {
                                 <p className="text-gray-400 text-sm">Agent Version</p>
                                 <p className="text-white">{satellite.agentVersion || 'Unknown'}</p>
                             </div>
+                            {satellite.model && (
+                                <div className="col-span-2 pt-2 border-t border-white/5">
+                                    <p className="text-gray-400 text-sm">Hardware Model</p>
+                                    <p className="text-white font-mono text-sm">{satellite.model}</p>
+                                </div>
+                            )}
+                            {satellite.bmcIp && (
+                                <div>
+                                    <p className="text-gray-400 text-sm">BMC IP</p>
+                                    <p className="text-cyan-400 font-mono text-sm">{satellite.bmcIp}</p>
+                                </div>
+                            )}
+                            {satellite.systemSerial && (
+                                <div>
+                                    <p className="text-gray-400 text-sm">Serial Number</p>
+                                    <p className="text-white font-mono text-sm">{satellite.systemSerial}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </GlassCard>
@@ -296,6 +314,20 @@ export const SatelliteDetailPage: React.FC = () => {
                             </div>
                             <span className="text-white font-medium">8x A100</span>
                         </div>
+                        {satellite.systemTemperatureCelsius !== undefined && (
+                            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                <span className="text-gray-300 text-sm">System Temp</span>
+                                <span className={`text-sm font-mono ${(satellite.systemTemperatureCelsius >= 75) ? 'text-red-400' : (satellite.systemTemperatureCelsius >= 60) ? 'text-yellow-400' : 'text-green-400'}`}>
+                                    {satellite.systemTemperatureCelsius}°C
+                                </span>
+                            </div>
+                        )}
+                        {satellite.powerState && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-gray-300 text-sm">Chassis Power</span>
+                                <span className="text-gray-400 text-sm">{satellite.powerState}</span>
+                            </div>
+                        )}
                     </div>
                 </GlassCard>
             </div>

@@ -32,33 +32,27 @@ public class HeartbeatSyncService {
         log.debug("🔄 Starting heartbeat sync to database...");
 
         return Panache.withTransaction(() -> Satellite.listAllReactive()
-                .onItem().invoke(satellites -> {
-                    int syncedCount = 0;
+                .onItem().transformToMulti(satellites -> io.smallrye.mutiny.Multi.createFrom().iterable(satellites))
+                .onItem().transformToUniAndConcatenate(sat -> stateCache.getLastHeartbeatReactive(sat.getId())
+                        .onItem().invoke(lastHeartbeatMs -> {
+                            if (lastHeartbeatMs != null) {
+                                LocalDateTime lastHeartbeat = LocalDateTime.ofInstant(
+                                        Instant.ofEpochMilli(lastHeartbeatMs),
+                                        ZoneId.systemDefault());
 
-                    for (Satellite sat : satellites) {
-                        Long lastHeartbeatMs = stateCache.getLastHeartbeat(sat.getId());
-                        if (lastHeartbeatMs != null) {
-                            LocalDateTime lastHeartbeat = LocalDateTime.ofInstant(
-                                    Instant.ofEpochMilli(lastHeartbeatMs),
-                                    ZoneId.systemDefault());
-
-                            if (sat.getLastHeartbeat() == null ||
-                                    lastHeartbeat.isAfter(sat.getLastHeartbeat())) {
-                                sat.setLastHeartbeat(lastHeartbeat);
-                                sat.setStatus("ONLINE");
-                                syncedCount++;
+                                if (sat.getLastHeartbeat() == null ||
+                                        lastHeartbeat.isAfter(sat.getLastHeartbeat())) {
+                                    sat.setLastHeartbeat(lastHeartbeat);
+                                    sat.setStatus("ONLINE");
+                                }
+                            } else {
+                                if ("ONLINE".equals(sat.getStatus())) {
+                                    sat.setStatus("OFFLINE");
+                                }
                             }
-                        } else {
-                            if ("ONLINE".equals(sat.getStatus())) {
-                                sat.setStatus("OFFLINE");
-                                syncedCount++;
-                            }
-                        }
-                    }
-
-                    if (syncedCount > 0) {
-                        log.info("🔄 Synced {} satellite heartbeats to database", syncedCount);
-                    }
-                })).replaceWithVoid();
+                        }))
+                .collect().asList()
+                .onItem().invoke(list -> log.info("🔄 Heartbeat sync cycle complete for {} satellites.", list.size()))
+                .replaceWithVoid());
     }
 }

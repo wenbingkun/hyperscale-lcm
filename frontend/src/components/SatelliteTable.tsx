@@ -33,7 +33,7 @@ export const SatelliteTable: React.FC = () => {
                                 <th className="py-3 font-medium">Status</th>
                                 <th className="py-3 font-medium">Hostname</th>
                                 <th className="py-3 font-medium">IP Address</th>
-                                <th className="py-3 font-medium">OS Version</th>
+                                <th className="py-3 font-medium">Environment</th>
                                 <th className="py-3 font-medium">Last Heartbeat</th>
                             </tr>
                         </thead>
@@ -54,7 +54,20 @@ export const SatelliteTable: React.FC = () => {
                                             </Link>
                                         </td>
                                         <td className="py-3 text-cyan-300 font-mono text-sm">{sat.ipAddress}</td>
-                                        <td className="py-3 text-gray-400 text-sm">{sat.osVersion}</td>
+                                        <td className="py-3">
+                                            <div className="flex items-center gap-3">
+                                                {sat.powerState && (
+                                                    <span className={`text-xs px-2 py-0.5 rounded ${sat.powerState === 'On' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                                        {sat.powerState}
+                                                    </span>
+                                                )}
+                                                {sat.systemTemperatureCelsius !== undefined ? (
+                                                    <span className={`text-xs font-mono ${(sat.systemTemperatureCelsius >= 75) ? 'text-red-400' : (sat.systemTemperatureCelsius >= 60) ? 'text-yellow-400' : 'text-green-400'}`}>
+                                                        {sat.systemTemperatureCelsius}°C
+                                                    </span>
+                                                ) : <span className="text-gray-600 text-xs">—</span>}
+                                            </div>
+                                        </td>
                                         <td className="py-3 text-gray-500 text-xs font-mono">{new Date(sat.lastHeartbeat).toLocaleTimeString()}</td>
                                     </tr>
                                 ))

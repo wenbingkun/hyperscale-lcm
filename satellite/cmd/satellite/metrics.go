@@ -309,7 +309,10 @@ func BuildHeartbeatRequest(satelliteId string) *pb.HeartbeatRequest {
 
 // BuildRegisterRequest creates a registration request with real hardware info
 func BuildRegisterRequest() *pb.RegisterRequest {
-	hostname, _ := os.Hostname()
+	hostname := os.Getenv("LCM_MOCK_HOSTNAME")
+	if hostname == "" {
+		hostname, _ = os.Hostname()
+	}
 	localIP := getLocalIP()
 	hw := CollectHardwareInfo()
 

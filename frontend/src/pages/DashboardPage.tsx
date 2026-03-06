@@ -5,6 +5,7 @@ import { JobSubmissionForm } from '../components/JobSubmissionForm';
 import { StatCard } from '../components/StatCard';
 import { Server, Zap, Network, Activity } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { motion, type Variants } from 'framer-motion';
 import { fetchClusterStats, fetchJobStats, type ClusterStats, type JobStats } from '../api/client';
 
 const data = [
@@ -40,8 +41,26 @@ export const DashboardPage: React.FC = () => {
     // const totalNodes = clusterStats?.totalNodes || 0; 
     const activeJobs = jobStats?.running || 0;
 
+    const containerVariants: Variants = {
+        hidden: { opacity: 0 },
+        show: {
+            opacity: 1,
+            transition: { staggerChildren: 0.1 }
+        }
+    };
+
+    const itemVariants: Variants = {
+        hidden: { opacity: 0, y: 20 },
+        show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+    };
+
     return (
-        <div className="space-y-8">
+        <motion.div
+            className="space-y-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+        >
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
@@ -51,6 +70,7 @@ export const DashboardPage: React.FC = () => {
                     subtext={`${onlineNodes} Online`}
                     icon={<Server size={20} />}
                     accentColor="cyan"
+                    variants={itemVariants}
                 />
                 <StatCard
                     title="GPU Capacity"
@@ -60,6 +80,7 @@ export const DashboardPage: React.FC = () => {
                     subtext="98,000 A100s"
                     icon={<Zap size={20} />}
                     accentColor="purple"
+                    variants={itemVariants}
                 />
                 <StatCard
                     title="Active Jobs"
@@ -68,6 +89,7 @@ export const DashboardPage: React.FC = () => {
                     subtext="85% Utilization"
                     icon={<Activity size={20} />}
                     accentColor="yellow"
+                    variants={itemVariants}
                 />
                 <StatCard
                     title="Network"
@@ -77,13 +99,14 @@ export const DashboardPage: React.FC = () => {
                     subtext="Infiniband Fabric"
                     icon={<Network size={20} />}
                     accentColor="green"
+                    variants={itemVariants}
                 />
             </div>
 
             {/* Main Content Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                    <GlassCard title="System Load" className="min-h-[400px]">
+                    <GlassCard title="System Load" className="min-h-[400px]" variants={itemVariants}>
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={data}>
@@ -110,12 +133,14 @@ export const DashboardPage: React.FC = () => {
                             </ResponsiveContainer>
                         </div>
                     </GlassCard>
-                    <SatelliteTable />
+                    <motion.div variants={itemVariants}>
+                        <SatelliteTable />
+                    </motion.div>
                 </div>
-                <div>
+                <motion.div variants={itemVariants}>
                     <JobSubmissionForm />
-                </div>
+                </motion.div>
             </div>
-        </div>
+        </motion.div>
     );
 };

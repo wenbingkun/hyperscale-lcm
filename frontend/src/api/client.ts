@@ -11,6 +11,11 @@ export interface Satellite {
     agentVersion: string;
     status: string; // 'ONLINE' | 'OFFLINE'
     lastHeartbeat: string;
+    bmcIp?: string;
+    systemSerial?: string;
+    model?: string;
+    powerState?: string;
+    systemTemperatureCelsius?: number;
 }
 
 export interface Job {

@@ -41,6 +41,10 @@ public class SatelliteStateCache {
         return heartbeatCommands.get("satellite:" + satelliteId + ":heartbeat");
     }
 
+    public io.smallrye.mutiny.Uni<Long> getLastHeartbeatReactive(String satelliteId) {
+        return reactiveHeartbeatCommands.get("satellite:" + satelliteId + ":heartbeat");
+    }
+
     /**
      * 获取在线节点数量
      * 注意：生产环境中应使用 SCAN 而非 KEYS
