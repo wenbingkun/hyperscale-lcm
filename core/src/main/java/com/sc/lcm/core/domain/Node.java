@@ -1,6 +1,7 @@
 package com.sc.lcm.core.domain;
 
 import ai.timefold.solver.core.api.domain.lookup.PlanningId;
+import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import lombok.Getter;
@@ -8,13 +9,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * 节点实体 - 支持 GPU 拓扑建模
+ * 节点实体 - 支持 GPU 拓扑建模 + Panache 响应式持久化
  */
 @Entity
 @Getter
 @Setter
 @NoArgsConstructor
-public class Node {
+public class Node extends PanacheEntityBase {
 
     @PlanningId
     @Id
@@ -29,6 +30,12 @@ public class Node {
     // Network Topology
     private String rackId;
     private String zoneId;
+
+    // Redfish / BMC Info
+    private String bmcIp;
+    private String bmcMac;
+    private String systemSerial;
+    private String systemModel;
 
     // ============== GPU 拓扑 (P2-3) ==============
 

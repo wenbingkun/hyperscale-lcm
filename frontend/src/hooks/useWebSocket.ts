@@ -5,18 +5,15 @@ export type WebSocketMessageType =
     | 'PONG'
     | 'STATUS'
     | 'NODE_STATUS'
+    | 'HEARTBEAT_UPDATE'
+    | 'JOB_STATUS'
     | 'SCHEDULE_EVENT'
+    | 'DISCOVERY_EVENT'
     | 'ALERT';
 
 export interface WebSocketMessage {
     type: WebSocketMessageType;
-    message?: string;
-    nodeId?: string;
-    jobId?: string;
-    action?: string;
-    status?: string;
-    severity?: string;
-    onlineNodes?: number;
+    payload?: any; // Generic payload to hold event-specific data
     timestamp?: number;
 }
 

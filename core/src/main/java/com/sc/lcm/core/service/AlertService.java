@@ -6,7 +6,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -58,7 +57,7 @@ public class AlertService {
         String message = String.format("节点 %s 已离线超过 2 分钟", nodeId);
 
         // 推送到 Dashboard
-        dashboardWebSocket.broadcastAlert("CRITICAL", message);
+        dashboardWebSocket.broadcastAlert("CRITICAL", message, "NodeHealthCheck");
 
         // 记录活跃告警
         activeAlerts.put(alertKey, System.currentTimeMillis());
@@ -80,7 +79,7 @@ public class AlertService {
         }
 
         String message = String.format("作业 %s 调度失败: %s", jobId, reason);
-        dashboardWebSocket.broadcastAlert("WARNING", message);
+        dashboardWebSocket.broadcastAlert("WARNING", message, "Scheduler");
         activeAlerts.put(alertKey, System.currentTimeMillis());
 
         log.warn("⚠️ ALERT: {}", message);
@@ -97,7 +96,7 @@ public class AlertService {
         }
 
         String message = String.format("节点 %s GPU 温度过高: %d°C", nodeId, temperature);
-        dashboardWebSocket.broadcastAlert("WARNING", message);
+        dashboardWebSocket.broadcastAlert("WARNING", message, "Telemetry");
         activeAlerts.put(alertKey, System.currentTimeMillis());
 
         log.warn("🔥 ALERT: {}", message);

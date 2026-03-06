@@ -115,21 +115,16 @@ func main() {
 
 	client := pb.NewLcmServiceClient(conn)
 
-	// Gather system info
-	hostname, _ := os.Hostname()
-	localIP := getLocalIP()
-	info := &pb.RegisterRequest{
-		Hostname:     hostname,
-		IpAddress:    localIP,
-		OsVersion:    "Linux Kernel 6.5",
-		AgentVersion: "0.2.0",
-	}
+	// Gather real system info with hardware specs
+	info := BuildRegisterRequest()
 
 	// Register
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	log.Printf("Registering satellite: %s...", hostname)
+	log.Printf("Registering satellite: %s (CPU: %d, RAM: %dGB, GPU: %d x %s)...",
+		info.Hostname, info.Hardware.CpuCores, info.Hardware.MemoryGb,
+		info.Hardware.GpuCount, info.Hardware.GpuModel)
 	r, err := client.RegisterSatellite(ctx, info)
 	if err != nil {
 		log.Fatalf("could not register satellite: %v", err)
@@ -191,15 +186,15 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				_, err := client.SendHeartbeat(context.Background(), &pb.HeartbeatRequest{
-					SatelliteId:     satelliteId,
-					LoadAvg:         0.5,               // Mock
-					MemoryUsedBytes: 1024 * 1024 * 512, // Mock 512MB
-				})
+				hbReq := BuildHeartbeatRequest(satelliteId)
+				_, err := client.SendHeartbeat(context.Background(), hbReq)
 				if err != nil {
 					log.Printf("⚠️ Heartbeat failed: %v", err)
 				} else {
-					log.Printf("💓 Heartbeat sent")
+					log.Printf("💓 Heartbeat sent (CPU: %.1f%%, Load: %.2f, Mem: %dMB/%dMB, GPUs: %d)",
+						hbReq.CpuUsagePercent, hbReq.LoadAvg,
+						hbReq.MemoryUsedBytes/1024/1024, hbReq.MemoryTotalBytes/1024/1024,
+						hbReq.GpuCount)
 				}
 
 				// Mock Active Discovery (Scan every 10 seconds)

@@ -26,6 +26,25 @@ message RegisterRequest {
     string ip_address = 2;
     string os_version = 3;
     string agent_version = 4;
+
+    // Hardware specs reported at registration
+    HardwareSpecs hardware = 5;
+}
+
+// Hardware specification reported by Satellite during registration
+message HardwareSpecs {
+    int32 cpu_cores = 1;
+    int64 memory_gb = 2;
+    int32 gpu_count = 3;
+    string gpu_model = 4;      // e.g., "A100", "H100", "MI250"
+    string gpu_topology = 5;   // NVLink, NVSwitch, PCIe
+    int32 nvlink_bandwidth_gbps = 6;
+    string rack_id = 7;
+    string zone_id = 8;
+    string bmc_ip = 9;
+    string bmc_mac = 10;
+    string system_serial = 11;
+    string system_model = 12;
 }
 
 message RegisterResponse {
@@ -37,7 +56,28 @@ message RegisterResponse {
 message HeartbeatRequest {
     string satellite_id = 1;
     double load_avg = 2; // CPU Load Average (1 min)
-    uint64 memory_used_bytes = 3; 
+    uint64 memory_used_bytes = 3;
+
+    // Extended metrics
+    double cpu_usage_percent = 4;    // CPU utilization 0-100
+    uint64 memory_total_bytes = 5;   // Total memory
+    uint64 disk_used_bytes = 6;      // Disk used
+    uint64 disk_total_bytes = 7;     // Disk total
+    int32 gpu_count = 8;             // Number of GPUs detected
+    repeated GpuMetric gpu_metrics = 9;
+    string power_state = 10;                // e.g., "On", "Off" (from Redfish)
+    int32 system_temperature_celsius = 11;  // Chassis temperature
+}
+
+// Per-GPU metrics
+message GpuMetric {
+    int32 index = 1;
+    string name = 2;                  // e.g., "NVIDIA A100-SXM4-80GB"
+    double utilization_percent = 3;   // GPU utilization 0-100
+    uint64 memory_used_bytes = 4;     // GPU memory used
+    uint64 memory_total_bytes = 5;    // GPU memory total
+    int32 temperature_celsius = 6;    // GPU temperature
+    int32 power_watts = 7;            // GPU power draw
 }
 
 message HeartbeatResponse {

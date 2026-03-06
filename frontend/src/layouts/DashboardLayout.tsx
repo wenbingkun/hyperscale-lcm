@@ -1,12 +1,15 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2 } from 'lucide-react';
+import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
     children: React.ReactNode;
 }
 
 export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
+    const { user, logout } = useAuth();
+
     const navLinkClass = ({ isActive }: { isActive: boolean }) => `
         flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
         ${isActive
@@ -51,11 +54,24 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
                     </NavLink>
                 </nav>
 
-                <div className="ml-auto flex items-center gap-4">
+                <div className="ml-auto flex items-center gap-3">
+                    {user && (
+                        <span className="text-sm text-gray-400 hidden lg:block">
+                            {user.username}
+                            <span className="text-gray-600 ml-1">@{user.tenantId}</span>
+                        </span>
+                    )}
                     <button className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors">
                         <Settings size={20} />
                     </button>
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 ring-2 ring-white/10"></div>
+                    <button
+                        onClick={logout}
+                        className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Logout"
+                    >
+                        <LogOut size={20} />
+                    </button>
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 ring-2 ring-white/10" />
                 </div>
             </header>
 

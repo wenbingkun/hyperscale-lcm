@@ -2,16 +2,21 @@ package com.sc.lcm.core.service;
 
 import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Alternative;
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * Mock 节点规格提供者
  * 用于开发和测试阶段，返回模拟的硬件规格
  * 
- * 生产环境应替换为 RedfishNodeSpecsProvider 或 DiscoveryNodeSpecsProvider
+ * 已被 RegistrationNodeSpecsProvider 替代（通过 CDI @Alternative 降低优先级）
+ * 可通过测试 profile 或 @Priority 重新激活
  */
 @ApplicationScoped
+@Alternative
+@Priority(1) // 低优先级，被 RegistrationNodeSpecsProvider 覆盖
 @Slf4j
 public class MockNodeSpecsProvider implements NodeSpecsProvider {
 

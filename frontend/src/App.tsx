@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Activity } from 'lucide-react';
 
 // 路由级代码分割 - 按需加载页面组件
@@ -12,6 +13,7 @@ const JobsPage = lazy(() => import('./pages/JobsPage').then(m => ({ default: m.J
 const JobDetailPage = lazy(() => import('./pages/JobDetailPage').then(m => ({ default: m.JobDetailPage })));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage').then(m => ({ default: m.DiscoveryPage })));
 const TenantsPage = lazy(() => import('./pages/TenantsPage').then(m => ({ default: m.TenantsPage })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 
 // 加载中占位组件
 const PageLoader = () => (
@@ -20,12 +22,30 @@ const PageLoader = () => (
   </div>
 );
 
-function App() {
+// 路由守卫 - 未登录时重定向到 /login
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return <PageLoader />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  return <>{children}</>;
+};
+
+function AppRoutes() {
+  const { isAuthenticated } = useAuth();
+
   return (
-    <WebSocketProvider>
-      <BrowserRouter>
-        <DashboardLayout>
-          <Suspense fallback={<PageLoader />}>
+    <Routes>
+      {/* 登录页 - 已登录时重定向到首页 */}
+      <Route path="/login" element={
+        isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+      } />
+
+      {/* 受保护的应用路由 */}
+      <Route path="/*" element={
+        <ProtectedRoute>
+          <DashboardLayout>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/satellites" element={<SatellitesPage />} />
@@ -36,10 +56,24 @@ function App() {
               <Route path="/tenants" element={<TenantsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+          </DashboardLayout>
+        </ProtectedRoute>
+      } />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <WebSocketProvider>
+        <BrowserRouter>
+          <Suspense fallback={<PageLoader />}>
+            <AppRoutes />
           </Suspense>
-        </DashboardLayout>
-      </BrowserRouter>
-    </WebSocketProvider>
+        </BrowserRouter>
+      </WebSocketProvider>
+    </AuthProvider>
   );
 }
 

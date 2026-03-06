@@ -25,22 +25,26 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const [lastEvent, setLastEvent] = useState<WebSocketMessage | null>(null);
 
     const handleMessage = useCallback((message: WebSocketMessage) => {
+        const payload = message.payload || {};
         switch (message.type) {
             case 'STATUS':
-                if (message.onlineNodes !== undefined) {
-                    setOnlineNodes(message.onlineNodes);
+                if (payload.onlineNodes !== undefined) {
+                    setOnlineNodes(payload.onlineNodes);
                 }
                 break;
             case 'NODE_STATUS':
             case 'SCHEDULE_EVENT':
+            case 'HEARTBEAT_UPDATE':
+            case 'JOB_STATUS':
+            case 'DISCOVERY_EVENT':
                 setLastEvent(message);
                 break;
             case 'ALERT':
                 setAlerts((prev) => [
                     {
                         id: `${Date.now()}-${Math.random()}`,
-                        severity: message.severity || 'INFO',
-                        message: message.message || '',
+                        severity: payload.severity || 'INFO',
+                        message: payload.message || '',
                         timestamp: message.timestamp || Date.now(),
                     },
                     ...prev,

@@ -1,5 +1,6 @@
 package com.sc.lcm.core.api;
 
+import com.sc.lcm.core.api.WsEvent.*;
 import com.sc.lcm.core.service.SatelliteStateCache;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -13,18 +14,12 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * WebSocket 端点 - 实时推送 Dashboard 数据
- * 
- * 功能：
- * - 节点状态变更推送
- * - 调度事件推送
- * - 告警通知推送
  */
 @ServerEndpoint("/ws/dashboard")
 @ApplicationScoped
 @Slf4j
 public class DashboardWebSocket {
 
-    /** 已连接的 Dashboard 客户端 */
     private static final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
     @Inject
@@ -36,15 +31,14 @@ public class DashboardWebSocket {
         sessions.put(sessionId, session);
         log.info("🌐 Dashboard client connected: {} (Total: {})", sessionId, sessions.size());
 
-        // 发送欢迎消息
-        sendToSession(session, "{\"type\":\"CONNECTED\",\"message\":\"Welcome to Hyperscale LCM Dashboard\"}");
+        WsEvent welcome = WsEvent.of(EventType.CONNECTED, new ConnectedPayload("Welcome to Hyperscale LCM Dashboard"));
+        sendToSession(session, welcome.toJson());
     }
 
     @OnClose
     public void onClose(Session session) {
-        String sessionId = session.getId();
-        sessions.remove(sessionId);
-        log.info("🔌 Dashboard client disconnected: {} (Total: {})", sessionId, sessions.size());
+        sessions.remove(session.getId());
+        log.info("🔌 Dashboard client disconnected: {} (Total: {})", session.getId(), sessions.size());
     }
 
     @OnError
@@ -57,51 +51,46 @@ public class DashboardWebSocket {
     public void onMessage(String message, Session session) {
         log.debug("📩 Received message from {}: {}", session.getId(), message);
 
-        // 处理客户端请求
         if ("PING".equals(message)) {
-            sendToSession(session, "{\"type\":\"PONG\"}");
+            sendToSession(session, WsEvent.of(EventType.PONG, null).toJson());
         } else if ("GET_STATUS".equals(message)) {
-            // 返回当前在线节点数
             int onlineCount = stateCache.getOnlineCount();
-            sendToSession(session, String.format("{\"type\":\"STATUS\",\"onlineNodes\":%d}", onlineCount));
+            StatusPayload payload = StatusPayload.builder()
+                    .onlineNodes(onlineCount)
+                    .build();
+            sendToSession(session, WsEvent.of(EventType.STATUS, payload).toJson());
         }
     }
 
-    /**
-     * 广播消息给所有连接的客户端
-     */
-    public void broadcast(String message) {
-        sessions.values().forEach(session -> sendToSession(session, message));
+    public void broadcast(WsEvent event) {
+        String json = event.toJson();
+        sessions.values().forEach(session -> sendToSession(session, json));
     }
 
-    /**
-     * 广播节点状态变更
-     */
-    public void broadcastNodeStatus(String nodeId, String status) {
-        String json = String.format(
-                "{\"type\":\"NODE_STATUS\",\"nodeId\":\"%s\",\"status\":\"%s\",\"timestamp\":%d}",
-                nodeId, status, System.currentTimeMillis());
-        broadcast(json);
+    public void broadcastNodeStatus(String nodeId, String hostname, String status) {
+        broadcast(WsEvent.of(EventType.NODE_STATUS, new NodeStatusPayload(nodeId, hostname, status)));
     }
 
-    /**
-     * 广播调度事件
-     */
+    public void broadcastHeartbeat(HeartbeatPayload payload) {
+        broadcast(WsEvent.of(EventType.HEARTBEAT_UPDATE, payload));
+    }
+
     public void broadcastScheduleEvent(String jobId, String nodeId, String action) {
-        String json = String.format(
-                "{\"type\":\"SCHEDULE_EVENT\",\"jobId\":\"%s\",\"nodeId\":\"%s\",\"action\":\"%s\",\"timestamp\":%d}",
-                jobId, nodeId, action, System.currentTimeMillis());
-        broadcast(json);
+        broadcast(WsEvent.of(EventType.SCHEDULE_EVENT, new SchedulePayload(jobId, nodeId, action)));
     }
 
-    /**
-     * 广播告警
-     */
-    public void broadcastAlert(String severity, String message) {
-        String json = String.format(
-                "{\"type\":\"ALERT\",\"severity\":\"%s\",\"message\":\"%s\",\"timestamp\":%d}",
-                severity, message, System.currentTimeMillis());
-        broadcast(json);
+    public void broadcastJobStatus(String jobId, String jobName, String status, String assignedNodeId,
+            Integer exitCode) {
+        broadcast(WsEvent.of(EventType.JOB_STATUS,
+                new JobStatusPayload(jobId, jobName, status, assignedNodeId, exitCode)));
+    }
+
+    public void broadcastDiscovery(String ipAddress, String macAddress, String discoveryMethod) {
+        broadcast(WsEvent.of(EventType.DISCOVERY_EVENT, new DiscoveryPayload(ipAddress, macAddress, discoveryMethod)));
+    }
+
+    public void broadcastAlert(String severity, String message, String source) {
+        broadcast(WsEvent.of(EventType.ALERT, new AlertPayload(severity, message, source)));
     }
 
     private void sendToSession(Session session, String message) {
@@ -114,9 +103,6 @@ public class DashboardWebSocket {
         }
     }
 
-    /**
-     * 获取当前连接数
-     */
     public int getConnectionCount() {
         return sessions.size();
     }
