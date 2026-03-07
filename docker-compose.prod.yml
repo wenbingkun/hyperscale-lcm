@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: lcm-postgres
+    environment:
+      POSTGRES_USER: lcm_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-O1b2M3x4P5!}
+      POSTGRES_DB: lcm_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U lcm_user -d lcm_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: lcm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: lcm-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: lcm-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: lcm-jaeger
+    ports:
+      - "16686:16686" # Web UI
+      - "4317:4317" # OTLP gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  lcm-core:
+    image: ${DOCKERHUB_USERNAME:-wenbingkun}/lcm-core:latest
+    container_name: lcm-core
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+    ports:
+      - "8080:8080" # REST API
+      - "9000:9000" # gRPC
+    environment:
+      - DB_USERNAME=lcm_user
+      - DB_PASSWORD=${DB_PASSWORD:-O1b2M3x4P5!}
+      - DB_REACTIVE_URL=postgresql://postgres:5432/lcm_db
+      - DB_URL=jdbc:postgresql://postgres:5432/lcm_db
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - OTEL_EXPORTER_ENDPOINT=http://jaeger:4317
+
+  lcm-frontend:
+    image: ${DOCKERHUB_USERNAME:-wenbingkun}/lcm-frontend:latest
+    container_name: lcm-frontend
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:
+  redis_data:

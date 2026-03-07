@@ -172,3 +172,14 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/lcm-satellite:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/lcm-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/lcm-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

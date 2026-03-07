@@ -137,6 +137,19 @@ cd frontend
 npm install && npm run dev
 ```
 
+### 方式三：生产环境 Docker 部署 (推荐)
+
+如果您希望直接使用 GitHub Actions 构建好的最新镜像，可以使用生产环境配置：
+
+```bash
+# 设置您的 Docker Hub 用户名（如果推送到了自己的仓库，否则默认使用 wenbingkun）
+export DOCKERHUB_USERNAME=wenbingkun
+export DB_PASSWORD=your_secure_password
+
+# 启动包括核心服务和所有基础设施在内的集群
+docker-compose -f docker-compose.prod.yml up -d
+```
+
 ### 5. 访问服务
 
 | 服务 | 地址 |
