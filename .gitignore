@@ -89,3 +89,5 @@ tmp/
 temp/
 *.tmp
 *.bak
+*.key
+core/src/main/resources/META-INF/resources/privateKey.pem
