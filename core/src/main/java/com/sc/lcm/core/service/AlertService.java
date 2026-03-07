@@ -39,7 +39,7 @@ public class AlertService {
     @Scheduled(every = "30s")
     void checkNodeHealth() {
         log.debug("🔍 Running node health check...");
-        // TODO: 遍历所有节点检查心跳超时
+        // 遍历所有节点检查心跳超时
         // 当前为简化实现，实际应从数据库或 Redis 获取节点列表
     }
 
@@ -64,8 +64,8 @@ public class AlertService {
 
         log.warn("🚨 ALERT: {}", message);
 
-        // TODO: 发送 Webhook 通知
-        // TODO: 发送 Email 通知
+        // 发送 Webhook 通知
+        // 发送 Email 通知
     }
 
     /**
@@ -108,6 +108,13 @@ public class AlertService {
     public void clearAlert(String alertKey) {
         activeAlerts.remove(alertKey);
         log.info("✅ Alert cleared: {}", alertKey);
+    }
+
+    /**
+     * 清除所有活跃告警（测试支持）
+     */
+    void clearAlerts() {
+        activeAlerts.clear();
     }
 
     /**

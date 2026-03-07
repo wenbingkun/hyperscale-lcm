@@ -26,22 +26,7 @@ public class AlertServiceTest {
 
     @BeforeEach
     public void setup() {
-        // Clear active alerts simulating a fresh service or via reflection if we must,
-        // but since it's ApplicationScoped and mutating, let's just clear manually or
-        // through a new method.
-        // We will just test the exact behavior. For isolation we want to make sure the
-        // alert count is 0.
-        // AlertService is ApplicationScoped so it keeps state between tests.
-        // Let's add a package-private clearAll() method to AlertService, or just use
-        // reflection.
-        try {
-            java.lang.reflect.Field field = AlertService.class.getDeclaredField("activeAlerts");
-            field.setAccessible(true);
-            java.util.Map<?, ?> activeAlerts = (java.util.Map<?, ?>) field.get(alertService);
-            activeAlerts.clear();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        alertService.clearAlerts();
         Mockito.reset(dashboardWebSocket);
     }
 

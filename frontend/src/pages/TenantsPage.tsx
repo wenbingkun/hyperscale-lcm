@@ -22,23 +22,22 @@ const API_BASE = 'http://localhost:8080';
 export const TenantsPage: React.FC = () => {
     const [tenants, setTenants] = useState<Tenant[]>([]);
 
-    const loadTenants = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE}/api/tenants`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setTenants(data);
-            }
-        } catch (error) {
-            console.error('Failed to load tenants:', error);
-        }
-    };
-
     useEffect(() => {
-        loadTenants();
+        const doLoadTenants = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch(`${API_BASE}/api/tenants`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setTenants(data);
+                }
+            } catch (error) {
+                console.error('Failed to load tenants:', error);
+            }
+        };
+        doLoadTenants();
     }, []);
 
     const getUtilizationColor = (used: number, quota: number) => {

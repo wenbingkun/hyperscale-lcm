@@ -16,9 +16,21 @@ export const JobsPage: React.FC = () => {
     };
 
     useEffect(() => {
-        loadJobs();
-        const interval = setInterval(loadJobs, 5000);
-        return () => clearInterval(interval);
+        let cancelled = false;
+        const doLoadJobs = async () => {
+            setLoading(true);
+            const data = await fetchJobs();
+            if (!cancelled) {
+                setJobs(data);
+                setLoading(false);
+            }
+        };
+        doLoadJobs();
+        const interval = setInterval(doLoadJobs, 5000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
     }, []);
 
     const getStatusColor = (status: string) => {

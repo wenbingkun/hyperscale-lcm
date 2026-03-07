@@ -30,7 +30,7 @@ export const GradientButton: React.FC<GradientButtonProps> = ({
             whileTap={{ scale: 0.95 }}
             className={`${baseStyle} ${variants[variant]} ${className}`}
             disabled={disabled || loading}
-            {...(props as any)}
+            {...(props as Record<string, unknown>)}
         >
             {loading ? (
                 <span className="flex items-center gap-2">

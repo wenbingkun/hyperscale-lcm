@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { Wifi, Check, X, RefreshCw, Monitor, Play, Square, Search } from 'lucide-react';
 
@@ -80,15 +80,22 @@ export const DiscoveryPage: React.FC = () => {
         }
     };
 
+    const runningScanRef = useRef(runningScan);
     useEffect(() => {
-        loadDevices();
-        loadPendingCount();
-        checkRunningScan();
+        runningScanRef.current = runningScan;
+    }, [runningScan]);
+
+    useEffect(() => {
+        // Initial load (wrapped in async IIFE to avoid direct setState in effect body)
+        const initLoad = async () => {
+            await Promise.all([loadDevices(), loadPendingCount(), checkRunningScan()]);
+        };
+        initLoad();
 
         // Poll for running scan status
         const interval = setInterval(() => {
             checkRunningScan();
-            if (runningScan) {
+            if (runningScanRef.current) {
                 loadDevices();
                 loadPendingCount();
             }

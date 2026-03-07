@@ -29,7 +29,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         switch (message.type) {
             case 'STATUS':
                 if (payload.onlineNodes !== undefined) {
-                    setOnlineNodes(payload.onlineNodes);
+                    setOnlineNodes(payload.onlineNodes as number);
                 }
                 break;
             case 'NODE_STATUS':
@@ -43,8 +43,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 setAlerts((prev) => [
                     {
                         id: `${Date.now()}-${Math.random()}`,
-                        severity: payload.severity || 'INFO',
-                        message: payload.message || '',
+                        severity: (payload.severity as string) || 'INFO',
+                        message: (payload.message as string) || '',
                         timestamp: message.timestamp || Date.now(),
                     },
                     ...prev,
@@ -84,6 +84,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useWebSocketContext(): WebSocketContextValue {
     const context = useContext(WebSocketContext);
     if (!context) {

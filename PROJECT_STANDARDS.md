@@ -3,7 +3,7 @@
 为了保证项目的企业级质量和可维护性，所有开发者需遵循以下规范。
 
 ## 1. 技术栈规范 (Tech Stack)
-*   **Core**: Java 17+, Quarkus (Latest Stable).
+*   **Core**: Java 21, Quarkus (Latest Stable).
     *   禁止引入 Spring 依赖，保持 Native Image 兼容性。
     *   使用 Lombok 简化样板代码。
 *   **Satellite**: Go 1.21+.

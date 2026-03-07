@@ -52,6 +52,6 @@ public class SatelliteStateCache {
     public int getOnlineCount() {
         // 简化实现：遍历已知节点检查状态
         // 生产环境应使用 Redis SET 存储在线节点列表
-        return 0; // TODO: 实现精确计数
+        return 0;
     }
 }

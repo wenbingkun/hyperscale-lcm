@@ -19,6 +19,7 @@ export const JobDetailPage: React.FC = () => {
     const [job, setJob] = useState<Job | null>(null);
     const [loading, setLoading] = useState(true);
     const { lastEvent } = useWebSocketContext();
+    const [initTimestamp] = useState(() => new Date(Date.now() - 3600000).toISOString());
 
     useEffect(() => {
         const loadJob = async () => {
@@ -131,7 +132,7 @@ export const JobDetailPage: React.FC = () => {
                         </div>
                         <div className="space-y-1 relative">
                             <p className="text-gray-500 mb-2"># Live execution stream</p>
-                            <p className="text-green-400">[{new Date(job.id ? Date.now() - 3600000 : Date.now()).toISOString()}] [SYSTEM] Job initialized.</p>
+                            <p className="text-green-400">[{initTimestamp}] [SYSTEM] Job initialized.</p>
                             {job.scheduledAt && (
                                 <p className="text-blue-400">[{job.scheduledAt}] [SCHEDULER] Assigned to compute node: <span className="text-cyan-300">{job.assignedNodeId}</span></p>
                             )}
