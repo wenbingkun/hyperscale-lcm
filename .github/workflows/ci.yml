@@ -60,6 +60,7 @@ jobs:
         run: ./gradlew test --no-daemon
         env:
           QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://localhost:5432/lcm
+          QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://localhost:5432/lcm
           QUARKUS_DATASOURCE_USERNAME: lcm
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
