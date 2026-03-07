@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: core
-          image: hyperscale-lcm/core:latest
+          image: myorg/lcm-core:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -10,7 +10,7 @@ core:
   replicaCount: 2
   
   image:
-    repository: hyperscale-lcm/core
+    repository: myorg/lcm-core
     tag: "latest"
     pullPolicy: IfNotPresent
   
@@ -56,7 +56,7 @@ frontend:
   replicaCount: 2
   
   image:
-    repository: hyperscale-lcm/frontend
+    repository: myorg/lcm-frontend
     tag: "latest"
     pullPolicy: IfNotPresent
   
@@ -81,7 +81,7 @@ satellite:
   enabled: true
   
   image:
-    repository: hyperscale-lcm/satellite
+    repository: myorg/lcm-satellite
     tag: "latest"
     pullPolicy: IfNotPresent
   

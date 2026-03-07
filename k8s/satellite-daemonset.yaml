@@ -20,7 +20,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: satellite
-          image: hyperscale-lcm/satellite:latest
+          image: myorg/lcm-satellite:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: CORE_ADDRESS
