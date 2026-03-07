@@ -4,7 +4,7 @@ FROM gradle:8.5-jdk21 AS build
 WORKDIR /app
 
 # Copy gradle files first for caching
-COPY build.gradle settings.gradle ./
+COPY build.gradle settings.gradle gradle.properties ./
 COPY gradle ./gradle
 
 # Download dependencies
