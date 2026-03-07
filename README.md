@@ -139,16 +139,18 @@ npm install && npm run dev
 
 ### 方式三：生产环境 Docker 部署 (推荐)
 
-如果您希望直接使用 GitHub Actions 构建好的最新镜像，可以使用生产环境配置：
+此项目提供了生产级的 `docker-compose.prod.yml`，它将启动所有核心服务、基础设施及前端，并直接使用已发布的 Docker 镜像。
 
 ```bash
-# 设置您的 Docker Hub 用户名（如果推送到了自己的仓库，否则默认使用 wenbingkun）
-export DOCKERHUB_USERNAME=wenbingkun
-export DB_PASSWORD=your_secure_password
+# （可选）配置您的自定义环境变量，例如使用自定义命名空间或标签
+export DOCKER_NAMESPACE=binkunwen  # 替换为您的 Docker Hub 组织或用户名
+export DOCKER_TAG=latest           # 指定镜像版本标签
+export DB_PASSWORD=your_secure_db_pwd
 
-# 启动包括核心服务和所有基础设施在内的集群
+# 一键启动生产环境集群
 docker-compose -f docker-compose.prod.yml up -d
 ```
+> **提示**：如果您是基于当前仓库自行构建了镜像并推送到了自己的 Harbor 或 Docker Hub，只需修改 `DOCKER_NAMESPACE` 指向您的 Registry 即可无缝切换部署。
 
 ### 5. 访问服务
 

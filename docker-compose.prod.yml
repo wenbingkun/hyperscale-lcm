@@ -59,7 +59,7 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
 
   lcm-core:
-    image: ${DOCKERHUB_USERNAME:-wenbingkun}/lcm-core:latest
+    image: ${DOCKER_NAMESPACE:-binkunwen}/lcm-core:${DOCKER_TAG:-latest}
     container_name: lcm-core
     depends_on:
       postgres:
@@ -81,7 +81,7 @@ services:
       - OTEL_EXPORTER_ENDPOINT=http://jaeger:4317
 
   lcm-frontend:
-    image: ${DOCKERHUB_USERNAME:-wenbingkun}/lcm-frontend:latest
+    image: ${DOCKER_NAMESPACE:-binkunwen}/lcm-frontend:${DOCKER_TAG:-latest}
     container_name: lcm-frontend
     ports:
       - "5173:80"
