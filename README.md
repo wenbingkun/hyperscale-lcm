@@ -143,7 +143,7 @@ npm install && npm run dev
 
 ```bash
 # （可选）配置您的自定义环境变量，例如使用自定义命名空间或标签
-export DOCKER_NAMESPACE=myorg      # 替换为您的 Docker Hub 组织或用户名
+export DOCKER_NAMESPACE=example    # 替换为您的 Docker Hub 组织或用户名
 export DOCKER_TAG=latest           # 指定镜像版本标签
 export DB_PASSWORD=your_secure_db_pwd
 

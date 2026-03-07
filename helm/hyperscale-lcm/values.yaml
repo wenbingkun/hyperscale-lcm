@@ -10,7 +10,7 @@ core:
   replicaCount: 2
   
   image:
-    repository: myorg/lcm-core
+    repository: example/lcm-core
     tag: "latest"
     pullPolicy: IfNotPresent
   
@@ -56,7 +56,7 @@ frontend:
   replicaCount: 2
   
   image:
-    repository: myorg/lcm-frontend
+    repository: example/lcm-frontend
     tag: "latest"
     pullPolicy: IfNotPresent
   
@@ -81,7 +81,7 @@ satellite:
   enabled: true
   
   image:
-    repository: myorg/lcm-satellite
+    repository: example/lcm-satellite
     tag: "latest"
     pullPolicy: IfNotPresent
   
