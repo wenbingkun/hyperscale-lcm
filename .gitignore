@@ -60,7 +60,6 @@ dist/
 .env.local
 .env.*.local
 *.pem
-!core/src/main/resources/META-INF/resources/*.pem
 
 # ============ OS Files ============
 .DS_Store
@@ -91,3 +90,4 @@ temp/
 *.bak
 *.key
 core/src/main/resources/META-INF/resources/privateKey.pem
+certs/
