@@ -52,6 +52,9 @@ dependencies {
     testImplementation 'io.quarkus:quarkus-test-vertx'
     testImplementation 'io.quarkus:quarkus-test-hibernate-reactive-panache'
     testImplementation 'io.rest-assured:rest-assured'
+    testImplementation 'io.quarkus:quarkus-test-kafka-companion'
+    testImplementation 'org.testcontainers:testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
     
     // Timefold Constraint Verifier for testing
     testImplementation 'ai.timefold.solver:timefold-solver-test:1.4.0'

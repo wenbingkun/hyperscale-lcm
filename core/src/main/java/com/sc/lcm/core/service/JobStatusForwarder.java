@@ -27,14 +27,15 @@ public class JobStatusForwarder {
     @Inject
     OpenTelemetry openTelemetry;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Inject
+    ObjectMapper objectMapper;
 
-    public void forwardStatus(String jobId, String satelliteId, String statusName, int exitCode, String message, Map<String, String> traceContextMap) {
+    public void forwardStatus(String jobId, String satelliteId, String statusName, int exitCode, String message,
+            Map<String, String> traceContextMap) {
         try {
             JobStatusCallback callback = new JobStatusCallback(
                     jobId, satelliteId, statusName, exitCode, message,
-                    "", "", 0L, LocalDateTime.now()
-            );
+                    "", "", 0L, LocalDateTime.now());
             String json = objectMapper.writeValueAsString(callback);
 
             if (traceContextMap != null && !traceContextMap.isEmpty()) {
@@ -44,6 +45,7 @@ public class JobStatusForwarder {
                             public Iterable<String> keys(Map<String, String> carrier) {
                                 return carrier.keySet();
                             }
+
                             @Override
                             public String get(Map<String, String> carrier, String key) {
                                 return carrier.get(key);
