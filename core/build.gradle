@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'io.quarkus' version '3.6.4'
     id 'eclipse'
+    id 'jacoco'
 }
 
 repositories {
@@ -45,6 +46,7 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
     testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.quarkus:quarkus-jacoco'
     testImplementation 'io.quarkus:quarkus-junit5-mockito'
     testImplementation 'org.mockito:mockito-core'
     testImplementation 'io.quarkus:quarkus-test-vertx'
@@ -104,3 +106,32 @@ sourceSets {
         }
     }
 }
+
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    // Quarkus extension generates coverage data to build/jacoco-quarkus.exec
+    executionData.setFrom(fileTree(dir: 'build', include: 'jacoco-quarkus.exec'))
+}
+
+jacocoTestCoverageVerification {
+    dependsOn jacocoTestReport
+    // Quarkus extension generates coverage data to build/jacoco-quarkus.exec
+    executionData.setFrom(fileTree(dir: 'build', include: 'jacoco-quarkus.exec'))
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification
