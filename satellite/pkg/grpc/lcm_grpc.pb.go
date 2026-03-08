@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v3.21.12
-// source: pkg/grpc/lcm.proto
+// source: lcm.proto
 
 package lcm
 
@@ -257,5 +257,5 @@ var LcmService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "pkg/grpc/lcm.proto",
+	Metadata: "lcm.proto",
 }

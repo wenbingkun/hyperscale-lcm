@@ -39,6 +39,9 @@ public class LcmGrpcService implements LcmService {
     @org.eclipse.microprofile.config.inject.ConfigProperty(name = "lcm.discovery.require-approval", defaultValue = "false")
     boolean requireApproval;
 
+    @Inject
+    com.sc.lcm.core.service.JobStatusForwarder jobStatusForwarder;
+
     /**
      * 响应式 Satellite 注册
      * - 使用 Panache.withTransaction() 非阻塞写入
@@ -232,6 +235,14 @@ public class LcmGrpcService implements LcmService {
                             var status = req.getStatusUpdate();
                             log.info("📊 JOB STATUS UPDATE: Job={} Status={} Msg={} Exit={}",
                                     status.getJobId(), status.getStatus(), status.getMessage(), status.getExitCode());
+
+                            jobStatusForwarder.forwardStatus(
+                                    status.getJobId(),
+                                    req.getSatelliteId(),
+                                    status.getStatus().name(),
+                                    status.getExitCode(),
+                                    status.getMessage(),
+                                    status.getTraceContextMap());
                         } else {
                             if (!req.getSatelliteId().isEmpty()) {
                                 streamRegistry.register(req.getSatelliteId(), emitter);

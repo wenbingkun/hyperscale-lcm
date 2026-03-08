@@ -18,21 +18,26 @@ public class StreamRegistry {
     public void register(String satelliteId, MultiEmitter<? super StreamResponse> emitter) {
         emitters.put(satelliteId, emitter);
         LOG.infof("✅ Satellite connected to stream: %s", satelliteId);
-        
+
         emitter.onTermination(() -> {
             emitters.remove(satelliteId);
             LOG.infof("❌ Satellite disconnected from stream: %s", satelliteId);
         });
     }
 
-    public void sendCommand(String satelliteId, String commandType, String payload) {
+    public void sendCommand(String satelliteId, String commandType, String payload, Map<String, String> traceContext) {
         MultiEmitter<? super StreamResponse> emitter = emitters.get(satelliteId);
         if (emitter != null) {
-            StreamResponse response = StreamResponse.newBuilder()
+            StreamResponse.Builder builder = StreamResponse.newBuilder()
                     .setCommandId(java.util.UUID.randomUUID().toString())
                     .setCommandType(commandType)
-                    .setPayload(payload)
-                    .build();
+                    .setPayload(payload);
+
+            if (traceContext != null) {
+                builder.putAllTraceContext(traceContext);
+            }
+
+            StreamResponse response = builder.build();
             emitter.emit(response);
             LOG.infof("🚀 Command sent to %s: %s", satelliteId, commandType);
         } else {
