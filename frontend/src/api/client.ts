@@ -61,7 +61,7 @@ export interface JobRequest {
     tenantId?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const TOKEN_KEY = 'lcm_auth_token';
 
 /**
@@ -79,7 +79,7 @@ function authHeaders(extra?: Record<string, string>): HeadersInit {
 /**
  * 统一的 fetch 封装 - 自动附加 Auth 头 + 401 处理
  */
-async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
+export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
     const response = await fetch(url, {
         ...options,
         headers: authHeaders(options?.headers as Record<string, string>),
