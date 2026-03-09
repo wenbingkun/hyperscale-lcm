@@ -133,13 +133,26 @@ func main() {
 		log.Printf("✅ Registration Successful! Assigned ID: %s", r.GetAssignedId())
 		satelliteId := r.GetAssignedId()
 
+		// Create a cancellable context for background goroutines
+		bgCtx, bgCancel := context.WithCancel(context.Background())
+		defer bgCancel()
+
 		// Start Stream Connection in background
 		go func() {
 			// Reconnection Loop
 			for {
+				select {
+				case <-bgCtx.Done():
+					return
+				default:
+				}
+
 				log.Println("🔌 Connecting to Command Stream...")
-				stream, err := client.ConnectStream(context.Background())
+				stream, err := client.ConnectStream(bgCtx)
 				if err != nil {
+					if bgCtx.Err() != nil {
+						return
+					}
 					log.Printf("❌ Failed to connect stream: %v. Retrying in 5s...", err)
 					time.Sleep(5 * time.Second)
 					continue
@@ -162,6 +175,9 @@ func main() {
 				for {
 					resp, err := stream.Recv()
 					if err != nil {
+						if bgCtx.Err() != nil {
+							return
+						}
 						log.Printf("❌ Stream disconnected: %v", err)
 						break // Break inner loop to reconnect
 					}
@@ -180,7 +196,7 @@ func main() {
 		// Start Discovery Manager (DHCP listener + ARP scanner)
 		discoveryIface := os.Getenv("LCM_DISCOVERY_IFACE") // e.g. "eth0", empty = auto-detect
 		discoveryMgr := discovery.NewManager(client, satelliteId, discoveryIface)
-		discoveryMgr.Start(context.Background())
+		discoveryMgr.Start(bgCtx)
 
 		// Start Heartbeat Ticker
 		ticker := time.NewTicker(5 * time.Second)
@@ -203,6 +219,7 @@ func main() {
 
 			case sig := <-sigChan:
 				log.Printf("Received signal %v, shutting down gracefully...", sig)
+				bgCancel()
 				discoveryMgr.Stop()
 				ticker.Stop()
 				// conn.Close() is handled by defer

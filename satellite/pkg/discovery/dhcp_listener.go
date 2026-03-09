@@ -34,10 +34,26 @@ func ListenDHCP(ctx context.Context, iface string, events chan<- Event) {
 }
 
 func listenDHCPOnce(ctx context.Context, iface string, events chan<- Event) error {
-	// Listen on DHCP server port (67) to capture DHCP broadcast packets.
-	// Satellites typically run with elevated privileges for hardware management,
-	// so binding to port 67 is expected.
-	conn, err := net.ListenPacket("udp4", ":67")
+	// Determine listen address: bind to specific interface IP if provided,
+	// otherwise listen on all interfaces.
+	listenAddr := ":67"
+	if iface != "" {
+		if ifc, err := net.InterfaceByName(iface); err == nil {
+			if addrs, err := ifc.Addrs(); err == nil {
+				for _, addr := range addrs {
+					if ipnet, ok := addr.(*net.IPNet); ok && ipnet.IP.To4() != nil {
+						listenAddr = ipnet.IP.String() + ":67"
+						log.Printf("DHCP listener binding to %s (%s)", listenAddr, iface)
+						break
+					}
+				}
+			}
+		} else {
+			log.Printf("Warning: interface %s not found, listening on all interfaces", iface)
+		}
+	}
+
+	conn, err := net.ListenPacket("udp4", listenAddr)
 	if err != nil {
 		return err
 	}
