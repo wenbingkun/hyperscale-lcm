@@ -1,22 +1,38 @@
 package com.sc.lcm.core.api;
 
+import com.sc.lcm.core.domain.DiscoveredDevice;
+import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryMethod;
+import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus;
 import com.sc.lcm.core.domain.Satellite;
-import com.sc.lcm.core.service.JobStatusForwarder;
+import com.sc.lcm.core.grpc.DiscoveryRequest;
+import com.sc.lcm.core.grpc.DiscoveryResponse;
+import com.sc.lcm.core.grpc.HeartbeatRequest;
+import com.sc.lcm.core.grpc.HeartbeatResponse;
 import com.sc.lcm.core.grpc.LcmService;
 import com.sc.lcm.core.grpc.RegisterRequest;
 import com.sc.lcm.core.grpc.RegisterResponse;
+import com.sc.lcm.core.grpc.StreamRequest;
+import com.sc.lcm.core.grpc.StreamResponse;
+import com.sc.lcm.core.service.JobStatusForwarder;
+import com.sc.lcm.core.service.RegistrationNodeSpecsProvider;
+import com.sc.lcm.core.service.SatelliteStateCache;
+import com.sc.lcm.core.service.StreamRegistry;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.quarkus.grpc.GrpcService;
 import io.quarkus.hibernate.reactive.panache.Panache;
-import io.smallrye.mutiny.Uni;
-import java.util.UUID;
-import lombok.extern.slf4j.Slf4j;
-import jakarta.inject.Inject;
-
-// Fault Tolerance imports
-import org.eclipse.microprofile.faulttolerance.CircuitBreaker;
-import org.eclipse.microprofile.faulttolerance.Bulkhead;
 import io.smallrye.faulttolerance.api.RateLimit;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.faulttolerance.Bulkhead;
+import org.eclipse.microprofile.faulttolerance.CircuitBreaker;
+
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 /**
  * gRPC 服务 - 使用 Hibernate Reactive + 限流熔断保护
@@ -26,18 +42,18 @@ import java.time.temporal.ChronoUnit;
 public class LcmGrpcService implements LcmService {
 
     @Inject
-    com.sc.lcm.core.api.DashboardWebSocket dashboardWebSocket;
+    DashboardWebSocket dashboardWebSocket;
 
     @Inject
-    com.sc.lcm.core.service.SatelliteStateCache stateCache;
+    SatelliteStateCache stateCache;
 
     @Inject
-    com.sc.lcm.core.service.StreamRegistry streamRegistry;
+    StreamRegistry streamRegistry;
 
     @Inject
-    com.sc.lcm.core.service.RegistrationNodeSpecsProvider registrationNodeSpecs;
+    RegistrationNodeSpecsProvider registrationNodeSpecs;
 
-    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "lcm.discovery.require-approval", defaultValue = "false")
+    @ConfigProperty(name = "lcm.discovery.require-approval", defaultValue = "false")
     boolean requireApproval;
 
     @Inject
@@ -45,7 +61,6 @@ public class LcmGrpcService implements LcmService {
 
     /**
      * 响应式 Satellite 注册
-     * - 使用 Panache.withTransaction() 非阻塞写入
      * - CircuitBreaker: DB 故障时快速失败
      * - 校验发现设备池的状态 (MANAGED/APPROVED)
      * - 同时持久化 Node 实体（如果包含硬件规格）
@@ -57,27 +72,26 @@ public class LcmGrpcService implements LcmService {
 
         return Panache.withTransaction(() -> {
             if (requireApproval) {
-                return com.sc.lcm.core.domain.DiscoveredDevice.findByIp(request.getIpAddress())
+                return DiscoveredDevice.findByIp(request.getIpAddress())
                         .flatMap(device -> {
                             if (device == null) {
-                                log.warn("❌ Registration rejected for {}: device unknown", request.getIpAddress());
+                                log.warn("Registration rejected for {}: device unknown", request.getIpAddress());
                                 return Uni.createFrom()
-                                        .failure(new io.grpc.StatusRuntimeException(io.grpc.Status.UNAUTHENTICATED
+                                        .failure(new StatusRuntimeException(Status.UNAUTHENTICATED
                                                 .withDescription("Device not discovered or approved")));
                             }
-                            if (device.getStatus() != com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus.APPROVED
-                                    && device
-                                            .getStatus() != com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus.MANAGED) {
-                                log.warn("❌ Registration rejected for {}: device status is {}", request.getIpAddress(),
+                            if (device.getStatus() != DiscoveryStatus.APPROVED
+                                    && device.getStatus() != DiscoveryStatus.MANAGED) {
+                                log.warn("Registration rejected for {}: device status is {}", request.getIpAddress(),
                                         device.getStatus());
                                 return Uni.createFrom()
-                                        .failure(new io.grpc.StatusRuntimeException(
-                                                io.grpc.Status.UNAUTHENTICATED.withDescription(
+                                        .failure(new StatusRuntimeException(
+                                                Status.UNAUTHENTICATED.withDescription(
                                                         "Device not approved for registration. Current status: "
                                                                 + device.getStatus())));
                             }
                             // Device is approved, mark as MANAGED
-                            device.setStatus(com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus.MANAGED);
+                            device.setStatus(DiscoveryStatus.MANAGED);
                             return doRegisterSatellite(request);
                         });
             } else {
@@ -94,7 +108,7 @@ public class LcmGrpcService implements LcmService {
                 request.getIpAddress(),
                 request.getOsVersion(),
                 request.getAgentVersion());
-        satellite.setLastHeartbeat(java.time.LocalDateTime.now());
+        satellite.setLastHeartbeat(LocalDateTime.now());
 
         // 缓存硬件规格（用于调度时快速查询）
         if (request.hasHardware()) {
@@ -111,7 +125,7 @@ public class LcmGrpcService implements LcmService {
                     return Uni.createFrom().voidItem();
                 })
                 .map(v -> {
-                    log.info("✅ Registered satellite with ID: {} (Node synced: {})", id, request.hasHardware());
+                    log.info("Registered satellite with ID: {} (Node synced: {})", id, request.hasHardware());
                     return RegisterResponse.newBuilder()
                             .setSuccess(true)
                             .setMessage("Registration Successful")
@@ -128,8 +142,8 @@ public class LcmGrpcService implements LcmService {
     @Override
     @RateLimit(value = 2000, window = 1, windowUnit = ChronoUnit.SECONDS)
     @Bulkhead(value = 200)
-    public Uni<com.sc.lcm.core.grpc.HeartbeatResponse> sendHeartbeat(com.sc.lcm.core.grpc.HeartbeatRequest request) {
-        log.debug("💓 Heartbeat received for satellite: {}", request.getSatelliteId());
+    public Uni<HeartbeatResponse> sendHeartbeat(HeartbeatRequest request) {
+        log.debug("Heartbeat received for satellite: {}", request.getSatelliteId());
 
         double avgGpu = 0.0;
         if (request.getGpuCount() > 0 && request.getGpuMetricsCount() > 0) {
@@ -138,7 +152,7 @@ public class LcmGrpcService implements LcmService {
                     .average().orElse(0.0);
         }
 
-        dashboardWebSocket.broadcastHeartbeat(com.sc.lcm.core.api.WsEvent.HeartbeatPayload.builder()
+        dashboardWebSocket.broadcastHeartbeat(WsEvent.HeartbeatPayload.builder()
                 .nodeId(request.getSatelliteId())
                 .cpuPercent(request.getCpuUsagePercent())
                 .loadAvg(request.getLoadAvg())
@@ -151,7 +165,7 @@ public class LcmGrpcService implements LcmService {
                 .build());
 
         return stateCache.updateHeartbeatReactive(request.getSatelliteId())
-                .replaceWith(() -> com.sc.lcm.core.grpc.HeartbeatResponse.newBuilder()
+                .replaceWith(() -> HeartbeatResponse.newBuilder()
                         .setSuccess(true)
                         .build());
     }
@@ -160,8 +174,8 @@ public class LcmGrpcService implements LcmService {
      * 发现事件上报 - 响应式持久化到 discovered_devices 表
      */
     @Override
-    public Uni<com.sc.lcm.core.grpc.DiscoveryResponse> reportDiscovery(com.sc.lcm.core.grpc.DiscoveryRequest request) {
-        log.info("🔍 Discovery Event from Satellite [{}]: Found IP={}, MAC={}, Method={}",
+    public Uni<DiscoveryResponse> reportDiscovery(DiscoveryRequest request) {
+        log.info("Discovery event from Satellite [{}]: IP={}, MAC={}, Method={}",
                 request.getSatelliteId(),
                 request.getDiscoveredIp(),
                 request.getMacAddress(),
@@ -170,33 +184,30 @@ public class LcmGrpcService implements LcmService {
         dashboardWebSocket.broadcastDiscovery(request.getDiscoveredIp(), request.getMacAddress(),
                 request.getDiscoveryMethod());
 
-        return Panache.withTransaction(() -> com.sc.lcm.core.domain.DiscoveredDevice.findByIp(request.getDiscoveredIp())
+        return Panache.withTransaction(() -> DiscoveredDevice.findByIp(request.getDiscoveredIp())
                 .onItem().transformToUni(existing -> {
                     if (existing != null) {
-                        // 更新已存在设备的最后探测时间
-                        existing.setLastProbedAt(java.time.LocalDateTime.now());
+                        existing.setLastProbedAt(LocalDateTime.now());
                         existing.setMacAddress(request.getMacAddress());
-                        log.debug("📡 Updated existing device: {}", request.getDiscoveredIp());
+                        log.debug("Updated existing device: {}", request.getDiscoveredIp());
                         return Uni.createFrom().item(existing);
                     } else {
-                        // 创建新的发现设备
-                        com.sc.lcm.core.domain.DiscoveredDevice device = new com.sc.lcm.core.domain.DiscoveredDevice();
+                        DiscoveredDevice device = new DiscoveredDevice();
                         device.setIpAddress(request.getDiscoveredIp());
                         device.setMacAddress(request.getMacAddress());
-                        device.setDiscoveryMethod(
-                                mapDiscoveryMethod(request.getDiscoveryMethod()));
-                        device.setDiscoveredAt(java.time.LocalDateTime.now());
-                        log.info("📡 New device discovered and persisted: {}", request.getDiscoveredIp());
+                        device.setDiscoveryMethod(mapDiscoveryMethod(request.getDiscoveryMethod()));
+                        device.setDiscoveredAt(LocalDateTime.now());
+                        log.info("New device discovered and persisted: {}", request.getDiscoveredIp());
                         return device.persist();
                     }
                 })).replaceWith(
-                        com.sc.lcm.core.grpc.DiscoveryResponse.newBuilder()
+                        DiscoveryResponse.newBuilder()
                                 .setSuccess(true)
                                 .setMessage("Discovery persisted")
                                 .build())
                 .onFailure().recoverWithItem(error -> {
-                    log.error("❌ Failed to persist discovery: {}", error.getMessage());
-                    return com.sc.lcm.core.grpc.DiscoveryResponse.newBuilder()
+                    log.error("Failed to persist discovery: {}", error.getMessage());
+                    return DiscoveryResponse.newBuilder()
                             .setSuccess(false)
                             .setMessage("Persistence failed: " + error.getMessage())
                             .build();
@@ -204,17 +215,26 @@ public class LcmGrpcService implements LcmService {
     }
 
     /**
-     * 将 gRPC 发现方法字符串映射为枚举
+     * 将 gRPC 发现方法字符串映射为枚举。
+     * 支持 DHCP_DISCOVER, DHCP_OFFER, DHCP_REQUEST, DHCP_ACK -> DHCP
+     * 支持 ARP_SCAN, PING_SCAN -> SCAN
      */
-    private com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryMethod mapDiscoveryMethod(String method) {
+    private DiscoveryMethod mapDiscoveryMethod(String method) {
+        if (method == null || method.isEmpty()) {
+            return DiscoveryMethod.SCAN;
+        }
+        String upper = method.toUpperCase();
+        if (upper.startsWith("DHCP")) {
+            return DiscoveryMethod.DHCP;
+        }
+        if (upper.contains("SCAN") || upper.contains("PING") || upper.contains("ARP")) {
+            return DiscoveryMethod.SCAN;
+        }
         try {
-            return com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryMethod.valueOf(method.toUpperCase());
+            return DiscoveryMethod.valueOf(upper);
         } catch (IllegalArgumentException e) {
-            // PING_SCAN, ARP_SCAN 等映射为 SCAN
-            if (method.toUpperCase().contains("SCAN") || method.toUpperCase().contains("PING")) {
-                return com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryMethod.SCAN;
-            }
-            return com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryMethod.MANUAL;
+            log.warn("Unknown discovery method '{}', defaulting to SCAN", method);
+            return DiscoveryMethod.SCAN;
         }
     }
 
@@ -222,9 +242,8 @@ public class LcmGrpcService implements LcmService {
      * 双向流连接
      */
     @Override
-    public io.smallrye.mutiny.Multi<com.sc.lcm.core.grpc.StreamResponse> connectStream(
-            io.smallrye.mutiny.Multi<com.sc.lcm.core.grpc.StreamRequest> request) {
-        return io.smallrye.mutiny.Multi.createFrom().emitter(emitter -> {
+    public Multi<StreamResponse> connectStream(Multi<StreamRequest> request) {
+        return Multi.createFrom().emitter(emitter -> {
             request.subscribe().with(
                     req -> {
                         if (req.hasInit()) {
@@ -234,7 +253,7 @@ public class LcmGrpcService implements LcmService {
                             }
                         } else if (req.hasStatusUpdate()) {
                             var status = req.getStatusUpdate();
-                            log.info("📊 JOB STATUS UPDATE: Job={} Status={} Msg={} Exit={}",
+                            log.info("JOB STATUS UPDATE: Job={} Status={} Msg={} Exit={}",
                                     status.getJobId(), status.getStatus(), status.getMessage(), status.getExitCode());
 
                             jobStatusForwarder.forwardStatus(
