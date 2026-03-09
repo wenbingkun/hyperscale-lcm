@@ -91,7 +91,9 @@ func main() {
 	}
 
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatalf("failed to parse CA certificate from %s", filepath.Join(certDir, "ca.pem"))
+	}
 
 	creds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -203,9 +205,9 @@ func main() {
 				log.Printf("Received signal %v, shutting down gracefully...", sig)
 				discoveryMgr.Stop()
 				ticker.Stop()
-				conn.Close()
+				// conn.Close() is handled by defer
 				log.Println("Satellite Agent stopped")
-				os.Exit(0)
+				return
 			}
 		}
 

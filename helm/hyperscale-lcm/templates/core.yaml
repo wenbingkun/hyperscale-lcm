@@ -33,6 +33,8 @@ spec:
           env:
             - name: QUARKUS_DATASOURCE_JDBC_URL
               value: jdbc:postgresql://{{ .Release.Name }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
+            - name: QUARKUS_DATASOURCE_REACTIVE_URL
+              value: postgresql://{{ .Release.Name }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
             - name: QUARKUS_DATASOURCE_USERNAME
               value: {{ .Values.postgresql.auth.username }}
             - name: QUARKUS_DATASOURCE_PASSWORD
@@ -42,6 +44,10 @@ spec:
                   key: password
             - name: QUARKUS_REDIS_HOSTS
               value: redis://{{ .Release.Name }}-redis-master:6379
+            {{- if .Values.kafka.enabled }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Release.Name }}-kafka:9092
+            {{- end }}
             {{- range $key, $value := .Values.core.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}

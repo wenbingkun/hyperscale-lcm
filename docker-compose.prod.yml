@@ -110,6 +110,8 @@ services:
   lcm-frontend:
     image: ${DOCKER_NAMESPACE:-example}/lcm-frontend:${DOCKER_TAG:-latest}
     container_name: lcm-frontend
+    depends_on:
+      - lcm-core
     ports:
       - "5173:80"
 

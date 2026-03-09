@@ -23,7 +23,8 @@ interface ScanJob {
     discoveredCount: number;
 }
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const TOKEN_KEY = 'lcm_auth_token';
 
 export const DiscoveryPage: React.FC = () => {
     const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
@@ -36,7 +37,7 @@ export const DiscoveryPage: React.FC = () => {
 
     const loadDevices = async () => {
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem(TOKEN_KEY);
             const response = await fetch(`${API_BASE}/api/discovery`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -52,7 +53,7 @@ export const DiscoveryPage: React.FC = () => {
 
     const loadPendingCount = async () => {
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem(TOKEN_KEY);
             const response = await fetch(`${API_BASE}/api/discovery/pending/count`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -67,7 +68,7 @@ export const DiscoveryPage: React.FC = () => {
 
     const checkRunningScan = async () => {
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem(TOKEN_KEY);
             const response = await fetch(`${API_BASE}/api/scan/running`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -108,7 +109,7 @@ export const DiscoveryPage: React.FC = () => {
         if (!scanTarget) return;
 
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem(TOKEN_KEY);
             const response = await fetch(`${API_BASE}/api/scan`, {
                 method: 'POST',
                 headers: {
@@ -134,7 +135,7 @@ export const DiscoveryPage: React.FC = () => {
         if (!runningScan) return;
 
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem(TOKEN_KEY);
             await fetch(`${API_BASE}/api/scan/${runningScan.id}/cancel`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -146,7 +147,7 @@ export const DiscoveryPage: React.FC = () => {
     };
 
     const approveDevice = async (id: string) => {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem(TOKEN_KEY);
         await fetch(`${API_BASE}/api/discovery/${id}/approve`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
@@ -156,7 +157,7 @@ export const DiscoveryPage: React.FC = () => {
     };
 
     const rejectDevice = async (id: string) => {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem(TOKEN_KEY);
         await fetch(`${API_BASE}/api/discovery/${id}/reject`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }

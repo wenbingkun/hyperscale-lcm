@@ -57,8 +57,6 @@ public class E2EIntegrationTest {
 
     @Test
     public void testEndToEndJobLifecycle() throws Exception {
-        String satelliteId = UUID.randomUUID().toString();
-
         // 1. Register Satellite (Mocking Satellite startup)
         RegisterRequest registerRequest = RegisterRequest.newBuilder()
                 .setHostname("test-node-1")
@@ -67,7 +65,12 @@ public class E2EIntegrationTest {
                 .setOsVersion("Ubuntu 24.04")
                 .build();
 
-        grpcClient.registerSatellite(registerRequest).await().atMost(Duration.ofSeconds(5));
+        var registerResponse = grpcClient.registerSatellite(registerRequest)
+                .await().atMost(Duration.ofSeconds(5));
+
+        // Use the assigned ID from the registration response
+        String satelliteId = registerResponse.getAssignedId();
+        assertNotNull(satelliteId, "Registration should return an assigned ID");
 
         // 2. Send Heartbeat to ensure node is active and has resources
         HeartbeatRequest heartbeat = HeartbeatRequest.newBuilder()

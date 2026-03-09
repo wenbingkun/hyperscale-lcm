@@ -5,36 +5,33 @@ set -e
 
 echo "🔨 Building Hyperscale LCM services..."
 
-# 获取版本
+# 获取版本和命名空间
 VERSION=${1:-latest}
+NAMESPACE=${DOCKER_NAMESPACE:-example}
 echo "📦 Version: $VERSION"
+echo "📦 Namespace: $NAMESPACE"
 
 # 构建 Core 服务
 echo ""
 echo "🏗️  Building Core service..."
-docker build -t hyperscale-lcm/core:$VERSION ./core
+docker build -t $NAMESPACE/lcm-core:$VERSION ./core
 
 # 构建 Satellite 服务
 echo ""
 echo "🏗️  Building Satellite service..."
-docker build -t hyperscale-lcm/satellite:$VERSION ./satellite
+docker build -t $NAMESPACE/lcm-satellite:$VERSION ./satellite
 
-# 构建 Dashboard（可选）
-if [ -d "dashboard" ]; then
-  echo ""
-  echo "🏗️  Building Dashboard..."
-  cd dashboard
-  npm install
-  npm run build
-  cd ..
-fi
+# 构建 Frontend
+echo ""
+echo "🏗️  Building Frontend..."
+docker build -t $NAMESPACE/lcm-frontend:$VERSION ./frontend
 
 echo ""
 echo "✅ Build complete!"
 echo ""
 echo "📋 Built images:"
-docker images | grep hyperscale-lcm
+docker images | grep "$NAMESPACE/lcm-"
 
 echo ""
 echo "🚀 To run with docker-compose:"
-echo "  docker-compose up -d"
+echo "  DOCKER_NAMESPACE=$NAMESPACE DOCKER_TAG=$VERSION docker-compose -f docker-compose.prod.yml up -d"

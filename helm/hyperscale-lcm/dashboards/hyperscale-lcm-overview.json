@@ -1,0 +1,58 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Online Nodes",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "lcm_nodes_online", "legendFormat": "Online" }],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Jobs Completed (5m rate)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "rate(lcm_jobs_completed_total[5m])", "legendFormat": "Completed/s" }],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "title": "Jobs Failed (5m rate)",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "rate(lcm_jobs_failed_total[5m])", "legendFormat": "Failed/s" }],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "title": "JVM Heap Usage",
+      "type": "gauge",
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "jvm_memory_used_bytes{area=\"heap\"} / jvm_memory_max_bytes{area=\"heap\"}", "legendFormat": "Heap %" }],
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+    },
+    {
+      "title": "Node Heartbeats",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "rate(lcm_heartbeats_total[5m])", "legendFormat": "Heartbeats/s" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+    },
+    {
+      "title": "gRPC Request Duration",
+      "type": "timeseries",
+      "datasource": "Prometheus",
+      "targets": [{ "expr": "histogram_quantile(0.99, rate(grpc_server_handling_seconds_bucket[5m]))", "legendFormat": "p99" }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["hyperscale-lcm"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Hyperscale LCM Overview",
+  "uid": "hyperscale-lcm-overview"
+}

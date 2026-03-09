@@ -1,6 +1,7 @@
 package redfish
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -67,8 +68,11 @@ func (c *Collector) CollectStaticInfo() (*Info, error) {
 	defer client.Logout()
 
 	systems, err := client.Service.Systems()
-	if err != nil || len(systems) == 0 {
+	if err != nil {
 		return nil, err
+	}
+	if len(systems) == 0 {
+		return nil, fmt.Errorf("no systems found via Redfish")
 	}
 
 	system := systems[0]

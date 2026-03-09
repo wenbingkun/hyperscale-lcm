@@ -17,7 +17,8 @@ interface Tenant {
     runningJobs: number;
 }
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const TOKEN_KEY = 'lcm_auth_token';
 
 export const TenantsPage: React.FC = () => {
     const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -25,7 +26,7 @@ export const TenantsPage: React.FC = () => {
     useEffect(() => {
         const doLoadTenants = async () => {
             try {
-                const token = localStorage.getItem('token');
+                const token = localStorage.getItem(TOKEN_KEY);
                 const response = await fetch(`${API_BASE}/api/tenants`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });

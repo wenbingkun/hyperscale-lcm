@@ -64,10 +64,11 @@ public class SchedulingService {
         Job job = solution.getJobList().get(0);
         if (job.getAssignedNode() != null) {
             String nodeId = job.getAssignedNode().getId();
-            log.info("🎉 Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
+            job.setAssignedNodeId(nodeId);
+            log.info("Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
             jobEmitter.send(job);
         } else {
-            log.warn("⚠️ Job {} could not be assigned!", job.getId());
+            log.warn("Job {} could not be assigned!", job.getId());
         }
     }
 

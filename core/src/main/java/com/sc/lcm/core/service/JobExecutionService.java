@@ -83,59 +83,59 @@ public class JobExecutionService {
      */
     @Incoming("job-status-in")
     public Uni<Void> handleJobStatusCallback(String message) {
+        JobStatusCallback callback;
         try {
-            JobStatusCallback callback = objectMapper.readValue(message, JobStatusCallback.class);
-
-            log.info("📥 Received status callback for job {}: {}", callback.jobId(), callback.status());
-
-            return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
-                    .onItem().transformToUni(job -> {
-                        if (job == null) {
-                            log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
-                            dlqEmitter.send(message);
-                            return Uni.createFrom().voidItem();
-                        }
-
-                        // 更新作业状态
-                        job.setStatus(JobStatus.valueOf(callback.status()));
-                        job.setExitCode(callback.exitCode());
-                        job.setErrorMessage(callback.errorMessage());
-                        job.setCompletedAt(callback.completedAt());
-
-                        return Uni.createFrom().voidItem();
-                    })).invoke(() -> {
-                        // 更新指标
-                        if ("COMPLETED".equals(callback.status())) {
-                            metricsService.recordJobCompleted();
-                        } else if ("FAILED".equals(callback.status())) {
-                            metricsService.recordJobFailed();
-                        }
-
-                        // WebSocket 通知
-                        dashboardWebSocket.broadcastScheduleEvent(
-                                callback.jobId(),
-                                callback.nodeId(),
-                                callback.status());
-
-                        // 审计日志
-                        if ("COMPLETED".equals(callback.status())) {
-                            auditService.logJobCompleted(callback.jobId(), "SYSTEM", null, callback.exitCode())
-                                    .subscribe().with(v -> {
-                                    }, e -> log.error("Audit log failed", e));
-                        } else if ("FAILED".equals(callback.status())) {
-                            auditService.logJobFailed(callback.jobId(), "SYSTEM", null, callback.errorMessage())
-                                    .subscribe().with(v -> {
-                                    }, e -> log.error("Audit log failed", e));
-                        }
-                    }).onFailure().invoke(err -> {
-                        log.error("❌ Database or business logic failure processing callback, routing to DLQ", err);
-                        dlqEmitter.send(message);
-                    }).onFailure().recoverWithNull();
-
+            callback = objectMapper.readValue(message, JobStatusCallback.class);
         } catch (Exception e) {
-            log.error("❌ Failed to parse or process job status callback, sending to DLQ", e);
+            log.error("Failed to parse job status callback, sending to DLQ", e);
             dlqEmitter.send(message);
             return Uni.createFrom().voidItem();
         }
+
+        log.info("Received status callback for job {}: {}", callback.jobId(), callback.status());
+
+        return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
+                .onItem().transformToUni(job -> {
+                    if (job == null) {
+                        log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
+                        dlqEmitter.send(message);
+                        return Uni.createFrom().voidItem();
+                    }
+
+                    // 更新作业状态
+                    job.setStatus(JobStatus.valueOf(callback.status()));
+                    job.setExitCode(callback.exitCode());
+                    job.setErrorMessage(callback.errorMessage());
+                    job.setCompletedAt(callback.completedAt());
+
+                    return Uni.createFrom().voidItem();
+                })).invoke(() -> {
+                    // 更新指标
+                    if ("COMPLETED".equals(callback.status())) {
+                        metricsService.recordJobCompleted();
+                    } else if ("FAILED".equals(callback.status())) {
+                        metricsService.recordJobFailed();
+                    }
+
+                    // WebSocket 通知
+                    dashboardWebSocket.broadcastScheduleEvent(
+                            callback.jobId(),
+                            callback.nodeId(),
+                            callback.status());
+
+                    // 审计日志
+                    if ("COMPLETED".equals(callback.status())) {
+                        auditService.logJobCompleted(callback.jobId(), "SYSTEM", null, callback.exitCode())
+                                .subscribe().with(v -> {
+                                }, e -> log.error("Audit log failed", e));
+                    } else if ("FAILED".equals(callback.status())) {
+                        auditService.logJobFailed(callback.jobId(), "SYSTEM", null, callback.errorMessage())
+                                .subscribe().with(v -> {
+                                }, e -> log.error("Audit log failed", e));
+                    }
+                }).onFailure().invoke(err -> {
+                    log.error("Database or business logic failure processing callback, routing to DLQ", err);
+                    dlqEmitter.send(message);
+                }).onFailure().recoverWithNull();
     }
 }

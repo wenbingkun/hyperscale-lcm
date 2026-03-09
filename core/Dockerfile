@@ -33,9 +33,9 @@ EXPOSE 8080 9000
 # Environment variables
 ENV JAVA_OPTS="-Xmx512m -Xms256m"
 
-# Health check
+# Health check (wget is available in jre-jammy, curl is not)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/q/health/live || exit 1
+    CMD wget -qO- http://localhost:8080/q/health/live || exit 1
 
-# Run the application
-ENTRYPOINT ["java", "-jar", "quarkus-run.jar"]
+# Run the application (shell form to allow JAVA_OPTS expansion)
+ENTRYPOINT java ${JAVA_OPTS} -jar quarkus-run.jar

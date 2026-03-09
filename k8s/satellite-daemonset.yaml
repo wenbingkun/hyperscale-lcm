@@ -56,7 +56,7 @@ spec:
       volumes:
         - name: certs
           secret:
-            secretName: hyperscale-lcm-satellite-tls
+            secretName: hyperscale-lcm-tls
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock

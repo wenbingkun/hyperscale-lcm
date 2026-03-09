@@ -8,6 +8,7 @@ import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
 import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.smallrye.mutiny.Uni;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,11 @@ public class PartitionedSchedulingService {
     private final ExecutorService zoneExecutor = Executors.newFixedThreadPool(
             Runtime.getRuntime().availableProcessors());
 
+    @PreDestroy
+    void shutdown() {
+        zoneExecutor.shutdownNow();
+    }
+
     /**
      * 按 Zone 分区调度 - 响应式入口
      * 
@@ -57,8 +63,8 @@ public class PartitionedSchedulingService {
     @WithSession
     public Uni<Map<String, Node>> scheduleByZone(Job job) {
         return loadNodesByZone()
-                .map(nodesByZone -> {
-                    log.info("📊 Partitioned scheduling: {} zones, {} total nodes",
+                .chain(nodesByZone -> {
+                    log.info("Partitioned scheduling: {} zones, {} total nodes",
                             nodesByZone.size(),
                             nodesByZone.values().stream().mapToInt(List::size).sum());
 
@@ -67,10 +73,10 @@ public class PartitionedSchedulingService {
                             .map(entry -> solveForZone(entry.getKey(), entry.getValue(), job))
                             .collect(Collectors.toList());
 
-                    // 等待所有 Zone 完成并选择最优解
-                    return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                            .thenApply(v -> selectBestSolution(futures, job))
-                            .join();
+                    // Use Uni.createFrom().completionStage to avoid blocking the event loop
+                    return Uni.createFrom().completionStage(
+                            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                                    .thenApply(v -> selectBestSolution(futures, job)));
                 });
     }
 

@@ -58,37 +58,28 @@ dependencies {
     
     // Timefold Constraint Verifier for testing
     testImplementation 'ai.timefold.solver:timefold-solver-test:1.4.0'
-    
+
     // Scheduler for background tasks
     implementation 'io.quarkus:quarkus-scheduler'
-    
+
     // Resilience (Rate Limiting & Circuit Breaker)
     implementation 'io.quarkus:quarkus-smallrye-fault-tolerance'
-    
+
     // WebSocket for real-time Dashboard (classic Jakarta WebSocket API)
     implementation 'io.quarkus:quarkus-undertow'
     implementation 'io.quarkus:quarkus-websockets'
-    
-    // Metrics (Prometheus)
-    implementation 'io.quarkus:quarkus-micrometer-registry-prometheus'
-    
+
     // Security (JWT + RBAC)
     implementation 'io.quarkus:quarkus-smallrye-jwt'
     implementation 'io.quarkus:quarkus-smallrye-jwt-build'
-    
-    // OpenAPI / Swagger UI (P7-2)
-    implementation 'io.quarkus:quarkus-smallrye-openapi'
-    
-    // Health Checks (P6-5)
-    implementation 'io.quarkus:quarkus-smallrye-health'
 }
 
 group 'com.sc.lcm'
 version '1.0.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
 }
 
 test {

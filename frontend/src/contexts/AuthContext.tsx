@@ -18,7 +18,7 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const API_BASE = 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const TOKEN_KEY = 'lcm_auth_token';
 const USER_KEY = 'lcm_auth_user';
 
