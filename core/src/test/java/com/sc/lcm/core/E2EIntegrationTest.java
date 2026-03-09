@@ -7,14 +7,15 @@ import com.sc.lcm.core.grpc.RegisterRequest;
 import com.sc.lcm.core.grpc.StreamRequest;
 import com.sc.lcm.core.grpc.JobStatusUpdate;
 import io.quarkus.grpc.GrpcClient;
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import io.restassured.http.ContentType;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.reactive.messaging.kafka.companion.KafkaCompanion;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -24,6 +25,13 @@ import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * End-to-end integration test that exercises the full job lifecycle.
+ *
+ * Infrastructure dependencies (PostgreSQL, Kafka, Redis) are started
+ * automatically by Quarkus DevServices backed by Testcontainers.
+ * Ensure Docker is available on the test host.
+ */
 @QuarkusTest
 public class E2EIntegrationTest {
 
@@ -52,7 +60,6 @@ public class E2EIntegrationTest {
         String satelliteId = UUID.randomUUID().toString();
 
         // 1. Register Satellite (Mocking Satellite startup)
-        // %test.lcm.discovery.require-approval=false is set in application.properties
         RegisterRequest registerRequest = RegisterRequest.newBuilder()
                 .setHostname("test-node-1")
                 .setIpAddress("192.168.1.100")

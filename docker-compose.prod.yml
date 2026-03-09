@@ -58,6 +58,33 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lcm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus-prod.yml:/etc/prometheus/prometheus.yml
+      - ./infra/prometheus-alerts.yml:/etc/prometheus/alerts.yml
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: lcm-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
   lcm-core:
     image: ${DOCKER_NAMESPACE:-example}/lcm-core:${DOCKER_TAG:-latest}
     container_name: lcm-core
@@ -89,3 +116,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  grafana_data:
