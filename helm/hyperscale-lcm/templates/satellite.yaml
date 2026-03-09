@@ -26,7 +26,7 @@ spec:
       {{- end }}
       containers:
         - name: satellite
-          image: {{ include "hyperscale-lcm.image" .Values.satellite.image }}
+          image: {{ include "hyperscale-lcm.image" (dict "image" .Values.satellite.image "global" .Values.global) }}
           imagePullPolicy: {{ .Values.satellite.image.pullPolicy }}
           env:
             - name: CORE_HOST

@@ -74,7 +74,7 @@ frontend:
   
   # API 代理配置
   apiProxy:
-    backend: http://{{ .Release.Name }}-core:8080
+    backend: ""  # Resolved in template as http://{{ .Release.Name }}-core:8080
 
 # ============== Satellite DaemonSet 配置 ==============
 satellite:
@@ -95,7 +95,7 @@ satellite:
   
   # Core 服务地址
   core:
-    host: "{{ .Release.Name }}-core"
+    host: ""  # Resolved in template as {{ .Release.Name }}-core
     grpcPort: 9000
   
   # 节点选择器
@@ -113,7 +113,7 @@ ingress:
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    nginx.ingress.kubernetes.io/websocket-services: "{{ .Release.Name }}-core"
+    nginx.ingress.kubernetes.io/websocket-services: ""  # Set in ingress template
   hosts:
     - host: lcm.example.com
       paths:

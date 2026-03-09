@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { Building2, Cpu, HardDrive, Zap, Users, Plus, Settings } from 'lucide-react';
+import { apiFetch, API_BASE } from '../api/client';
 
 interface Tenant {
     id: string;
@@ -17,18 +18,13 @@ interface Tenant {
     runningJobs: number;
 }
 
-const API_BASE = 'http://localhost:8080';
-
 export const TenantsPage: React.FC = () => {
     const [tenants, setTenants] = useState<Tenant[]>([]);
 
     useEffect(() => {
         const doLoadTenants = async () => {
             try {
-                const token = localStorage.getItem('token');
-                const response = await fetch(`${API_BASE}/api/tenants`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const response = await apiFetch(`${API_BASE}/api/tenants`);
                 if (response.ok) {
                     const data = await response.json();
                     setTenants(data);

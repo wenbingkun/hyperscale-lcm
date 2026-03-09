@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -19,6 +18,7 @@ import (
 	// OTel instrumentation
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
+	"github.com/sc-lcm/satellite/pkg/discovery"
 	"github.com/sc-lcm/satellite/pkg/docker"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
 )
@@ -91,7 +91,9 @@ func main() {
 	}
 
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatalf("failed to parse CA certificate from %s", filepath.Join(certDir, "ca.pem"))
+	}
 
 	creds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -131,13 +133,26 @@ func main() {
 		log.Printf("✅ Registration Successful! Assigned ID: %s", r.GetAssignedId())
 		satelliteId := r.GetAssignedId()
 
+		// Create a cancellable context for background goroutines
+		bgCtx, bgCancel := context.WithCancel(context.Background())
+		defer bgCancel()
+
 		// Start Stream Connection in background
 		go func() {
 			// Reconnection Loop
 			for {
+				select {
+				case <-bgCtx.Done():
+					return
+				default:
+				}
+
 				log.Println("🔌 Connecting to Command Stream...")
-				stream, err := client.ConnectStream(context.Background())
+				stream, err := client.ConnectStream(bgCtx)
 				if err != nil {
+					if bgCtx.Err() != nil {
+						return
+					}
 					log.Printf("❌ Failed to connect stream: %v. Retrying in 5s...", err)
 					time.Sleep(5 * time.Second)
 					continue
@@ -160,6 +175,9 @@ func main() {
 				for {
 					resp, err := stream.Recv()
 					if err != nil {
+						if bgCtx.Err() != nil {
+							return
+						}
 						log.Printf("❌ Stream disconnected: %v", err)
 						break // Break inner loop to reconnect
 					}
@@ -175,52 +193,38 @@ func main() {
 			}
 		}()
 
+		// Start Discovery Manager (DHCP listener + ARP scanner)
+		discoveryIface := os.Getenv("LCM_DISCOVERY_IFACE") // e.g. "eth0", empty = auto-detect
+		discoveryMgr := discovery.NewManager(client, satelliteId, discoveryIface)
+		discoveryMgr.Start(bgCtx)
+
 		// Start Heartbeat Ticker
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		// 主循环，包含优雅关闭处理
+		// Main loop with graceful shutdown
 		for {
 			select {
 			case <-ticker.C:
 				hbReq := BuildHeartbeatRequest(satelliteId)
 				_, err := client.SendHeartbeat(context.Background(), hbReq)
 				if err != nil {
-					log.Printf("⚠️ Heartbeat failed: %v", err)
+					log.Printf("Heartbeat failed: %v", err)
 				} else {
-					log.Printf("💓 Heartbeat sent (CPU: %.1f%%, Load: %.2f, Mem: %dMB/%dMB, GPUs: %d)",
+					log.Printf("Heartbeat sent (CPU: %.1f%%, Load: %.2f, Mem: %dMB/%dMB, GPUs: %d)",
 						hbReq.CpuUsagePercent, hbReq.LoadAvg,
 						hbReq.MemoryUsedBytes/1024/1024, hbReq.MemoryTotalBytes/1024/1024,
 						hbReq.GpuCount)
 				}
 
-				// Mock Active Discovery (Scan every 10 seconds)
-				if time.Now().Unix()%10 < 5 { // Simple throttle
-					log.Println("📡 Scanning network range 192.168.1.0/24...")
-					// Simulate finding a node
-					go func() {
-						time.Sleep(2 * time.Second) // Simulate scan time
-						discoveredIP := fmt.Sprintf("192.168.1.%d", time.Now().Unix()%254+1)
-						log.Printf("🎯 Discovered new asset: %s", discoveredIP)
-
-						// Fire and forget reporting to keep it simple for now
-						// In real app, proper error handling
-						client.ReportDiscovery(context.Background(), &pb.DiscoveryRequest{
-							SatelliteId:     satelliteId,
-							DiscoveredIp:    discoveredIP,
-							MacAddress:      "AA:BB:CC:DD:EE:FF",
-							DiscoveryMethod: "PING_SCAN",
-						})
-					}()
-				}
-
 			case sig := <-sigChan:
-				// 优雅关闭处理
-				log.Printf("⚠️ Received signal %v, shutting down gracefully...", sig)
+				log.Printf("Received signal %v, shutting down gracefully...", sig)
+				bgCancel()
+				discoveryMgr.Stop()
 				ticker.Stop()
-				conn.Close()
-				log.Println("👋 Satellite Agent stopped")
-				os.Exit(0)
+				// conn.Close() is handled by defer
+				log.Println("Satellite Agent stopped")
+				return
 			}
 		}
 

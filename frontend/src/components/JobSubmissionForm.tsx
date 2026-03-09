@@ -55,7 +55,7 @@ export const JobSubmissionForm: React.FC = () => {
                             type="number"
                             min="1"
                             value={formData.cpuCores}
-                            onChange={e => setFormData({ ...formData, cpuCores: parseInt(e.target.value) })}
+                            onChange={e => setFormData({ ...formData, cpuCores: parseInt(e.target.value) || 1 })}
                             className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
                         />
                     </div>
@@ -65,7 +65,7 @@ export const JobSubmissionForm: React.FC = () => {
                             type="number"
                             min="1"
                             value={formData.memoryGb}
-                            onChange={e => setFormData({ ...formData, memoryGb: parseInt(e.target.value) })}
+                            onChange={e => setFormData({ ...formData, memoryGb: parseInt(e.target.value) || 1 })}
                             className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
                         />
                     </div>
@@ -75,7 +75,7 @@ export const JobSubmissionForm: React.FC = () => {
                             type="number"
                             min="0"
                             value={formData.gpuCount}
-                            onChange={e => setFormData({ ...formData, gpuCount: parseInt(e.target.value) })}
+                            onChange={e => setFormData({ ...formData, gpuCount: parseInt(e.target.value) || 0 })}
                             className="w-full bg-black/30 border border-glass-border rounded p-2 text-white focus:border-cyan-400 focus:outline-none transition-colors"
                         />
                     </div>

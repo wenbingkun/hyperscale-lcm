@@ -53,8 +53,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
     }, []);
 
+    const wsUrl = (import.meta.env.VITE_API_BASE || 'http://localhost:8080')
+        .replace(/^http/, 'ws') + '/ws/dashboard';
+
     const { isConnected } = useWebSocket({
-        url: 'ws://localhost:8080/ws/dashboard',
+        url: wsUrl,
         onMessage: handleMessage,
         onConnect: () => console.log('Dashboard WebSocket connected'),
         onDisconnect: () => console.log('Dashboard WebSocket disconnected'),

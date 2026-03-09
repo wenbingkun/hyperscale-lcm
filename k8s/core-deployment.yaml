@@ -32,6 +32,11 @@ spec:
                 secretKeyRef:
                   name: hyperscale-lcm-secrets
                   key: db-reactive-url
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hyperscale-lcm-secrets
+                  key: db-jdbc-url
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:

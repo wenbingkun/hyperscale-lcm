@@ -58,22 +58,24 @@ jobs:
       - name: Generate dummy keys
         run: chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh
         
-      - name: Run tests
+      - name: Run tests with coverage verification
         working-directory: core
-        run: ./gradlew test --no-daemon
+        run: ./gradlew check --no-daemon
         env:
           QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://localhost:5432/lcm
           QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://localhost:5432/lcm
           QUARKUS_DATASOURCE_USERNAME: lcm
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
-      
-      - name: Upload test results
+
+      - name: Upload test and coverage results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-results
-          path: core/build/reports/tests/
+          path: |
+            core/build/reports/tests/
+            core/build/reports/jacoco/
 
   # ==================== Frontend Build ====================
   frontend-build:

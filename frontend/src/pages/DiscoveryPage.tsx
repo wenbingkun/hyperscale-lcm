@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { Wifi, Check, X, RefreshCw, Monitor, Play, Square, Search } from 'lucide-react';
+import { apiFetch, API_BASE } from '../api/client';
 
 interface DiscoveredDevice {
     id: string;
@@ -23,8 +24,6 @@ interface ScanJob {
     discoveredCount: number;
 }
 
-const API_BASE = 'http://localhost:8080';
-
 export const DiscoveryPage: React.FC = () => {
     const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
     const [loading, setLoading] = useState(true);
@@ -36,10 +35,7 @@ export const DiscoveryPage: React.FC = () => {
 
     const loadDevices = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE}/api/discovery`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await apiFetch(`${API_BASE}/api/discovery`);
             if (response.ok) {
                 const data = await response.json();
                 setDevices(data);
@@ -52,10 +48,7 @@ export const DiscoveryPage: React.FC = () => {
 
     const loadPendingCount = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE}/api/discovery/pending/count`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await apiFetch(`${API_BASE}/api/discovery/pending/count`);
             if (response.ok) {
                 const data = await response.json();
                 setPendingCount(data.count);
@@ -67,10 +60,7 @@ export const DiscoveryPage: React.FC = () => {
 
     const checkRunningScan = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE}/api/scan/running`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await apiFetch(`${API_BASE}/api/scan/running`);
             if (response.ok) {
                 const data = await response.json();
                 setRunningScan(data.running ? data.job : null);
@@ -108,13 +98,9 @@ export const DiscoveryPage: React.FC = () => {
         if (!scanTarget) return;
 
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(`${API_BASE}/api/scan`, {
+            const response = await apiFetch(`${API_BASE}/api/scan`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     target: scanTarget,
                     ports: scanPorts
@@ -134,10 +120,8 @@ export const DiscoveryPage: React.FC = () => {
         if (!runningScan) return;
 
         try {
-            const token = localStorage.getItem('token');
-            await fetch(`${API_BASE}/api/scan/${runningScan.id}/cancel`, {
+            await apiFetch(`${API_BASE}/api/scan/${runningScan.id}/cancel`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
             });
             setRunningScan(null);
         } catch (error) {
@@ -146,23 +130,23 @@ export const DiscoveryPage: React.FC = () => {
     };
 
     const approveDevice = async (id: string) => {
-        const token = localStorage.getItem('token');
-        await fetch(`${API_BASE}/api/discovery/${id}/approve`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        loadDevices();
-        loadPendingCount();
+        try {
+            await apiFetch(`${API_BASE}/api/discovery/${id}/approve`, { method: 'POST' });
+            loadDevices();
+            loadPendingCount();
+        } catch (error) {
+            console.error('Failed to approve device:', error);
+        }
     };
 
     const rejectDevice = async (id: string) => {
-        const token = localStorage.getItem('token');
-        await fetch(`${API_BASE}/api/discovery/${id}/reject`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        loadDevices();
-        loadPendingCount();
+        try {
+            await apiFetch(`${API_BASE}/api/discovery/${id}/reject`, { method: 'POST' });
+            loadDevices();
+            loadPendingCount();
+        } catch (error) {
+            console.error('Failed to reject device:', error);
+        }
     };
 
     const getStatusColor = (status: string) => {

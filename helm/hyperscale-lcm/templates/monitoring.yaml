@@ -1,0 +1,70 @@
+{{- if .Values.monitoring.enabled }}
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /q/metrics/prometheus
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+{{- end }}
+---
+{{- if .Values.monitoring.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-dashboards
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  hyperscale-lcm-overview.json: |
+    {{- .Files.Get "dashboards/hyperscale-lcm-overview.json" | nindent 4 }}
+{{- end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-alerts
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: hyperscale-lcm-alerts
+      rules:
+        - alert: NoOnlineNodes
+          expr: lcm_nodes_online == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No online nodes detected"
+        - alert: HighJobFailureRate
+          expr: rate(lcm_jobs_failed_total[5m]) / (rate(lcm_jobs_completed_total[5m]) + rate(lcm_jobs_failed_total[5m]) + 0.001) > 0.2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Job failure rate exceeds 20%"
+        - alert: CoreServiceDown
+          expr: up{job="quarkus-core"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "LCM Core service is down"
+        - alert: HighJvmMemoryUsage
+          expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "JVM heap usage exceeds 85%"
+{{- end }}

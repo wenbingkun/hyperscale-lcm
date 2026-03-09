@@ -1,6 +1,30 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
+
+async function loginViaLocalStorage(page: Page) {
+    await page.goto('/login');
+    await page.evaluate(() => {
+        const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+        const payload = btoa(JSON.stringify({
+            upn: 'admin',
+            groups: ['ADMIN'],
+            tenant_id: 'default',
+            exp: Math.floor(Date.now() / 1000) + 3600
+        }));
+        const token = `${header}.${payload}.test-signature`;
+        localStorage.setItem('lcm_auth_token', token);
+        localStorage.setItem('lcm_auth_user', JSON.stringify({
+            username: 'admin',
+            roles: ['ADMIN'],
+            tenantId: 'default'
+        }));
+    });
+}
 
 test.describe('Discovery Page', () => {
+    test.beforeEach(async ({ page }) => {
+        await loginViaLocalStorage(page);
+    });
+
     test('should display discovery page header', async ({ page }) => {
         await page.goto('/discovery');
 

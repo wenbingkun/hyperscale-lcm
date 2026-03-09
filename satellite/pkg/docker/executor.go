@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -31,7 +32,10 @@ func (e *Executor) RunContainer(ctx context.Context, imageName string, cmd []str
 		return "", err
 	}
 	// Draining the reader is important for the pull to complete/progress
-	io.Copy(os.Stdout, reader)
+	if _, err := io.Copy(os.Stdout, reader); err != nil {
+		reader.Close()
+		return "", fmt.Errorf("image pull stream failed: %w", err)
+	}
 	reader.Close()
 
 	// 2. Create Container

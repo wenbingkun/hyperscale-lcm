@@ -109,6 +109,7 @@ message JobStatusUpdate {
     JobStatus status = 2;
     string message = 3; // logs or error message
     int32 exit_code = 4;
+    map<string, string> trace_context = 5;
 }
 
 enum JobStatus {
@@ -122,4 +123,5 @@ message StreamResponse {
     string command_id = 1;
     string command_type = 2; // e.g. "EXEC_SHELL"
     string payload = 3; // e.g. "echo Hello"
+    map<string, string> trace_context = 4;
 }

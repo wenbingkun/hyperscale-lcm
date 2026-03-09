@@ -19,7 +19,7 @@ spec:
       {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: frontend
-          image: {{ include "hyperscale-lcm.image" .Values.frontend.image }}
+          image: {{ include "hyperscale-lcm.image" (dict "image" .Values.frontend.image "global" .Values.global) }}
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
           ports:
             - name: http

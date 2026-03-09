@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-03-07
+> 最后更新: 2026-03-09
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -31,7 +31,7 @@
     *   [x] 实现网络扫描器（Ping Scan）。
     *   [x] 发现事件通过 gRPC 上报 Core。
     *   [x] **真实指标采集** — 替换 Mock 心跳数据。
-    *   [ ] 实现 DHCP Listener，捕获新设备上线 (Optional — 未来迭代)。
+    *   [x] 实现 DHCP Listener + ARP Scanner，零接触设备发现。
     *   [x] 实现 Redfish Client，远程获取 BMC 信息（电源、温度）。
 *   **Core**:
     *   [x] **DiscoveredDevice 持久化** — 补全 reportDiscovery TODO。
@@ -64,35 +64,39 @@
 **目标**: 达到可部署的 MVP 水平。
 *   **DevOps**:
     *   [x] Kubernetes 清单（Deployment, DaemonSet, ConfigMap, Secrets）。
-    *   [x] Helm Chart 打包。
-    *   [x] CI/CD 流水线 (GitHub Actions)。
+    *   [x] Helm Chart 打包（含 ServiceMonitor + PrometheusRule + Grafana ConfigMap）。
+    *   [x] CI/CD 流水线 (GitHub Actions) + JaCoCo 覆盖率检查。
+    *   [x] CodeQL 静态安全分析 (Go, Java, JavaScript)。
     *   [x] 性能基准测试自动化 (Loadgen)。
 *   **质量**:
     *   [x] 基础测试套件（Auth, Job, Satellite, StateCache, ConstraintProvider, AlertService）。
+    *   [x] E2E 集成测试（Quarkus DevServices + Testcontainers）。
     *   [x] 代码审计修复 — ESLint 错误、重复依赖、TODO 占位符清理。
     *   [x] DLQ (Dead Letter Queue) 异常消息处理机制。
     *   [x] Satellite 环境变量配置化（替换硬编码参数）。
-    *   [ ] 集成测试覆盖率提升 (持续改进)。
-    *   [ ] OpenTelemetry 链路追踪完全恢复与串联 (持续改进)。
+    *   [x] OpenTelemetry 端到端链路追踪（Core → Satellite → Kafka）。
+*   **监控**:
+    *   [x] Prometheus 指标采集 + 告警规则。
+    *   [x] Grafana 监控仪表盘（集群概览、Job 指标、JVM 内存、HTTP 请求）。
 
 ---
 
 ## 🎯 当前状态 (Current Status)
 
-**Sprint 5 (System Hardening & Tracing)** — ✅ 已完成
+**Sprint 6 (Audit Fix & Monitoring)** — ✅ 已完成
 
 完成内容：
-1.  ✅ **Satellite 配置化管理** — 全局环境变量化，替换硬编码参数
-2.  ✅ **测试补充** — AlertService 单元测试、StateCache 响应式 Redis 测试
-3.  ✅ **DLQ 异常处理** — Kafka 消息管道健壮性加固
-4.  ✅ **代码审计修复** — ESLint 错误、类型安全、重复依赖、无用 TODO 清理
+1.  ✅ **Grafana 监控栈** — 添加 Grafana 服务、预配置仪表盘、Prometheus 告警规则
+2.  ✅ **E2E 测试修复** — 启用 Quarkus DevServices (Testcontainers) 支持自包含测试
+3.  ✅ **CI 覆盖率** — CI 流水线集成 JaCoCo 覆盖率验证 (`gradlew check`)
+4.  ✅ **Prometheus 生产配置** — 分离 dev/prod 配置，修复容器间服务发现
+5.  ✅ **Helm 监控模板** — ServiceMonitor、PrometheusRule、Grafana Dashboard ConfigMap
 
 ## 📌 未来迭代方向
 
-- DHCP Listener 设备自动发现
 - 分区并行调度 (Zone 分片)
 - Ansible/SSH 远程命令下发
 - PXE/iPXE 裸金属 OS 自动化重装
 - 调度结果拓扑图可视化
-- E2E 集成测试覆盖率
-- OpenTelemetry 全链路追踪串联
+- 测试覆盖率提升至 70%
+- AlertManager 集成（邮件/Slack 通知）
