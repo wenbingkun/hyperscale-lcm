@@ -21,7 +21,7 @@ spec:
       {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: core
-          image: {{ include "hyperscale-lcm.image" .Values.core.image }}
+          image: {{ include "hyperscale-lcm.image" (dict "image" .Values.core.image "global" .Values.global) }}
           imagePullPolicy: {{ .Values.core.image.pullPolicy }}
           ports:
             - name: http

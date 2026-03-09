@@ -22,4 +22,9 @@
   kubectl logs -f deployment/{{ .Release.Name }}-core -n {{ .Release.Namespace }}
 
 5. Swagger API 文档:
+{{- if .Values.ingress.enabled }}
   http://{{ (index .Values.ingress.hosts 0).host }}/q/swagger-ui
+{{- else }}
+  kubectl port-forward svc/{{ .Release.Name }}-core 8080:8080 -n {{ .Release.Namespace }}
+  然后访问: http://localhost:8080/q/swagger-ui
+{{- end }}

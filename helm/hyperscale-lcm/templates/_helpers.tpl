@@ -46,13 +46,15 @@ imagePullSecrets:
 {{- end }}
 
 {{/*
-Full image name with registry
+Full image name with registry.
+Accepts a dict with keys "image" (the image map) and "global" (global values).
+Usage: {{ include "hyperscale-lcm.image" (dict "image" .Values.core.image "global" .Values.global) }}
 */}}
 {{- define "hyperscale-lcm.image" -}}
-{{- $registry := .Values.global.imageRegistry | default "" -}}
+{{- $registry := (.global).imageRegistry | default "" -}}
 {{- if $registry -}}
-{{ $registry }}/{{ .repository }}:{{ .tag }}
+{{ $registry }}/{{ .image.repository }}:{{ .image.tag }}
 {{- else -}}
-{{ .repository }}:{{ .tag }}
+{{ .image.repository }}:{{ .image.tag }}
 {{- end -}}
 {{- end }}
