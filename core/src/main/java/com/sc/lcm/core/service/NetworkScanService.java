@@ -193,7 +193,7 @@ public class NetworkScanService {
 
         return Panache.withTransaction(() -> job.persist())
                 .chain(() -> {
-                    // Run scan in background
+                    // Run scan in background on a Vert.x worker thread
                     vertx.executeBlocking(() -> {
                         int discovered = 0;
                         int scanned = 0;
@@ -228,7 +228,9 @@ public class NetworkScanService {
 
                         completeScan(job.getId(), scanned, discovered, null);
                         return null;
-                    });
+                    }).subscribe().with(
+                            v -> {},
+                            e -> log.error("Scan execution failed for job {}", job.getId(), e));
 
                     return Uni.createFrom().voidItem();
                 });

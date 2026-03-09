@@ -6,6 +6,7 @@ import io.smallrye.mutiny.Uni;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -29,6 +30,9 @@ public class AuthResource {
 
     @Inject
     JsonWebToken jwt;
+
+    @ConfigProperty(name = "lcm.auth.dev-users.enabled", defaultValue = "false")
+    boolean devUsersEnabled;
 
     /**
      * 登录并获取 JWT Token (开发用)
@@ -100,7 +104,12 @@ public class AuthResource {
      * 生产环境应使用数据库/LDAP/外部 IdP
      */
     private String validateUser(String username, String password) {
-        // 硬编码用户（仅开发测试）
+        if (!devUsersEnabled) {
+            log.warn("Login attempted but dev users are disabled. Set lcm.auth.dev-users.enabled=true for dev/test.");
+            return null;
+        }
+
+        // 硬编码用户（仅开发测试，生产环境必须禁用）
         if ("admin".equals(username) && "admin123".equals(password)) {
             return "ADMIN";
         }
