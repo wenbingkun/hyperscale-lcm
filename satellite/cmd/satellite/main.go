@@ -19,6 +19,7 @@ import (
 	// OTel instrumentation
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
+	"github.com/sc-lcm/satellite/pkg/discovery"
 	"github.com/sc-lcm/satellite/pkg/docker"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
 )
@@ -178,6 +179,11 @@ func main() {
 		// Start Heartbeat Ticker
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+
+		// Start DHCP Listener globally for discovery
+		ctxDHCP, cancelDHCP := context.WithCancel(context.Background())
+		defer cancelDHCP()
+		go discovery.StartDHCPListener(ctxDHCP, client, satelliteId)
 
 		// 主循环，包含优雅关闭处理
 		for {
