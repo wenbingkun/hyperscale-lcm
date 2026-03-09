@@ -1,6 +1,7 @@
 package com.sc.lcm.core.api;
 
 import com.sc.lcm.core.domain.Satellite;
+import com.sc.lcm.core.service.JobStatusForwarder;
 import com.sc.lcm.core.grpc.LcmService;
 import com.sc.lcm.core.grpc.RegisterRequest;
 import com.sc.lcm.core.grpc.RegisterResponse;
@@ -40,7 +41,7 @@ public class LcmGrpcService implements LcmService {
     boolean requireApproval;
 
     @Inject
-    com.sc.lcm.core.service.JobStatusForwarder jobStatusForwarder;
+    JobStatusForwarder jobStatusForwarder;
 
     /**
      * 响应式 Satellite 注册
