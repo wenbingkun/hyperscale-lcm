@@ -59,6 +59,7 @@ function AppRoutes() {
 
       <Route path="/*" element={
         <ProtectedRoute>
+          <WebSocketProvider>
           <DashboardLayout>
             <AnimatePresence mode="wait">
               <Routes location={location} key={location.pathname}>
@@ -74,6 +75,7 @@ function AppRoutes() {
               </Routes>
             </AnimatePresence>
           </DashboardLayout>
+          </WebSocketProvider>
         </ProtectedRoute>
       } />
     </Routes>
@@ -83,13 +85,11 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <WebSocketProvider>
-        <BrowserRouter>
-          <Suspense fallback={<PageLoader />}>
-            <AppRoutes />
-          </Suspense>
-        </BrowserRouter>
-      </WebSocketProvider>
+      <BrowserRouter>
+        <Suspense fallback={<PageLoader />}>
+          <AppRoutes />
+        </Suspense>
+      </BrowserRouter>
     </AuthProvider>
   );
 }

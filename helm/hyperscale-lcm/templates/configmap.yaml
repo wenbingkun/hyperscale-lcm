@@ -9,7 +9,7 @@ data:
   {{ $key }}: {{ $value | quote }}
   {{- end }}
 ---
-{{- if or .Values.secrets.adminPassword .Values.security.jwt.secret }}
+{{- /* Always create the secret - auto-generate passwords when not provided */ -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -28,4 +28,3 @@ data:
   {{- else }}
   jwt-secret: {{ randAlphaNum 32 | b64enc }}
   {{- end }}
-{{- end }}

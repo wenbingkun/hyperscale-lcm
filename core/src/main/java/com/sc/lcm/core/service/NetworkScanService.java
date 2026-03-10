@@ -5,6 +5,7 @@ import com.sc.lcm.core.domain.ScanJob;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,11 @@ public class NetworkScanService {
 
     private final ExecutorService scanExecutor = Executors.newFixedThreadPool(50);
     private volatile boolean cancelRequested = false;
+
+    @PreDestroy
+    void shutdown() {
+        scanExecutor.shutdownNow();
+    }
 
     /**
      * 解析 CIDR 为 IP 列表
@@ -187,7 +193,7 @@ public class NetworkScanService {
 
         return Panache.withTransaction(() -> job.persist())
                 .chain(() -> {
-                    // Run scan in background
+                    // Run scan in background on a Vert.x worker thread
                     vertx.executeBlocking(() -> {
                         int discovered = 0;
                         int scanned = 0;
@@ -222,7 +228,9 @@ public class NetworkScanService {
 
                         completeScan(job.getId(), scanned, discovered, null);
                         return null;
-                    });
+                    }).subscribe().with(
+                            v -> {},
+                            e -> log.error("Scan execution failed for job {}", job.getId(), e));
 
                     return Uni.createFrom().voidItem();
                 });

@@ -42,6 +42,30 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      kafka:
+        image: confluentinc/cp-kafka:7.4.0
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_NODE_ID: 1
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:29093
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+          CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+
     steps:
       - uses: actions/checkout@v4
       
@@ -58,22 +82,25 @@ jobs:
       - name: Generate dummy keys
         run: chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh
         
-      - name: Run tests
+      - name: Run tests with coverage verification
         working-directory: core
-        run: ./gradlew test --no-daemon
+        run: ./gradlew check --no-daemon
         env:
           QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://localhost:5432/lcm
           QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://localhost:5432/lcm
           QUARKUS_DATASOURCE_USERNAME: lcm
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
-      
-      - name: Upload test results
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+
+      - name: Upload test and coverage results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-results
-          path: core/build/reports/tests/
+          path: |
+            core/build/reports/tests/
+            core/build/reports/jacoco/
 
   # ==================== Frontend Build ====================
   frontend-build:

@@ -8,7 +8,6 @@ import jakarta.websocket.*;
 import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -94,12 +93,13 @@ public class DashboardWebSocket {
     }
 
     private void sendToSession(Session session, String message) {
-        try {
-            if (session.isOpen()) {
-                session.getBasicRemote().sendText(message);
-            }
-        } catch (IOException e) {
-            log.error("Failed to send message to session {}: {}", session.getId(), e.getMessage());
+        if (session.isOpen()) {
+            session.getAsyncRemote().sendText(message, result -> {
+                if (!result.isOK()) {
+                    log.error("Failed to send message to session {}: {}",
+                            session.getId(), result.getException().getMessage());
+                }
+            });
         }
     }
 

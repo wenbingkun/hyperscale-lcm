@@ -1,0 +1,8 @@
+-- V1.8.0: Add BMC/Redfish columns to node table
+
+ALTER TABLE node ADD COLUMN IF NOT EXISTS bmc_ip VARCHAR(255);
+ALTER TABLE node ADD COLUMN IF NOT EXISTS bmc_mac VARCHAR(255);
+ALTER TABLE node ADD COLUMN IF NOT EXISTS system_serial VARCHAR(255);
+ALTER TABLE node ADD COLUMN IF NOT EXISTS system_model VARCHAR(255);
+
+CREATE INDEX IF NOT EXISTS idx_node_bmc_ip ON node(bmc_ip);

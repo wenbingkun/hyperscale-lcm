@@ -1,0 +1,77 @@
+groups:
+  - name: hyperscale-lcm-alerts
+    rules:
+      # Node health alerts
+      - alert: NoOnlineNodes
+        expr: lcm_nodes_online == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No online nodes detected"
+          description: "All satellite nodes are offline for more than 2 minutes."
+
+      - alert: NodeCountDrop
+        expr: lcm_nodes_online < 0.5 * lcm_nodes_online offset 10m
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Significant node count drop"
+          description: "Online node count dropped by more than 50% in 10 minutes."
+
+      # Job execution alerts
+      - alert: HighJobFailureRate
+        expr: rate(lcm_jobs_failed_total[5m]) / (rate(lcm_jobs_completed_total[5m]) + rate(lcm_jobs_failed_total[5m]) + 0.001) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High job failure rate"
+          description: "Job failure rate exceeds 20% over the last 5 minutes."
+
+      - alert: JobQueueBacklog
+        expr: lcm_jobs_pending > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Large job queue backlog"
+          description: "More than 100 pending jobs for over 10 minutes."
+
+      - alert: SchedulingLatencyHigh
+        expr: histogram_quantile(0.95, rate(lcm_scheduling_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduling latency is high"
+          description: "P95 scheduling duration exceeds 30 seconds."
+
+      # Infrastructure alerts
+      - alert: CoreServiceDown
+        expr: up{job="quarkus-core"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LCM Core service is down"
+          description: "Quarkus Core service is unreachable for more than 1 minute."
+
+      - alert: HighJvmMemoryUsage
+        expr: jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM heap memory usage"
+          description: "JVM heap usage exceeds 85% for more than 5 minutes."
+
+      - alert: HighHttpErrorRate
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "HTTP 5xx error rate exceeds 5% over the last 5 minutes."

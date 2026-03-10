@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"log"
 	"math/rand"
 	"sync"
@@ -38,12 +38,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to load client certs: %v", err)
 	}
-	caCert, err := ioutil.ReadFile(*caPath)
+	caCert, err := os.ReadFile(*caPath)
 	if err != nil {
 		log.Fatalf("failed to read CA cert: %v", err)
 	}
 	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatalf("failed to parse CA certificate from %s", *caPath)
+	}
 	creds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      caCertPool,
@@ -129,7 +131,7 @@ func simulateSatellite(connId, satIdx int, client pb.LcmServiceClient, activeCou
 		_, err := client.SendHeartbeat(context.Background(), &pb.HeartbeatRequest{
 			SatelliteId:     id,
 			LoadAvg:         rand.Float64() * 10.0,
-			MemoryUsedBytes: uint64(rand.Intn(1024*1024*1024) * 16), // 0-16GB
+			MemoryUsedBytes: uint64(rand.Intn(1024*1024*1024)) * 16, // 0-16GB
 		})
 		if err != nil {
 			log.Printf("⚠️ [%s] Heartbeat failed: %v", hostname, err)

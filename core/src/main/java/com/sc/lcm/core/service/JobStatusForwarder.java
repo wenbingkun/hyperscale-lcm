@@ -30,11 +30,11 @@ public class JobStatusForwarder {
     @Inject
     ObjectMapper objectMapper;
 
-    public void forwardStatus(String jobId, String satelliteId, String statusName, int exitCode, String message,
+    public void forwardStatus(String jobId, String nodeId, String statusName, int exitCode, String message,
             Map<String, String> traceContextMap) {
         try {
             JobStatusCallback callback = new JobStatusCallback(
-                    jobId, satelliteId, statusName, exitCode, message,
+                    jobId, nodeId, statusName, exitCode, message,
                     "", "", 0L, LocalDateTime.now());
             String json = objectMapper.writeValueAsString(callback);
 
