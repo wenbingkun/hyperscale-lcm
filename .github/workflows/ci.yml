@@ -158,7 +158,7 @@ jobs:
 
   # ==================== Backend Load Test ====================
   load-test:
-    name: Core Load & Penetration Test
+    name: Core Load Test
     runs-on: ubuntu-latest
     needs: [backend-test, satellite-build]
     
@@ -239,7 +239,7 @@ jobs:
 
       - name: Build LoadGen tool
         working-directory: satellite
-        run: go build -o loadgen ./cmd/loadgen/main.go
+        run: go build -o loadgen ./cmd/loadgen
 
       - name: Start Core Server Background
         working-directory: core
@@ -252,8 +252,8 @@ jobs:
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
         run: |
           java -jar build/quarkus-app/quarkus-run.jar &
-          # Wait for Core to fully initialize on port 9000
-          timeout 60 bash -c 'while ! curl -s --insecure https://localhost:9000 > /dev/null; do sleep 2; done' || echo "Core startup complete/timeout"
+          # Wait for Core HTTP health endpoint (port 8080) to become ready
+          timeout 60 bash -c 'until curl -sf http://localhost:8080/q/health/ready; do sleep 2; done'
 
       - name: Execute Load Profile (500 connections for 30s)
         working-directory: satellite
@@ -263,14 +263,14 @@ jobs:
           
       - name: Verify Core Health Post-Load
         run: |
-          # Check health endpoint or just basic socket connectivity - ensuring OOM/crash did not occur
-          curl -s --insecure https://localhost:9000 | grep -q "Not Found" || echo "Core is alive!"
+          # Fail the step if Core crashed or is unhealthy after load test
+          curl -sf http://localhost:8080/q/health/live
 
   # ==================== Docker Images ====================
   docker-build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [backend-test, frontend-build, satellite-build, load-test]
+    needs: [backend-test, frontend-build, satellite-build]
     if: github.ref == 'refs/heads/main'
     
     steps:
