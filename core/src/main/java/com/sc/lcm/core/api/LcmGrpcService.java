@@ -104,6 +104,7 @@ public class LcmGrpcService implements LcmService {
         String id = UUID.randomUUID().toString();
         Satellite satellite = new Satellite(
                 id,
+                request.getClusterId(),
                 request.getHostname(),
                 request.getIpAddress(),
                 request.getOsVersion(),
@@ -164,6 +165,9 @@ public class LcmGrpcService implements LcmService {
                 .systemTemperatureCelsius(request.getSystemTemperatureCelsius())
                 .build());
 
+        // TODO(multi-cluster): request.getClusterId() is received but not yet used.
+        // Future work: validate that the satellite's cluster affinity matches what is
+        // stored at registration time, and route scheduling partitions accordingly.
         return stateCache.updateHeartbeatReactive(request.getSatelliteId())
                 .replaceWith(() -> HeartbeatResponse.newBuilder()
                         .setSuccess(true)

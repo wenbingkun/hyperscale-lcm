@@ -36,13 +36,13 @@ public class HeartbeatSyncServiceTest {
     @RunOnVertxContext
     public void testSyncHeartbeatsToDatabase(TransactionalUniAsserter asserter) {
         // Setup mock data
-        Satellite sat1 = new Satellite();
-        sat1.setId("sat-1");
+        Satellite sat1 = new Satellite("sat-id1", "default", "host1", "127.0.0.1", "os", "agent");
+        sat1.setId("sat-id1");
         sat1.setHostname("host1");
         sat1.setStatus("OFFLINE");
 
-        Satellite sat2 = new Satellite();
-        sat2.setId("sat-2");
+        Satellite sat2 = new Satellite("sat-id2", "default", "host2", "127.0.0.2", "os", "agent");
+        sat2.setId("sat-id2");
         sat2.setHostname("host2");
         sat2.setStatus("ONLINE");
 

@@ -42,6 +42,30 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      kafka:
+        image: confluentinc/cp-kafka:7.4.0
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_NODE_ID: 1
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:29093
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+          CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+
     steps:
       - uses: actions/checkout@v4
       
@@ -67,6 +91,7 @@ jobs:
           QUARKUS_DATASOURCE_USERNAME: lcm
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
 
       - name: Upload test and coverage results
         if: always()
@@ -130,6 +155,116 @@ jobs:
       - name: Run tests
         working-directory: satellite
         run: go test -v ./...
+
+  # ==================== Backend Load Test ====================
+  load-test:
+    name: Core Load Test
+    runs-on: ubuntu-latest
+    needs: [backend-test, satellite-build]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: lcm
+          POSTGRES_PASSWORD: lcm_password
+          POSTGRES_DB: lcm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      kafka:
+        image: confluentinc/cp-kafka:7.4.0
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_NODE_ID: 1
+          KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:29093
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+          CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+        ports:
+          - 9092:9092
+        options: >-
+          --health-cmd "kafka-broker-api-versions --bootstrap-server localhost:9092"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+          
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: satellite/go.sum
+          
+      - name: Grant execute permission for gradlew
+        run: chmod +x core/gradlew
+        
+      - name: Generate dummy TLS keys
+        run: chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh
+        
+      - name: Build Core (Fast-JAR)
+        working-directory: core
+        run: ./gradlew build -Dquarkus.package.type=fast-jar -x test
+
+      - name: Build LoadGen tool
+        working-directory: satellite
+        run: go build -o loadgen ./cmd/loadgen
+
+      - name: Start Core Server Background
+        working-directory: core
+        env:
+          QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://localhost:5432/lcm
+          QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://localhost:5432/lcm
+          QUARKUS_DATASOURCE_USERNAME: lcm
+          QUARKUS_DATASOURCE_PASSWORD: lcm_password
+          QUARKUS_REDIS_HOSTS: redis://localhost:6379
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+        run: |
+          java -jar build/quarkus-app/quarkus-run.jar &
+          # Wait for Core HTTP health endpoint (port 8080) to become ready
+          timeout 60 bash -c 'until curl -sf http://localhost:8080/q/health/ready; do sleep 2; done'
+
+      - name: Execute Load Profile (500 connections for 30s)
+        working-directory: satellite
+        run: |
+          # We use timeout 30s to simulate sustained load, we expect it to exit 124 on timeout success
+          timeout 30s ./loadgen -addr localhost:9000 -conns 10 -sats 50 -interval 1s -cert ../certs/client.pem -key ../certs/client.key -ca ../certs/ca.pem || [ $? -eq 124 ]
+          
+      - name: Verify Core Health Post-Load
+        run: |
+          # Fail the step if Core crashed or is unhealthy after load test
+          curl -sf http://localhost:8080/q/health/live
 
   # ==================== Docker Images ====================
   docker-build:

@@ -6,9 +6,9 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
-	"os"
 	"log"
 	"math/rand"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +27,7 @@ var (
 	certPath    = flag.String("cert", "../certs/client.pem", "Path to client cert")
 	keyPath     = flag.String("key", "../certs/client.key", "Path to client key")
 	caPath      = flag.String("ca", "../certs/ca.pem", "Path to CA cert")
+	clusterFlag = flag.String("cluster", "default", "Cluster ID for load test isolation")
 )
 
 func main() {
@@ -106,6 +107,7 @@ func simulateSatellite(connId, satIdx int, client pb.LcmServiceClient, activeCou
 
 	regReq := &pb.RegisterRequest{
 		Hostname:     hostname,
+		ClusterId:    *clusterFlag,
 		IpAddress:    fmt.Sprintf("10.0.%d.%d", connId, satIdx%255),
 		OsVersion:    "Linux LoadGen",
 		AgentVersion: "1.0-stress",
@@ -130,6 +132,7 @@ func simulateSatellite(connId, satIdx int, client pb.LcmServiceClient, activeCou
 	for range ticker.C {
 		_, err := client.SendHeartbeat(context.Background(), &pb.HeartbeatRequest{
 			SatelliteId:     id,
+			ClusterId:       *clusterFlag,
 			LoadAvg:         rand.Float64() * 10.0,
 			MemoryUsedBytes: uint64(rand.Intn(1024*1024*1024)) * 16, // 0-16GB
 		})

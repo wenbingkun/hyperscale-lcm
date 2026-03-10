@@ -3,6 +3,8 @@ package com.sc.lcm.core.api;
 import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.service.SchedulingService;
+import com.sc.lcm.core.service.PartitionedSchedulingService;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
 import jakarta.annotation.security.RolesAllowed;
@@ -33,6 +35,12 @@ public class JobResource {
         @Inject
         SchedulingService schedulingService;
 
+        @Inject
+        PartitionedSchedulingService partitionedSchedulingService;
+
+        @ConfigProperty(name = "lcm.scheduling.partitioned.enabled", defaultValue = "false")
+        boolean partitionedSchedulingEnabled;
+
         /**
          * 提交新作业
          */
@@ -58,10 +66,19 @@ public class JobResource {
                 return Panache.withTransaction(job::persist)
                                 .chain(() -> {
                                         // 异步触发调度
-                                        schedulingService.scheduleJob(job).subscribe().with(
-                                                        v -> log.info("🚀 Job {} scheduling started", jobId),
-                                                        e -> log.error("❌ Job {} scheduling failed: {}", jobId,
-                                                                        e.getMessage()));
+                                        if (partitionedSchedulingEnabled) {
+                                                log.info("🚀 Job {} partitioned scheduling started", jobId);
+                                                partitionedSchedulingService.scheduleByZone(job).subscribe().with(
+                                                                v -> log.info("✅ Job {} partitioned solving completed",
+                                                                                jobId),
+                                                                e -> log.error("❌ Job {} scheduling failed: {}", jobId,
+                                                                                e.getMessage()));
+                                        } else {
+                                                schedulingService.scheduleJob(job).subscribe().with(
+                                                                v -> log.info("🚀 Job {} scheduling started", jobId),
+                                                                e -> log.error("❌ Job {} scheduling failed: {}", jobId,
+                                                                                e.getMessage()));
+                                        }
                                         return Uni.createFrom().item(Response.status(Response.Status.CREATED)
                                                         .entity(new JobResponse(jobId, job.getStatus().name(),
                                                                         "Job submitted successfully"))

@@ -10,6 +10,7 @@ import { Activity } from 'lucide-react';
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const SatellitesPage = lazy(() => import('./pages/SatellitesPage').then(m => ({ default: m.SatellitesPage })));
 const SatelliteDetailPage = lazy(() => import('./pages/SatelliteDetailPage').then(m => ({ default: m.SatelliteDetailPage })));
+const TopologyPage = lazy(() => import('./pages/TopologyPage').then(m => ({ default: m.TopologyPage })));
 const JobsPage = lazy(() => import('./pages/JobsPage').then(m => ({ default: m.JobsPage })));
 const JobDetailPage = lazy(() => import('./pages/JobDetailPage').then(m => ({ default: m.JobDetailPage })));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage').then(m => ({ default: m.DiscoveryPage })));
@@ -65,6 +66,7 @@ function AppRoutes() {
                 <Route path="/" element={<PageWrapper><DashboardPage /></PageWrapper>} />
                 <Route path="/satellites" element={<PageWrapper><SatellitesPage /></PageWrapper>} />
                 <Route path="/satellites/:id" element={<PageWrapper><SatelliteDetailPage /></PageWrapper>} />
+                <Route path="/topology" element={<PageWrapper><TopologyPage /></PageWrapper>} />
                 <Route path="/jobs" element={<PageWrapper><JobsPage /></PageWrapper>} />
                 <Route path="/jobs/:id" element={<PageWrapper><JobDetailPage /></PageWrapper>} />
                 <Route path="/discovery" element={<PageWrapper><DiscoveryPage /></PageWrapper>} />

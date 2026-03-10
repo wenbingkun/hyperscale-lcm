@@ -1,6 +1,5 @@
-import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2, LogOut } from 'lucide-react';
+import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2, LogOut, Network } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
@@ -39,6 +38,10 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
                     <NavLink to="/satellites" className={navLinkClass}>
                         <Satellite size={18} />
                         Satellites
+                    </NavLink>
+                    <NavLink to="/topology" className={navLinkClass}>
+                        <Network size={18} />
+                        Topology
                     </NavLink>
                     <NavLink to="/jobs" className={navLinkClass}>
                         <Cpu size={18} />

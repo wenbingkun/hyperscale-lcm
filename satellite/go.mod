@@ -6,6 +6,7 @@ toolchain go1.24.7
 
 require (
 	github.com/docker/docker v20.10.18+incompatible
+	github.com/pin/tftp/v3 v3.2.0
 	github.com/stmcginnis/gofish v0.21.4
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.66.0
 	go.opentelemetry.io/otel v1.41.0
