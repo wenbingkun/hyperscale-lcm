@@ -22,6 +22,7 @@ import (
 	"github.com/sc-lcm/satellite/pkg/discovery"
 	"github.com/sc-lcm/satellite/pkg/docker"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
+	"github.com/sc-lcm/satellite/pkg/pxe"
 )
 
 const (
@@ -184,6 +185,11 @@ func main() {
 		ctxDHCP, cancelDHCP := context.WithCancel(context.Background())
 		defer cancelDHCP()
 		go discovery.StartDHCPListener(ctxDHCP, client, satelliteId)
+
+		// Start PXE Services globally for baremetal provisioning
+		ctxPXE, cancelPXE := context.WithCancel(context.Background())
+		defer cancelPXE()
+		go pxe.StartPXEServices(ctxPXE, pxe.DefaultConfig)
 
 		// 主循环，包含优雅关闭处理
 		for {
