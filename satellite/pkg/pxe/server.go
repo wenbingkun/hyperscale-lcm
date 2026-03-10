@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pin/tftp/v3"
 )
@@ -19,11 +20,12 @@ type ServerConfig struct {
 	HTTPAddr    string
 }
 
-// DefaultConfig provides sensible defaults
+// DefaultConfig provides sensible defaults.
+// HTTPAddr uses :8090 to avoid conflicting with the satellite's own :8080 port.
 var DefaultConfig = ServerConfig{
 	TFTPAddr:    ":69",
 	TFTPRootDir: "/var/lib/lcm/tftpboot",
-	HTTPAddr:    ":8080",
+	HTTPAddr:    ":8090",
 }
 
 // StartPXEServices initializes and blocks to run both the TFTP and HTTP servers concurrently.
@@ -64,9 +66,12 @@ func startTFTPServer(ctx context.Context, cfg ServerConfig) error {
 	readHandler := func(filename string, rf io.ReaderFrom) error {
 		cleanPath := filepath.Join(cfg.TFTPRootDir, filepath.Clean(filename))
 
-		// Prevent path traversal outside TFTP root
-		rel, err := filepath.Rel(cfg.TFTPRootDir, cleanPath)
-		if err != nil || len(rel) == 0 || rel[0] == '.' {
+		// Prevent path traversal outside TFTP root using prefix check on the
+		// resolved absolute path, which handles both ".." sequences and symlinks
+		// more reliably than rel[0] == '.' alone.
+		root := cfg.TFTPRootDir + string(os.PathSeparator)
+		if !strings.HasPrefix(cleanPath, root) {
+			log.Printf("TFTP: path traversal attempt blocked: %s", filename)
 			return fmt.Errorf("access denied")
 		}
 
@@ -126,7 +131,12 @@ func handleIpxeScript(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("HTTP: Generating iPXE script for MAC %s", mac)
 
-	host := r.Host // Ensure server is accessible via this Host IP
+	host := r.Host
+	if host == "" {
+		// Fallback to the remote address host when running behind a proxy or
+		// accessed directly by IP without a Host header.
+		host = r.RemoteAddr
+	}
 
 	// A highly simplified Ubuntu netboot iPXE example script
 	script := fmt.Sprintf(`#!ipxe

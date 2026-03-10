@@ -29,17 +29,24 @@ var (
 
 // cleanCache removes MACs we haven't seen in the last 5 minutes to avoid memory leaks
 // and allow re-reporting if a machine drops offline and re-broadcasts later.
-func cleanCache() {
+// It stops when ctx is cancelled to prevent goroutine leaks.
+func cleanCache(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
 	for {
-		time.Sleep(5 * time.Minute)
-		cacheMu.Lock()
-		now := time.Now()
-		for mac, entry := range macCache {
-			if now.Sub(entry.lastSeen) > 5*time.Minute {
-				delete(macCache, mac)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cacheMu.Lock()
+			now := time.Now()
+			for mac, entry := range macCache {
+				if now.Sub(entry.lastSeen) > 5*time.Minute {
+					delete(macCache, mac)
+				}
 			}
+			cacheMu.Unlock()
 		}
-		cacheMu.Unlock()
 	}
 }
 
@@ -47,8 +54,8 @@ func cleanCache() {
 func StartDHCPListener(ctx context.Context, client pb.LcmServiceClient, satelliteID string) {
 	log.Println("📡 Starting DHCP Discover Listener on UDP port 67...")
 
-	// Run cache cleaner in background
-	go cleanCache()
+	// Run cache cleaner in background; tied to ctx so it stops on shutdown
+	go cleanCache(ctx)
 
 	addr := net.UDPAddr{
 		Port: 67,
