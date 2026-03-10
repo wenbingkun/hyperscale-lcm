@@ -255,11 +255,70 @@ jobs:
           # Wait for Core HTTP health endpoint (port 8080) to become ready
           timeout 60 bash -c 'until curl -sf http://localhost:8080/q/health/ready; do sleep 2; done'
 
-      - name: Execute Load Profile (500 connections for 30s)
+      - name: Execute Load Profile (500 satellites for 30s)
         working-directory: satellite
         run: |
-          # We use timeout 30s to simulate sustained load, we expect it to exit 124 on timeout success
-          timeout 30s ./loadgen -addr localhost:9000 -conns 10 -sats 50 -interval 1s -cert ../certs/client.pem -key ../certs/client.key -ca ../certs/ca.pem || [ $? -eq 124 ]
+          ./loadgen -addr localhost:9000 -conns 10 -sats 50 -interval 1s -duration 30s -cert ../certs/client.pem -key ../certs/client.key -ca ../certs/ca.pem 2>&1 | tee /tmp/loadgen.log
+
+      - name: Validate Load Test Baseline
+        run: |
+          summary_line=$(grep 'LOADGEN_SUMMARY ' /tmp/loadgen.log | tail -n 1)
+          if [ -z "$summary_line" ]; then
+            echo "Missing LOADGEN_SUMMARY output"
+            exit 1
+          fi
+
+          summary_json=${summary_line#*LOADGEN_SUMMARY }
+
+          python3 - <<'PY' "$summary_json"
+          import json
+          import sys
+
+          summary = json.loads(sys.argv[1])
+
+          registration_success = summary["registrationSuccess"]
+          total_satellites = summary["totalSatellites"]
+          registration_rate = summary["registrationSuccessRate"]
+          heartbeat_attempts = summary["heartbeatAttempts"]
+          heartbeat_failures = summary["heartbeatFailures"]
+          heartbeat_rate = summary["heartbeatSuccessRate"]
+
+          errors = []
+          if registration_success < int(total_satellites * 0.95):
+              errors.append(
+                  f"registration baseline failed: {registration_success}/{total_satellites} satellites registered"
+              )
+          if registration_rate < 0.95:
+              errors.append(f"registration success rate too low: {registration_rate:.3f}")
+          if heartbeat_attempts < total_satellites:
+              errors.append(
+                  f"heartbeat baseline failed: only {heartbeat_attempts} heartbeat attempts for {total_satellites} satellites"
+              )
+          if heartbeat_rate < 0.99:
+              errors.append(f"heartbeat success rate too low: {heartbeat_rate:.3f}")
+          if heartbeat_failures > max(5, int(heartbeat_attempts * 0.01)):
+              errors.append(
+                  f"heartbeat failures above threshold: {heartbeat_failures}/{heartbeat_attempts}"
+              )
+
+          if errors:
+              for error in errors:
+                  print(error)
+              sys.exit(1)
+
+          print(
+              "Load test baseline passed:",
+              json.dumps(
+                  {
+                      "registrationSuccess": registration_success,
+                      "totalSatellites": total_satellites,
+                      "heartbeatAttempts": heartbeat_attempts,
+                      "heartbeatFailures": heartbeat_failures,
+                      "heartbeatSuccessRate": heartbeat_rate,
+                  }
+              ),
+          )
+          PY
           
       - name: Verify Core Health Post-Load
         run: |

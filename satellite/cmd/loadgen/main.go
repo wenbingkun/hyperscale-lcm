@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -24,11 +25,32 @@ var (
 	conns       = flag.Int("conns", 100, "Number of physical gRPC connections")
 	satsPerConn = flag.Int("sats", 100, "Number of satellites per connection")
 	interval    = flag.Duration("interval", 5*time.Second, "Heartbeat interval")
+	duration    = flag.Duration("duration", 30*time.Second, "Total load test duration")
 	certPath    = flag.String("cert", "../certs/client.pem", "Path to client cert")
 	keyPath     = flag.String("key", "../certs/client.key", "Path to client key")
 	caPath      = flag.String("ca", "../certs/ca.pem", "Path to CA cert")
 	clusterFlag = flag.String("cluster", "default", "Cluster ID for load test isolation")
 )
+
+type stats struct {
+	RegistrationAttempts int64 `json:"registrationAttempts"`
+	RegistrationSuccess  int64 `json:"registrationSuccess"`
+	RegistrationFailures int64 `json:"registrationFailures"`
+	HeartbeatAttempts    int64 `json:"heartbeatAttempts"`
+	HeartbeatSuccess     int64 `json:"heartbeatSuccess"`
+	HeartbeatFailures    int64 `json:"heartbeatFailures"`
+}
+
+type summary struct {
+	DurationSeconds   int64   `json:"durationSeconds"`
+	Connections       int     `json:"connections"`
+	SatellitesPerConn int     `json:"satellitesPerConnection"`
+	TotalSatellites   int     `json:"totalSatellites"`
+	ActiveSatellites  int32   `json:"activeSatellites"`
+	RegistrationRate  float64 `json:"registrationSuccessRate"`
+	HeartbeatRate     float64 `json:"heartbeatSuccessRate"`
+	stats
+}
 
 func main() {
 	flag.Parse()
@@ -53,15 +75,23 @@ func main() {
 		ServerName:   "localhost",
 	})
 
+	ctx, cancel := context.WithTimeout(context.Background(), *duration)
+	defer cancel()
+
 	var wg sync.WaitGroup
 	var activeSats int32
+	var runStats stats
 
 	for i := 0; i < *conns; i++ {
 		wg.Add(1)
 		go func(connId int) {
 			defer wg.Done()
 			// Stagger connection start to avoid thundering herd on startup
-			time.Sleep(time.Duration(rand.Intn(5000)) * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(rand.Intn(5000)) * time.Millisecond):
+			}
 
 			conn, err := grpc.Dial(*serverAddr, grpc.WithTransportCredentials(creds))
 			if err != nil {
@@ -75,10 +105,13 @@ func main() {
 			// Simulate N satellites on this connection
 			var satWg sync.WaitGroup
 			for j := 0; j < *satsPerConn; j++ {
+				if ctx.Err() != nil {
+					break
+				}
 				satWg.Add(1)
 				go func(satIdx int) {
 					defer satWg.Done()
-					simulateSatellite(connId, satIdx, client, &activeSats)
+					simulateSatellite(ctx, connId, satIdx, client, &activeSats, &runStats)
 				}(j)
 				// Slight stagger between sats in same conn
 				time.Sleep(10 * time.Millisecond)
@@ -90,20 +123,27 @@ func main() {
 	// Monitor loop
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
-			current := atomic.LoadInt32(&activeSats)
-			log.Printf("📊 Active Satellites: %d / %d", current, (*conns)*(*satsPerConn))
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				current := atomic.LoadInt32(&activeSats)
+				log.Printf("📊 Active Satellites: %d / %d", current, (*conns)*(*satsPerConn))
+			}
 		}
 	}()
 
 	wg.Wait()
+	printSummary(*duration, *conns, *satsPerConn, atomic.LoadInt32(&activeSats), runStats)
 }
 
-func simulateSatellite(connId, satIdx int, client pb.LcmServiceClient, activeCounter *int32) {
+func simulateSatellite(ctx context.Context, connId, satIdx int, client pb.LcmServiceClient, activeCounter *int32,
+	runStats *stats) {
 	// 1. Register
 	hostname := fmt.Sprintf("sat-%d-%d", connId, satIdx)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	regCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	atomic.AddInt64(&runStats.RegistrationAttempts, 1)
 
 	regReq := &pb.RegisterRequest{
 		Hostname:     hostname,
@@ -113,32 +153,75 @@ func simulateSatellite(connId, satIdx int, client pb.LcmServiceClient, activeCou
 		AgentVersion: "1.0-stress",
 	}
 
-	resp, err := client.RegisterSatellite(ctx, regReq)
+	resp, err := client.RegisterSatellite(regCtx, regReq)
 	if err != nil {
-		//		log.Printf("❌ [%s] Registration failed: %v", hostname, err)
+		atomic.AddInt64(&runStats.RegistrationFailures, 1)
 		return
 	}
 
 	id := resp.GetAssignedId()
+	atomic.AddInt64(&runStats.RegistrationSuccess, 1)
 	atomic.AddInt32(activeCounter, 1)
+	defer atomic.AddInt32(activeCounter, -1)
 
 	// 2. Heartbeat Loop
 	ticker := time.NewTicker(*interval)
 	// Randomize ticker start to avoid synchronized heartbeats
-	time.Sleep(time.Duration(rand.Intn(int(*interval))))
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(time.Duration(rand.Intn(int(*interval)))):
+	}
 
 	defer ticker.Stop()
 
-	for range ticker.C {
-		_, err := client.SendHeartbeat(context.Background(), &pb.HeartbeatRequest{
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		atomic.AddInt64(&runStats.HeartbeatAttempts, 1)
+		hbCtx, hbCancel := context.WithTimeout(ctx, 5*time.Second)
+		_, err := client.SendHeartbeat(hbCtx, &pb.HeartbeatRequest{
 			SatelliteId:     id,
 			ClusterId:       *clusterFlag,
 			LoadAvg:         rand.Float64() * 10.0,
 			MemoryUsedBytes: uint64(rand.Intn(1024*1024*1024)) * 16, // 0-16GB
 		})
+		hbCancel()
 		if err != nil {
-			log.Printf("⚠️ [%s] Heartbeat failed: %v", hostname, err)
-			// Optional: Re-register? For simplified stress test, maybe just retry or exit
+			atomic.AddInt64(&runStats.HeartbeatFailures, 1)
+			continue
 		}
+		atomic.AddInt64(&runStats.HeartbeatSuccess, 1)
 	}
+}
+
+func printSummary(duration time.Duration, connections, satellitesPerConn int, activeSatellites int32, runStats stats) {
+	totalSatellites := connections * satellitesPerConn
+	summary := summary{
+		DurationSeconds:   int64(duration.Seconds()),
+		Connections:       connections,
+		SatellitesPerConn: satellitesPerConn,
+		TotalSatellites:   totalSatellites,
+		ActiveSatellites:  activeSatellites,
+		RegistrationRate:  successRate(runStats.RegistrationSuccess, runStats.RegistrationAttempts),
+		HeartbeatRate:     successRate(runStats.HeartbeatSuccess, runStats.HeartbeatAttempts),
+		stats:             runStats,
+	}
+
+	payload, err := json.Marshal(summary)
+	if err != nil {
+		log.Printf("LOADGEN_SUMMARY marshal_error=%v", err)
+		return
+	}
+	log.Printf("LOADGEN_SUMMARY %s", payload)
+}
+
+func successRate(successes, attempts int64) float64 {
+	if attempts == 0 {
+		return 0
+	}
+	return float64(successes) / float64(attempts)
 }
