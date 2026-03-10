@@ -63,6 +63,8 @@ public class PartitionedSchedulingService {
      */
     @WithSession
     public Uni<Map<String, Node>> scheduleByZone(Job job) {
+        Job detachedJob = cloneJob(job);
+
         return loadNodesByZone()
                 .chain(nodesByZone -> {
                     log.info("Partitioned scheduling: {} zones, {} total nodes",
@@ -71,13 +73,13 @@ public class PartitionedSchedulingService {
 
                     // 并行求解每个 Zone
                     List<CompletableFuture<ZoneSolution>> futures = nodesByZone.entrySet().stream()
-                            .map(entry -> solveForZone(entry.getKey(), entry.getValue(), job))
+                            .map(entry -> solveForZone(entry.getKey(), entry.getValue(), detachedJob))
                             .collect(Collectors.toList());
 
                     // Use Uni.createFrom().completionStage to avoid blocking the event loop
                     return Uni.createFrom().completionStage(
                             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                                    .thenApply(v -> selectBestSolution(futures, job)));
+                                    .thenApply(v -> selectBestSolution(futures, detachedJob)));
                 });
     }
 
@@ -141,9 +143,10 @@ public class PartitionedSchedulingService {
                     log.info("🎉 Job {} assigned to Node {} in Zone '{}'",
                             originalJob.getId(), assignedNode.getId(), bestZone.zoneId);
 
-                    // 发送到 Kafka
-                    originalJob.setAssignedNode(assignedNode);
-                    jobEmitter.send(originalJob);
+                    Job dispatchJob = cloneJob(originalJob);
+                    dispatchJob.setAssignedNode(assignedNode);
+                    dispatchJob.setAssignedNodeId(assignedNode.getId());
+                    jobEmitter.send(dispatchJob);
 
                     return Map.of(originalJob.getId(), assignedNode);
                 })

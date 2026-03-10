@@ -14,6 +14,7 @@ export interface Satellite {
     bmcIp?: string;
     systemSerial?: string;
     model?: string;
+    gpuCount?: number;
     powerState?: string;
     systemTemperatureCelsius?: number;
 }
@@ -24,6 +25,7 @@ export interface Job {
     description?: string;
     status: string; // 'PENDING' | 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
     assignedNodeId?: string;
+    requiredGpuCount?: number;
     scheduledAt?: string;
     completedAt?: string;
     exitCode?: number;

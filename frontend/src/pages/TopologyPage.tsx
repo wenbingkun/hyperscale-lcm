@@ -4,6 +4,25 @@ import { GlassCard } from '../components/GlassCard';
 import { Server, Grid, Network, Cpu, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+type StatBubbleProps = {
+    label: string;
+    value: string;
+    icon: React.ReactNode;
+    color: string;
+};
+
+const StatBubble: React.FC<StatBubbleProps> = ({ label, value, icon, color }) => (
+    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className={`rounded-lg p-3 ${color} bg-opacity-20 text-current`}>
+            {icon}
+        </div>
+        <div>
+            <p className="text-sm text-gray-400">{label}</p>
+            <p className="text-xl font-bold text-white">{value}</p>
+        </div>
+    </div>
+);
+
 export const TopologyPage: React.FC = () => {
     const [satellites, setSatellites] = useState<Satellite[]>([]);
     const [jobs, setJobs] = useState<Job[]>([]);
@@ -54,23 +73,11 @@ export const TopologyPage: React.FC = () => {
         return true;
     }).sort((a, b) => a.id.localeCompare(b.id));
 
-    // Simple stat aggregation
-    const totalGpus = satellites.length * 8; // Assuming 8 per chassis
+    // Fallback to 8 GPUs per node until the backend exposes exact inventory for every node.
+    const totalGpus = satellites.reduce((sum, satellite) => sum + (satellite.gpuCount ?? 8), 0);
     const utilizedGpus = jobs
         .filter(j => j.status === 'RUNNING' || j.status === 'SCHEDULED')
-        .reduce((sum) => sum + 8, 0); // Temporary simplification: If job assigned, it consumes 8. Will refine based on exact API data later if `requiredGpuCount` is available in the Job model on frontend
-
-    const StatBubble: React.FC<{ label: string; value: string; icon: React.ReactNode; color: string }> = ({ label, value, icon, color }) => (
-        <div className={`flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10`}>
-            <div className={`p-3 rounded-lg ${color} bg-opacity-20 text-current`}>
-                {icon}
-            </div>
-            <div>
-                <p className="text-gray-400 text-sm">{label}</p>
-                <p className="text-white text-xl font-bold">{value}</p>
-            </div>
-        </div>
-    );
+        .reduce((sum, job) => sum + (job.requiredGpuCount ?? 8), 0);
 
     if (loading) {
         return (

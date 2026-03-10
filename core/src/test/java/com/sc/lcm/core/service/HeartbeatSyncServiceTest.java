@@ -4,7 +4,6 @@ import com.sc.lcm.core.domain.Satellite;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.vertx.RunOnVertxContext;
-import io.quarkus.test.vertx.UniAsserter;
 import io.quarkus.test.hibernate.reactive.panache.TransactionalUniAsserter;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
@@ -12,11 +11,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.time.LocalDateTime;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.anyString;
 
 @QuarkusTest
 public class HeartbeatSyncServiceTest {
@@ -52,20 +48,20 @@ public class HeartbeatSyncServiceTest {
                 .execute(() -> Satellite.persist(sat2))
                 .execute(() -> {
                     // sat-1 has a recent heartbeat (comes ONLINE)
-                    Mockito.when(stateCache.getLastHeartbeatReactive("sat-1"))
+                    Mockito.when(stateCache.getLastHeartbeatReactive("sat-id1"))
                             .thenReturn(Uni.createFrom().item(System.currentTimeMillis()));
 
                     // sat-2 has NO heartbeat (goes OFFLINE)
-                    Mockito.when(stateCache.getLastHeartbeatReactive("sat-2"))
+                    Mockito.when(stateCache.getLastHeartbeatReactive("sat-id2"))
                             .thenReturn(Uni.createFrom().nullItem());
                 })
                 .execute(() -> heartbeatSyncService.syncHeartbeatsToDatabase())
-                .assertThat(() -> Satellite.<Satellite>findById("sat-1"), result -> {
+                .assertThat(() -> Satellite.<Satellite>findById("sat-id1"), result -> {
                     assertNotNull(result);
                     assertEquals("ONLINE", result.getStatus());
                     assertNotNull(result.getLastHeartbeat());
                 })
-                .assertThat(() -> Satellite.<Satellite>findById("sat-2"), result -> {
+                .assertThat(() -> Satellite.<Satellite>findById("sat-id2"), result -> {
                     assertNotNull(result);
                     assertEquals("OFFLINE", result.getStatus());
                 });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import './App.css'
 
 interface NodeStatus {
@@ -37,67 +37,96 @@ function App() {
     alerts: []
   })
 
-  const [ws, setWs] = useState<WebSocket | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
 
-  const connectWebSocket = useCallback(() => {
-    const websocket = new WebSocket('ws://localhost:8080/ws/dashboard')
+  const handleMessage = useEffectEvent((event: MessageEvent<string>) => {
+    const data = JSON.parse(event.data)
 
-    websocket.onopen = () => {
-      console.log('🌐 Connected to Dashboard WebSocket')
-      setState(prev => ({ ...prev, connected: true }))
-      websocket.send('GET_STATUS')
-    }
-
-    websocket.onclose = () => {
-      console.log('🔌 Disconnected from Dashboard WebSocket')
-      setState(prev => ({ ...prev, connected: false }))
-      // 自动重连
-      setTimeout(connectWebSocket, 3000)
-    }
-
-    websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      
-      switch (data.type) {
-        case 'CONNECTED':
-          console.log('✅', data.message)
-          break
-        case 'STATUS':
-          setState(prev => ({ ...prev, onlineNodes: data.onlineNodes }))
-          break
-        case 'NODE_STATUS':
-          setState(prev => {
-            const nodes = new Map(prev.nodes)
-            nodes.set(data.nodeId, {
-              nodeId: data.nodeId,
-              status: data.status,
-              timestamp: data.timestamp
-            })
-            return { ...prev, nodes }
+    switch (data.type) {
+      case 'CONNECTED':
+        console.log('✅', data.message)
+        break
+      case 'STATUS':
+        setState(prev => ({ ...prev, onlineNodes: data.onlineNodes }))
+        break
+      case 'NODE_STATUS':
+        setState(prev => {
+          const nodes = new Map(prev.nodes)
+          nodes.set(data.nodeId, {
+            nodeId: data.nodeId,
+            status: data.status,
+            timestamp: data.timestamp
           })
-          break
-        case 'SCHEDULE_EVENT':
-          setState(prev => ({
-            ...prev,
-            events: [data, ...prev.events].slice(0, 50)
-          }))
-          break
-        case 'ALERT':
-          setState(prev => ({
-            ...prev,
-            alerts: [data, ...prev.alerts].slice(0, 20)
-          }))
-          break
+          return { ...prev, nodes }
+        })
+        break
+      case 'SCHEDULE_EVENT':
+        setState(prev => ({
+          ...prev,
+          events: [data, ...prev.events].slice(0, 50)
+        }))
+        break
+      case 'ALERT':
+        setState(prev => ({
+          ...prev,
+          alerts: [data, ...prev.alerts].slice(0, 20)
+        }))
+        break
+    }
+  })
+
+  useEffect(() => {
+    let disposed = false
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
       }
     }
 
-    setWs(websocket)
-  }, [])
+    const connectWebSocket = () => {
+      if (disposed) {
+        return
+      }
 
-  useEffect(() => {
+      const websocket = new WebSocket('ws://localhost:8080/ws/dashboard')
+      wsRef.current = websocket
+
+      websocket.onopen = () => {
+        console.log('🌐 Connected to Dashboard WebSocket')
+        setState(prev => ({ ...prev, connected: true }))
+        websocket.send('GET_STATUS')
+      }
+
+      websocket.onclose = () => {
+        console.log('🔌 Disconnected from Dashboard WebSocket')
+        setState(prev => ({ ...prev, connected: false }))
+
+        if (wsRef.current === websocket) {
+          wsRef.current = null
+        }
+
+        if (!disposed) {
+          clearReconnectTimer()
+          reconnectTimerRef.current = window.setTimeout(connectWebSocket, 3000)
+        }
+      }
+
+      websocket.onmessage = handleMessage
+    }
+
     connectWebSocket()
-    return () => ws?.close()
-  }, [connectWebSocket])
+
+    return () => {
+      disposed = true
+      clearReconnectTimer()
+      const websocket = wsRef.current
+      wsRef.current = null
+      websocket?.close()
+    }
+  }, [])
 
   return (
     <div className="dashboard">

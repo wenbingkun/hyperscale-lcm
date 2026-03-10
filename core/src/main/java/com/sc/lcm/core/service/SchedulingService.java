@@ -53,7 +53,7 @@ public class SchedulingService {
                     solution.setNodeList(nodes);
 
                     List<Job> jobs = new ArrayList<>();
-                    jobs.add(newJob);
+                    jobs.add(copyJob(newJob));
                     solution.setJobList(jobs);
 
                     return solution;
@@ -66,7 +66,7 @@ public class SchedulingService {
             String nodeId = job.getAssignedNode().getId();
             job.setAssignedNodeId(nodeId);
             log.info("Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
-            jobEmitter.send(job);
+            jobEmitter.send(copyJob(job));
         } else {
             log.warn("Job {} could not be assigned!", job.getId());
         }
@@ -89,5 +89,26 @@ public class SchedulingService {
                             this::saveSolution);
                 })
                 .replaceWithVoid();
+    }
+
+    private Job copyJob(Job original) {
+        Job copy = new Job();
+        copy.setId(original.getId());
+        copy.setName(original.getName());
+        copy.setDescription(original.getDescription());
+        copy.setRequiredCpuCores(original.getRequiredCpuCores());
+        copy.setRequiredMemoryGb(original.getRequiredMemoryGb());
+        copy.setRequiredGpuCount(original.getRequiredGpuCount());
+        copy.setRequiredGpuModel(original.getRequiredGpuModel());
+        copy.setRequiresNvlink(original.isRequiresNvlink());
+        copy.setMinNvlinkBandwidthGbps(original.getMinNvlinkBandwidthGbps());
+        copy.setStatus(original.getStatus());
+        copy.setAssignedNodeId(original.getAssignedNodeId());
+        copy.setAssignedNode(original.getAssignedNode());
+        copy.setTenantId(original.getTenantId());
+        copy.setPriority(original.getPriority());
+        copy.setPreemptible(original.isPreemptible());
+        copy.setNodeSelector(original.getNodeSelector());
+        return copy;
     }
 }

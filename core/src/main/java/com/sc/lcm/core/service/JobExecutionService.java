@@ -30,6 +30,9 @@ import java.time.LocalDateTime;
 public class JobExecutionService {
 
     @Inject
+    ObjectMapper objectMapper;
+
+    @Inject
     @Channel("job-execution-out")
     Emitter<String> jobExecutionEmitter;
 
@@ -45,8 +48,6 @@ public class JobExecutionService {
 
     @Inject
     AuditService auditService;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 派发作业到指定节点执行
@@ -64,6 +65,7 @@ public class JobExecutionService {
             return Panache.withTransaction(() -> Job.<Job>findById(job.getId())
                     .onItem().transformToUni(j -> {
                         if (j != null) {
+                            j.setAssignedNodeId(job.getAssignedNodeId());
                             j.setStatus(JobStatus.SCHEDULED);
                             j.setScheduledAt(LocalDateTime.now());
                         }
