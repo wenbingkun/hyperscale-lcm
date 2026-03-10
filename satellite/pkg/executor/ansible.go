@@ -23,7 +23,9 @@ func RunAnsiblePlaybook(ctx context.Context, playbookYaml string) (string, int, 
 	if _, err := tmpFile.Write([]byte(playbookYaml)); err != nil {
 		return "", -1, fmt.Errorf("failed to write playbook content: %w", err)
 	}
-	tmpFile.Close() // Ensure it's flushed and closed before ansible reads it
+	if err := tmpFile.Close(); err != nil {
+		return "", -1, fmt.Errorf("failed to flush playbook file: %w", err)
+	}
 
 	// 3. Execute ansible-playbook
 	// Note: In a production heavily-secured environment, you might want to specify

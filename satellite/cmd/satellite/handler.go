@@ -63,7 +63,7 @@ func handleCommand(resp *pb.StreamResponse, satelliteId string, dockerExec *dock
 		output, exitCode, err := executor.RunShell(ctx, resp.Payload)
 
 		status := pb.JobStatus_COMPLETED
-		if err != nil && exitCode != 0 {
+		if err != nil {
 			status = pb.JobStatus_FAILED
 		}
 
@@ -89,7 +89,7 @@ func handleCommand(resp *pb.StreamResponse, satelliteId string, dockerExec *dock
 		output, exitCode, err := executor.RunAnsiblePlaybook(ctx, resp.Payload)
 
 		status := pb.JobStatus_COMPLETED
-		if err != nil && exitCode != 0 {
+		if err != nil {
 			status = pb.JobStatus_FAILED
 		}
 

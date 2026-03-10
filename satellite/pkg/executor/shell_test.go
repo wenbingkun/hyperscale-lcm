@@ -58,8 +58,8 @@ func TestRunShellTimeout(t *testing.T) {
 		t.Fatal("Expected a timeout error, got nil")
 	}
 
-	// For context timeouts, bash receives SIGKILL (-1 signal status usually leads to -1 in our parser)
+	// For context timeouts, bash receives SIGKILL; our parser returns -1
 	if exitCode != -1 {
-		t.Logf("Process killed by context timeout, exitCode is %d", exitCode)
+		t.Errorf("Expected exit code -1 on timeout, got %d", exitCode)
 	}
 }
