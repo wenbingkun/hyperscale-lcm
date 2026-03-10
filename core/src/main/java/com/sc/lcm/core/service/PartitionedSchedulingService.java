@@ -2,6 +2,7 @@ package com.sc.lcm.core.service;
 
 import ai.timefold.solver.core.api.solver.SolverManager;
 import ai.timefold.solver.core.api.solver.SolverJob;
+import ai.timefold.solver.core.api.score.buildin.hardsoft.HardSoftScore;
 import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.LcmSolution;
 import com.sc.lcm.core.domain.Node;
@@ -128,10 +129,12 @@ public class PartitionedSchedulingService {
         return futures.stream()
                 .map(CompletableFuture::join)
                 .filter(zs -> zs.solution.getJobList().get(0).getAssignedNode() != null)
-                .min(Comparator.comparing(zs -> {
-                    // 优先选择硬约束满足的方案，其次选择软约束得分高的
-                    var score = zs.solution.getScore();
-                    return score != null ? score.hardScore() * 1000000 - score.softScore() : 0;
+                .max(Comparator.comparing(zs -> {
+                    HardSoftScore score = (HardSoftScore) zs.solution().getScore();
+                    if (score == null) {
+                        return HardSoftScore.of(Integer.MIN_VALUE, Integer.MIN_VALUE);
+                    }
+                    return score;
                 }))
                 .map(bestZone -> {
                     Node assignedNode = bestZone.solution.getJobList().get(0).getAssignedNode();

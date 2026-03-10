@@ -21,6 +21,7 @@ import (
 	"github.com/sc-lcm/satellite/pkg/discovery"
 	"github.com/sc-lcm/satellite/pkg/docker"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
+	"github.com/sc-lcm/satellite/pkg/pxe"
 )
 
 const (
@@ -201,6 +202,10 @@ func main() {
 		// Start Heartbeat Ticker
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+
+		// Start PXE Services for bare-metal provisioning (TFTP + HTTP)
+		// DHCP discovery is handled by discoveryMgr above; no separate listener needed.
+		go pxe.StartPXEServices(bgCtx, pxe.DefaultConfig)
 
 		// Main loop with graceful shutdown
 		for {
