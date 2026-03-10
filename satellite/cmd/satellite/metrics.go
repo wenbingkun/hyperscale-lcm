@@ -288,12 +288,13 @@ func getGPUMetrics() []*pb.GpuMetric {
 }
 
 // BuildHeartbeatRequest creates a heartbeat request from collected metrics
-func BuildHeartbeatRequest(satelliteId string) *pb.HeartbeatRequest {
+func BuildHeartbeatRequest(satelliteId string, clusterId string) *pb.HeartbeatRequest {
 	m := CollectMetrics()
 	powerState, tempC := rfCollector.CollectDynamicTelemetry()
 
 	return &pb.HeartbeatRequest{
 		SatelliteId:              satelliteId,
+		ClusterId:                clusterId,
 		LoadAvg:                  m.LoadAvg1m,
 		MemoryUsedBytes:          m.MemoryUsedBytes,
 		CpuUsagePercent:          m.CPUUsagePercent,
@@ -308,7 +309,7 @@ func BuildHeartbeatRequest(satelliteId string) *pb.HeartbeatRequest {
 }
 
 // BuildRegisterRequest creates a registration request with real hardware info
-func BuildRegisterRequest() *pb.RegisterRequest {
+func BuildRegisterRequest(clusterId string) *pb.RegisterRequest {
 	hostname := os.Getenv("LCM_MOCK_HOSTNAME")
 	if hostname == "" {
 		hostname, _ = os.Hostname()
@@ -328,6 +329,7 @@ func BuildRegisterRequest() *pb.RegisterRequest {
 
 	return &pb.RegisterRequest{
 		Hostname:     hostname,
+		ClusterId:    clusterId,
 		IpAddress:    localIP,
 		OsVersion:    osVersion,
 		AgentVersion: "0.3.0",

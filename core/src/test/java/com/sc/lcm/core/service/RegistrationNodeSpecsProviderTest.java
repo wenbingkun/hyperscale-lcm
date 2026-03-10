@@ -43,7 +43,7 @@ class RegistrationNodeSpecsProviderTest {
         provider.cacheHardwareSpecs("sat-001", specs);
 
         // 创建 Satellite
-        Satellite satellite = new Satellite("sat-001", "gpu-node-01", "10.0.0.1", "Linux 6.5", "0.3.0");
+        Satellite satellite = new Satellite("sat-001", "default", "gpu-node-01", "10.0.0.1", "Linux 6.5", "0.3.0");
 
         // 验证 Node 创建
         Node node = provider.getNodeSpecs(satellite);
@@ -62,7 +62,7 @@ class RegistrationNodeSpecsProviderTest {
     @Test
     @DisplayName("无缓存时应返回默认 Node")
     void testGetNodeSpecsWithoutCache() {
-        Satellite satellite = new Satellite("sat-002", "compute-01", "10.0.0.2", "Linux 6.5", "0.3.0");
+        Satellite satellite = new Satellite("sat-002", "default", "compute-01", "10.0.0.2", "Linux 6.5", "0.3.0");
 
         Node node = provider.getNodeSpecs(satellite);
 
@@ -91,8 +91,8 @@ class RegistrationNodeSpecsProviderTest {
         provider.cacheHardwareSpecs("sat-a", specsA);
         provider.cacheHardwareSpecs("sat-b", specsB);
 
-        Satellite satA = new Satellite("sat-a", "node-a", "10.0.0.1", "Linux 6.5", "0.3.0");
-        Satellite satB = new Satellite("sat-b", "node-b", "10.0.0.2", "Linux 6.5", "0.3.0");
+        Satellite satA = new Satellite("sat-a", "default", "node-a", "10.0.0.1", "Linux 6.5", "0.3.0");
+        Satellite satB = new Satellite("sat-b", "default", "node-b", "10.0.0.2", "Linux 6.5", "0.3.0");
 
         Node nodeA = provider.getNodeSpecs(satA);
         Node nodeB = provider.getNodeSpecs(satB);
@@ -109,7 +109,7 @@ class RegistrationNodeSpecsProviderTest {
     void testCacheIgnoresNullSpecs() {
         provider.cacheHardwareSpecs("sat-003", null);
 
-        Satellite satellite = new Satellite("sat-003", "node-03", "10.0.0.3", "Linux 6.5", "0.3.0");
+        Satellite satellite = new Satellite("sat-003", "default", "node-03", "10.0.0.3", "Linux 6.5", "0.3.0");
         Node node = provider.getNodeSpecs(satellite);
 
         // Should return defaults (no cached specs)
@@ -128,7 +128,7 @@ class RegistrationNodeSpecsProviderTest {
 
         provider.cacheHardwareSpecs("sat-cpu", specs);
 
-        Satellite satellite = new Satellite("sat-cpu", "cpu-node", "10.0.0.4", "Linux 6.5", "0.3.0");
+        Satellite satellite = new Satellite("sat-cpu", "default", "cpu-node", "10.0.0.4", "Linux 6.5", "0.3.0");
         Node node = provider.getNodeSpecs(satellite);
 
         assertEquals(128, node.getCpuCores());
