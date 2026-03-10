@@ -108,6 +108,7 @@ public class E2EIntegrationTest {
                     null,
                     false,
                     0,
+                    "default",
                     "default");
 
             String jobId = given()

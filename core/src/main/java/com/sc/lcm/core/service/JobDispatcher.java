@@ -28,7 +28,7 @@ public class JobDispatcher {
     @Incoming("job-queue-in")
     public void dispatch(Job job) {
         if (job == null || job.getAssignedNode() == null) {
-            LOG.warn("Received invalid job from Kafka");
+            LOG.debug("Ignoring invalid job from Kafka");
             return;
         }
 
@@ -44,6 +44,6 @@ public class JobDispatcher {
         openTelemetry.getPropagators().getTextMapPropagator()
                 .inject(Context.current(), traceContext, Map::put);
 
-        streamRegistry.sendCommand(nodeId, "EXEC_DOCKER", payload, traceContext);
+        streamRegistry.sendCommand(nodeId, job.getId(), "EXEC_DOCKER", payload, traceContext);
     }
 }

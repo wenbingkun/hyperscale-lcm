@@ -25,11 +25,12 @@ public class StreamRegistry {
         });
     }
 
-    public void sendCommand(String satelliteId, String commandType, String payload, Map<String, String> traceContext) {
+    public void sendCommand(String satelliteId, String commandId, String commandType, String payload,
+            Map<String, String> traceContext) {
         MultiEmitter<? super StreamResponse> emitter = emitters.get(satelliteId);
         if (emitter != null) {
             StreamResponse.Builder builder = StreamResponse.newBuilder()
-                    .setCommandId(java.util.UUID.randomUUID().toString())
+                    .setCommandId(commandId)
                     .setCommandType(commandType)
                     .setPayload(payload);
 

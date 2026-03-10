@@ -58,6 +58,9 @@ public class Job extends PanacheEntityBase {
     // 多租户支持 (P4-4)
     private String tenantId;
 
+    // 多集群支持 (P5-5): 调度到指定 cluster 的 Satellite
+    private String clusterId = "default";
+
     // 优先级队列 (P5-3): 1-10, 10最高
     private int priority = 5;
 
@@ -90,6 +93,7 @@ public class Job extends PanacheEntityBase {
         this.requiredGpuCount = requiredGpuCount;
         this.requiredGpuModel = requiredGpuModel;
         this.status = JobStatus.PENDING;
+        this.clusterId = "default";
     }
 
     public Job(String id, int requiredCpuCores, long requiredMemoryGb,

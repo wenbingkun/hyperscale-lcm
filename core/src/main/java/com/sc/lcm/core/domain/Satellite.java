@@ -69,6 +69,11 @@ public class Satellite extends PanacheEntityBase {
         return list("lastHeartbeat > ?1", since);
     }
 
+    public static Uni<List<Satellite>> findActiveByCluster(LocalDateTime since, String clusterId) {
+        String effectiveClusterId = (clusterId == null || clusterId.isBlank()) ? "default" : clusterId;
+        return list("lastHeartbeat > ?1 and clusterId = ?2", since, effectiveClusterId);
+    }
+
     /**
      * 响应式: 获取所有 Satellite
      */

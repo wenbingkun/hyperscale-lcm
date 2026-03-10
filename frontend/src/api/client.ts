@@ -25,6 +25,7 @@ export interface Job {
     description?: string;
     status: string; // 'PENDING' | 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
     assignedNodeId?: string;
+    clusterId?: string;
     requiredGpuCount?: number;
     scheduledAt?: string;
     completedAt?: string;
@@ -61,6 +62,7 @@ export interface JobRequest {
     requiresNvlink?: boolean;
     minNvlinkBandwidthGbps?: number;
     tenantId?: string;
+    clusterId?: string;
 }
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';

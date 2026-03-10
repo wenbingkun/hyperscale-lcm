@@ -63,6 +63,7 @@ public class JobResource {
                 job.setRequiresNvlink(request.requiresNvlink());
                 job.setMinNvlinkBandwidthGbps(request.minNvlinkBandwidthGbps());
                 job.setTenantId(request.tenantId());
+                job.setClusterId(request.clusterId());
                 job.setStatus(JobStatus.PENDING);
                 Job schedulingJob = copyJob(job);
 
@@ -101,6 +102,7 @@ public class JobResource {
                 copy.setRequiresNvlink(original.isRequiresNvlink());
                 copy.setMinNvlinkBandwidthGbps(original.getMinNvlinkBandwidthGbps());
                 copy.setTenantId(original.getTenantId());
+                copy.setClusterId(original.getClusterId());
                 copy.setStatus(original.getStatus());
                 return copy;
         }
@@ -223,7 +225,8 @@ public class JobResource {
                         String gpuModel,
                         boolean requiresNvlink,
                         int minNvlinkBandwidthGbps,
-                        String tenantId) {
+                        String tenantId,
+                        String clusterId) {
         }
 
         public record JobResponse(String id, String status, String message) {

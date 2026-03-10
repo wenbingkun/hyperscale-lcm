@@ -45,9 +45,10 @@ public class SchedulingService {
      */
     @WithSession
     public Uni<LcmSolution> loadProblemReactive(Job newJob) {
-        return Satellite.findActive(java.time.LocalDateTime.now().minusMinutes(2))
+        String clusterId = normalizeClusterId(newJob.getClusterId());
+        return Satellite.findActiveByCluster(java.time.LocalDateTime.now().minusMinutes(2), clusterId)
                 .map(satellites -> {
-                    log.info("📊 Scheduler found {} active satellites", satellites.size());
+                    log.info("📊 Scheduler found {} active satellites in cluster {}", satellites.size(), clusterId);
 
                     LcmSolution solution = new LcmSolution();
 
@@ -111,9 +112,14 @@ public class SchedulingService {
         copy.setAssignedNodeId(original.getAssignedNodeId());
         copy.setAssignedNode(original.getAssignedNode());
         copy.setTenantId(original.getTenantId());
+        copy.setClusterId(normalizeClusterId(original.getClusterId()));
         copy.setPriority(original.getPriority());
         copy.setPreemptible(original.isPreemptible());
         copy.setNodeSelector(original.getNodeSelector());
         return copy;
+    }
+
+    private String normalizeClusterId(String clusterId) {
+        return (clusterId == null || clusterId.isBlank()) ? "default" : clusterId;
     }
 }

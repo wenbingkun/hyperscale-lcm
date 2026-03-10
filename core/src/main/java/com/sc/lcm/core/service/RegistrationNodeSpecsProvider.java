@@ -61,7 +61,7 @@ public class RegistrationNodeSpecsProvider implements NodeSpecsProvider {
         }
 
         // 降级: 如果没有缓存的规格，返回基础信息
-        log.warn("⚠️ No hardware specs cached for satellite {}, using defaults", satellite.getId());
+        log.debug("No hardware specs cached for satellite {}, using defaults", satellite.getId());
         return new Node(satellite.getId(), 1, 0, 0, null);
     }
 

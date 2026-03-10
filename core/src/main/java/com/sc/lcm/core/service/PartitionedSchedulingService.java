@@ -68,7 +68,7 @@ public class PartitionedSchedulingService {
     public Uni<Map<String, Node>> scheduleByZone(Job job) {
         Job detachedJob = cloneJob(job);
 
-        return loadNodesByZone()
+        return loadNodesByZone(detachedJob)
                 .chain(nodesByZone -> {
                     log.info("Partitioned scheduling: {} zones, {} total nodes",
                             nodesByZone.size(),
@@ -89,8 +89,9 @@ public class PartitionedSchedulingService {
     /**
      * 响应式加载节点并按 Zone 分组
      */
-    private Uni<Map<String, List<Node>>> loadNodesByZone() {
-        return Panache.withSession(() -> Satellite.findActive(LocalDateTime.now().minusMinutes(2))
+    private Uni<Map<String, List<Node>>> loadNodesByZone(Job job) {
+        String clusterId = normalizeClusterId(job.getClusterId());
+        return Panache.withSession(() -> Satellite.findActiveByCluster(LocalDateTime.now().minusMinutes(2), clusterId)
                 .map(satellites -> satellites.stream()
                         .map(nodeSpecsProvider::getNodeSpecs)
                         .collect(Collectors.groupingBy(
@@ -171,7 +172,12 @@ public class PartitionedSchedulingService {
         clone.setRequiredGpuModel(original.getRequiredGpuModel());
         clone.setRequiresNvlink(original.isRequiresNvlink());
         clone.setMinNvlinkBandwidthGbps(original.getMinNvlinkBandwidthGbps());
+        clone.setClusterId(normalizeClusterId(original.getClusterId()));
         return clone;
+    }
+
+    private String normalizeClusterId(String clusterId) {
+        return (clusterId == null || clusterId.isBlank()) ? "default" : clusterId;
     }
 
     /**
