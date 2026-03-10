@@ -7,8 +7,9 @@ import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.LcmSolution;
 import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
-import io.quarkus.hibernate.reactive.panache.common.WithSession;
+import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -46,6 +47,9 @@ public class PartitionedSchedulingService {
     @Channel("job-queue-out")
     Emitter<Job> jobEmitter;
 
+    @Inject
+    Vertx vertx;
+
     /** 并行求解的线程池 */
     private final ExecutorService zoneExecutor = Executors.newFixedThreadPool(
             Runtime.getRuntime().availableProcessors());
@@ -61,7 +65,6 @@ public class PartitionedSchedulingService {
      * @param job 要调度的作业
      * @return 调度结果 (JobId -> 分配的 Node)
      */
-    @WithSession
     public Uni<Map<String, Node>> scheduleByZone(Job job) {
         Job detachedJob = cloneJob(job);
 
@@ -87,11 +90,11 @@ public class PartitionedSchedulingService {
      * 响应式加载节点并按 Zone 分组
      */
     private Uni<Map<String, List<Node>>> loadNodesByZone() {
-        return Satellite.findActive(LocalDateTime.now().minusMinutes(2))
+        return Panache.withSession(() -> Satellite.findActive(LocalDateTime.now().minusMinutes(2))
                 .map(satellites -> satellites.stream()
                         .map(nodeSpecsProvider::getNodeSpecs)
                         .collect(Collectors.groupingBy(
-                                node -> Optional.ofNullable(node.getZoneId()).orElse("default"))));
+                                node -> Optional.ofNullable(node.getZoneId()).orElse("default")))));
     }
 
     /**
@@ -146,7 +149,7 @@ public class PartitionedSchedulingService {
                     Job dispatchJob = cloneJob(originalJob);
                     dispatchJob.setAssignedNode(assignedNode);
                     dispatchJob.setAssignedNodeId(assignedNode.getId());
-                    jobEmitter.send(dispatchJob);
+                    vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
 
                     return Map.of(originalJob.getId(), assignedNode);
                 })

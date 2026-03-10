@@ -7,6 +7,7 @@ import com.sc.lcm.core.service.PartitionedSchedulingService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -37,6 +38,9 @@ public class AllocationResource {
         @ConfigProperty(name = "lcm.scheduling.partitioned.enabled", defaultValue = "false")
         boolean partitionedSchedulingEnabled;
 
+        @Inject
+        Vertx vertx;
+
         /**
          * 提交资源分配请求
          * 返回一个 Allocation ID，用于后续查询调度结果
@@ -58,38 +62,49 @@ public class AllocationResource {
                 allocationJob.setMinNvlinkBandwidthGbps(request.minNvlinkBandwidthGbps());
                 allocationJob.setTenantId(request.tenantId());
                 allocationJob.setStatus(JobStatus.PENDING);
+                Job schedulingJob = copyJob(allocationJob);
 
                 log.info("📊 New allocation requested: {} CPUs, {} GPUs for tenant {}",
                                 request.cpuCores(), request.gpuCount(), request.tenantId());
 
                 return Panache.withTransaction(allocationJob::persist)
-                                .chain(() -> {
-                                        // 异步触发调度引擎
-                                        if (partitionedSchedulingEnabled) {
-                                                log.info("🚀 Allocation {} partitioned scheduling started",
-                                                                allocationId);
-                                                partitionedSchedulingService.scheduleByZone(allocationJob).subscribe()
-                                                                .with(
-                                                                                v -> log.info("✅ Allocation {} partitioned solving completed",
-                                                                                                allocationId),
-                                                                                e -> log.error("❌ Allocation {} scheduling failed: {}",
-                                                                                                allocationId,
-                                                                                                e.getMessage()));
-                                        } else {
-                                                schedulingService.scheduleJob(allocationJob).subscribe().with(
-                                                                v -> log.info("🚀 Allocation {} scheduling started",
-                                                                                allocationId),
-                                                                e -> log.error("❌ Allocation {} scheduling failed: {}",
-                                                                                allocationId, e.getMessage()));
-                                        }
+                                .replaceWith(Response.status(Response.Status.ACCEPTED)
+                                                .entity(new AllocationResponse(
+                                                                allocationId,
+                                                                "PENDING",
+                                                                "Allocation requested and queued for scheduling"))
+                                                .build())
+                                .invoke(() -> vertx.getDelegate()
+                                                .runOnContext(ignored -> triggerScheduling(allocationId, schedulingJob)));
+        }
 
-                                        return Uni.createFrom().item(Response.status(Response.Status.ACCEPTED)
-                                                        .entity(new AllocationResponse(
-                                                                        allocationId,
-                                                                        "PENDING",
-                                                                        "Allocation requested and queued for scheduling"))
-                                                        .build());
-                                });
+        private void triggerScheduling(String allocationId, Job schedulingJob) {
+                if (partitionedSchedulingEnabled) {
+                        log.info("🚀 Allocation {} partitioned scheduling started", allocationId);
+                        partitionedSchedulingService.scheduleByZone(schedulingJob).subscribe().with(
+                                        v -> log.info("✅ Allocation {} partitioned solving completed", allocationId),
+                                        e -> log.error("❌ Allocation {} scheduling failed", allocationId, e));
+                } else {
+                        schedulingService.scheduleJob(schedulingJob).subscribe().with(
+                                        v -> log.info("🚀 Allocation {} scheduling started", allocationId),
+                                        e -> log.error("❌ Allocation {} scheduling failed", allocationId, e));
+                }
+        }
+
+        private Job copyJob(Job original) {
+                Job copy = new Job();
+                copy.setId(original.getId());
+                copy.setName(original.getName());
+                copy.setDescription(original.getDescription());
+                copy.setRequiredCpuCores(original.getRequiredCpuCores());
+                copy.setRequiredMemoryGb(original.getRequiredMemoryGb());
+                copy.setRequiredGpuCount(original.getRequiredGpuCount());
+                copy.setRequiredGpuModel(original.getRequiredGpuModel());
+                copy.setRequiresNvlink(original.isRequiresNvlink());
+                copy.setMinNvlinkBandwidthGbps(original.getMinNvlinkBandwidthGbps());
+                copy.setTenantId(original.getTenantId());
+                copy.setStatus(original.getStatus());
+                return copy;
         }
 
         /**

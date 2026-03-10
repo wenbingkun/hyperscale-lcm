@@ -84,6 +84,7 @@ java {
 
 test {
     systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
+    finalizedBy jacocoTestReport
 }
 compileJava {
     options.encoding = 'UTF-8'
@@ -105,20 +106,28 @@ jacoco {
     toolVersion = "0.8.11"
 }
 
+def coverageExcludes = [
+    'com/sc/lcm/core/grpc/**'
+]
+
 jacocoTestReport {
     dependsOn test
     reports {
         xml.required = true
         html.required = true
     }
-    // Quarkus extension generates coverage data to build/jacoco-quarkus.exec
-    executionData.setFrom(fileTree(dir: 'build', include: 'jacoco-quarkus.exec'))
+    executionData.setFrom(fileTree(dir: "$buildDir/jacoco", include: 'test.exec'))
+    classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
+        exclude coverageExcludes
+    })
 }
 
 jacocoTestCoverageVerification {
     dependsOn jacocoTestReport
-    // Quarkus extension generates coverage data to build/jacoco-quarkus.exec
-    executionData.setFrom(fileTree(dir: 'build', include: 'jacoco-quarkus.exec'))
+    executionData.setFrom(fileTree(dir: "$buildDir/jacoco", include: 'test.exec'))
+    classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
+        exclude coverageExcludes
+    })
     violationRules {
         rule {
             limit {

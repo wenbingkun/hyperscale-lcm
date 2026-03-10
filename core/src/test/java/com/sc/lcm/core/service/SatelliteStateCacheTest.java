@@ -5,6 +5,8 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -20,7 +22,7 @@ public class SatelliteStateCacheTest {
     @Test
     @DisplayName("测试心跳更新后状态变为在线")
     void testUpdateAndCheckHeartbeat() {
-        String satelliteId = "test-satellite-001";
+        String satelliteId = "test-satellite-" + UUID.randomUUID();
 
         // 初始状态应为离线（没有心跳记录）
         assertFalse(stateCache.isOnline(satelliteId),
@@ -41,8 +43,8 @@ public class SatelliteStateCacheTest {
     @Test
     @DisplayName("测试多个 Satellite 心跳独立性")
     void testMultipleSatelliteHeartbeats() {
-        String satellite1 = "test-satellite-multi-001";
-        String satellite2 = "test-satellite-multi-002";
+        String satellite1 = "test-satellite-multi-" + UUID.randomUUID();
+        String satellite2 = "test-satellite-multi-" + UUID.randomUUID();
 
         // 只更新第一个
         stateCache.updateHeartbeat(satellite1);

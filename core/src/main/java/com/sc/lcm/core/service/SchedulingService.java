@@ -8,6 +8,7 @@ import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
 import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.ArrayList;
@@ -35,6 +36,9 @@ public class SchedulingService {
     @Inject
     @Channel("job-queue-out")
     Emitter<Job> jobEmitter;
+
+    @Inject
+    Vertx vertx;
 
     /**
      * 响应式加载问题数据
@@ -66,7 +70,8 @@ public class SchedulingService {
             String nodeId = job.getAssignedNode().getId();
             job.setAssignedNodeId(nodeId);
             log.info("Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
-            jobEmitter.send(copyJob(job));
+            Job dispatchJob = copyJob(job);
+            vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
         } else {
             log.warn("Job {} could not be assigned!", job.getId());
         }

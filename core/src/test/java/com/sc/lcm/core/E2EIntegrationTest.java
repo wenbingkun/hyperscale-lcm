@@ -10,13 +10,17 @@ import io.quarkus.grpc.GrpcClient;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.subscription.Cancellable;
+import io.smallrye.mutiny.subscription.MultiEmitter;
 import io.smallrye.reactive.messaging.kafka.companion.KafkaCompanion;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
-import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -41,6 +45,9 @@ public class E2EIntegrationTest {
     @Test
     public void testEndToEndJobLifecycle() throws Exception {
         try (KafkaCompanion companion = new KafkaCompanion(kafkaBrokers)) {
+            AtomicReference<MultiEmitter<? super StreamRequest>> streamEmitterRef = new AtomicReference<>();
+            CompletableFuture<String> commandTypeFuture = new CompletableFuture<>();
+
             // 1. Register Satellite (Mocking Satellite startup)
             RegisterRequest registerRequest = RegisterRequest.newBuilder()
                     .setHostname("test-node-1")
@@ -69,11 +76,16 @@ public class E2EIntegrationTest {
                     .build();
             grpcClient.sendHeartbeat(heartbeat).await().atMost(Duration.ofSeconds(5));
 
-            // 3. Connect Stream to receive commands
-            Multi<StreamRequest> requestStream = Multi.createFrom().items(
-                    StreamRequest.newBuilder().setSatelliteId(satelliteId).setInit(true).build());
-            grpcClient.connectStream(requestStream).subscribe().with(resp -> {
-                System.out.println("Received command from Core: " + resp.getCommandType());
+            // 3. Keep a bi-directional stream open so the dispatcher can deliver commands.
+            Multi<StreamRequest> requestStream = Multi.createFrom().emitter(emitter -> {
+                streamEmitterRef.set(emitter);
+                emitter.emit(StreamRequest.newBuilder()
+                        .setSatelliteId(satelliteId)
+                        .setInit(true)
+                        .build());
+            });
+            Cancellable streamSubscription = grpcClient.connectStream(requestStream).subscribe().with(resp -> {
+                commandTypeFuture.complete(resp.getCommandType());
             });
 
             // 4. Authenticate via HTTP API
@@ -110,8 +122,13 @@ public class E2EIntegrationTest {
 
             assertNotNull(jobId, "Job ID should not be null after submission");
 
-            // 6. Send a manual JobStatus update via a new gRPC stream
-            StreamRequest statusUpdate = StreamRequest.newBuilder()
+            String commandType = commandTypeFuture.get(5, TimeUnit.SECONDS);
+            assertTrue(commandType != null && !commandType.isBlank(), "Core should dispatch a command over the stream");
+
+            // 6. Send the job completion update on the same open stream.
+            MultiEmitter<? super StreamRequest> streamEmitter = streamEmitterRef.get();
+            assertNotNull(streamEmitter, "Expected an initialized stream emitter");
+            streamEmitter.emit(StreamRequest.newBuilder()
                     .setSatelliteId(satelliteId)
                     .setStatusUpdate(JobStatusUpdate.newBuilder()
                             .setJobId(jobId)
@@ -119,10 +136,7 @@ public class E2EIntegrationTest {
                             .setMessage("Mock completed")
                             .setExitCode(0)
                             .build())
-                    .build();
-
-            grpcClient.connectStream(Multi.createFrom().item(statusUpdate))
-                    .collect().asList().await().atMost(Duration.ofSeconds(5));
+                    .build());
 
             // 7. Verify the status was forwarded to `jobs.status` topic
             ConsumerRecord<String, String> statusRecord = companion.consumeStrings()
@@ -132,6 +146,9 @@ public class E2EIntegrationTest {
 
             assertNotNull(statusRecord, "Should have received a status message on jobs.status topic");
             assertTrue(statusRecord.value().contains("COMPLETED"), "Status message should contain COMPLETED");
+
+            streamEmitter.complete();
+            streamSubscription.cancel();
         }
     }
 }

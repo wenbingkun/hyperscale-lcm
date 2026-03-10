@@ -7,6 +7,7 @@ import com.sc.lcm.core.service.PartitionedSchedulingService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -41,6 +42,9 @@ public class JobResource {
         @ConfigProperty(name = "lcm.scheduling.partitioned.enabled", defaultValue = "false")
         boolean partitionedSchedulingEnabled;
 
+        @Inject
+        Vertx vertx;
+
         /**
          * 提交新作业
          */
@@ -60,30 +64,45 @@ public class JobResource {
                 job.setMinNvlinkBandwidthGbps(request.minNvlinkBandwidthGbps());
                 job.setTenantId(request.tenantId());
                 job.setStatus(JobStatus.PENDING);
+                Job schedulingJob = copyJob(job);
 
                 log.info("📝 Submitting new job: {} ({})", request.name(), jobId);
 
                 return Panache.withTransaction(job::persist)
-                                .chain(() -> {
-                                        // 异步触发调度
-                                        if (partitionedSchedulingEnabled) {
-                                                log.info("🚀 Job {} partitioned scheduling started", jobId);
-                                                partitionedSchedulingService.scheduleByZone(job).subscribe().with(
-                                                                v -> log.info("✅ Job {} partitioned solving completed",
-                                                                                jobId),
-                                                                e -> log.error("❌ Job {} scheduling failed: {}", jobId,
-                                                                                e.getMessage()));
-                                        } else {
-                                                schedulingService.scheduleJob(job).subscribe().with(
-                                                                v -> log.info("🚀 Job {} scheduling started", jobId),
-                                                                e -> log.error("❌ Job {} scheduling failed: {}", jobId,
-                                                                                e.getMessage()));
-                                        }
-                                        return Uni.createFrom().item(Response.status(Response.Status.CREATED)
-                                                        .entity(new JobResponse(jobId, job.getStatus().name(),
-                                                                        "Job submitted successfully"))
-                                                        .build());
-                                });
+                                .replaceWith(Response.status(Response.Status.CREATED)
+                                                .entity(new JobResponse(jobId, JobStatus.PENDING.name(),
+                                                                "Job submitted successfully"))
+                                                .build())
+                                .invoke(() -> vertx.getDelegate().runOnContext(ignored -> triggerScheduling(jobId, schedulingJob)));
+        }
+
+        private void triggerScheduling(String jobId, Job schedulingJob) {
+                if (partitionedSchedulingEnabled) {
+                        log.info("🚀 Job {} partitioned scheduling started", jobId);
+                        partitionedSchedulingService.scheduleByZone(schedulingJob).subscribe().with(
+                                        v -> log.info("✅ Job {} partitioned solving completed", jobId),
+                                        e -> log.error("❌ Job {} scheduling failed", jobId, e));
+                } else {
+                        schedulingService.scheduleJob(schedulingJob).subscribe().with(
+                                        v -> log.info("🚀 Job {} scheduling started", jobId),
+                                        e -> log.error("❌ Job {} scheduling failed", jobId, e));
+                }
+        }
+
+        private Job copyJob(Job original) {
+                Job copy = new Job();
+                copy.setId(original.getId());
+                copy.setName(original.getName());
+                copy.setDescription(original.getDescription());
+                copy.setRequiredCpuCores(original.getRequiredCpuCores());
+                copy.setRequiredMemoryGb(original.getRequiredMemoryGb());
+                copy.setRequiredGpuCount(original.getRequiredGpuCount());
+                copy.setRequiredGpuModel(original.getRequiredGpuModel());
+                copy.setRequiresNvlink(original.isRequiresNvlink());
+                copy.setMinNvlinkBandwidthGbps(original.getMinNvlinkBandwidthGbps());
+                copy.setTenantId(original.getTenantId());
+                copy.setStatus(original.getStatus());
+                return copy;
         }
 
         /**
