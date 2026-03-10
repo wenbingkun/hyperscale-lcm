@@ -37,16 +37,13 @@ var kaParams = keepalive.ClientParameters{
 	PermitWithoutStream: true,             // 即使没有活跃 stream 也保持连接
 }
 
-// getCertDir 获取证书目录，支持环境变量覆盖
-func getCertDir() string {
-	certDir := os.Getenv("LCM_CERTS_DIR")
-	if certDir == "" {
-		certDir = defaultCertDir
-	}
-	return certDir
-}
-
 func main() {
+	// Parse flags first so all subsequent code sees resolved values
+	serverAddr := flag.String("server", defaultAddress, "Lcm Core gRPC server address")
+	certsDir := flag.String("certs", defaultCertDir, "Directory containing mTLS certificates")
+	clusterFlag := flag.String("cluster", "default", "Logical cluster or datacenter region name")
+	flag.Parse()
+
 	log.Println("Starting Satellite Agent...")
 
 	shutdownTracer, err := initTracer()
@@ -66,13 +63,6 @@ func main() {
 	if err != nil {
 		log.Printf("⚠️ Failed to initialize Docker Client: %v (Docker features disabled)", err)
 	}
-
-	// Command-line flags
-	serverAddr := flag.String("server", defaultAddress, "Lcm Core gRPC server address")
-	certsDir := flag.String("certs", defaultCertDir, "Directory containing mTLS certificates")
-	clusterFlag := flag.String("cluster", "default", "Logical cluster or datacenter region name")
-
-	flag.Parse()
 
 	// Get Core address from env or flag
 	address := os.Getenv("LCM_CORE_ADDR")
