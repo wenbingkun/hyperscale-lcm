@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/sc-lcm/satellite/pkg/docker"
+	"github.com/sc-lcm/satellite/pkg/executor"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
 )
 
@@ -49,15 +50,56 @@ func handleCommand(resp *pb.StreamResponse, satelliteId string, dockerExec *dock
 	)
 
 	if resp.CommandType == "EXEC_SHELL" {
-		log.Printf("Executing Shell: %s", resp.Payload)
+		log.Printf("Executing Shell Script")
+
+		// Notify Running
 		sendStatus(stream, satelliteId, &pb.JobStatusUpdate{
 			JobId:        resp.CommandId,
-			Status:       pb.JobStatus_COMPLETED,
-			Message:      "Shell command executed successfully",
-			ExitCode:     0,
+			Status:       pb.JobStatus_RUNNING,
+			Message:      "Executing Shell script...",
 			TraceContext: injectContext(ctx),
 		})
 
+		output, exitCode, err := executor.RunShell(ctx, resp.Payload)
+
+		status := pb.JobStatus_COMPLETED
+		if err != nil && exitCode != 0 {
+			status = pb.JobStatus_FAILED
+		}
+
+		sendStatus(stream, satelliteId, &pb.JobStatusUpdate{
+			JobId:        resp.CommandId,
+			Status:       status,
+			Message:      output,
+			ExitCode:     int32(exitCode),
+			TraceContext: injectContext(ctx),
+		})
+
+	} else if resp.CommandType == "EXEC_ANSIBLE" {
+		log.Printf("Executing Ansible Playbook")
+
+		// Notify Running
+		sendStatus(stream, satelliteId, &pb.JobStatusUpdate{
+			JobId:        resp.CommandId,
+			Status:       pb.JobStatus_RUNNING,
+			Message:      "Executing Ansible Playbook...",
+			TraceContext: injectContext(ctx),
+		})
+
+		output, exitCode, err := executor.RunAnsiblePlaybook(ctx, resp.Payload)
+
+		status := pb.JobStatus_COMPLETED
+		if err != nil && exitCode != 0 {
+			status = pb.JobStatus_FAILED
+		}
+
+		sendStatus(stream, satelliteId, &pb.JobStatusUpdate{
+			JobId:        resp.CommandId,
+			Status:       status,
+			Message:      output,
+			ExitCode:     int32(exitCode),
+			TraceContext: injectContext(ctx),
+		})
 	} else if resp.CommandType == "EXEC_DOCKER" {
 		if dockerExec == nil {
 			log.Printf("Cannot execute Docker command: Docker client not initialized")
