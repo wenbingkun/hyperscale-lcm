@@ -104,6 +104,7 @@ public class LcmGrpcService implements LcmService {
         String id = UUID.randomUUID().toString();
         Satellite satellite = new Satellite(
                 id,
+                request.getClusterId(),
                 request.getHostname(),
                 request.getIpAddress(),
                 request.getOsVersion(),

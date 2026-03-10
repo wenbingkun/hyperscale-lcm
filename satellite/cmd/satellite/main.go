@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -60,20 +61,30 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Get Core address from env or default
-	address := os.Getenv("LCM_CORE_ADDR")
-	if address == "" {
-		address = defaultAddress
-	}
-
 	// Initialize Docker Executor
 	dockerExec, err := docker.NewExecutor()
 	if err != nil {
 		log.Printf("⚠️ Failed to initialize Docker Client: %v (Docker features disabled)", err)
 	}
 
-	// 获取证书目录
-	certDir := getCertDir()
+	// Command-line flags
+	serverAddr := flag.String("server", defaultAddress, "Lcm Core gRPC server address")
+	certsDir := flag.String("certs", defaultCertDir, "Directory containing mTLS certificates")
+	clusterFlag := flag.String("cluster", "default", "Logical cluster or datacenter region name")
+
+	flag.Parse()
+
+	// Get Core address from env or flag
+	address := os.Getenv("LCM_CORE_ADDR")
+	if address == "" {
+		address = *serverAddr
+	}
+
+	// Get cert directory from env or flag
+	certDir := os.Getenv("LCM_CERTS_DIR")
+	if certDir == "" {
+		certDir = *certsDir
+	}
 	log.Printf("📁 Using certificate directory: %s", certDir)
 
 	// Load mTLS credentials
@@ -116,7 +127,7 @@ func main() {
 	client := pb.NewLcmServiceClient(conn)
 
 	// Gather real system info with hardware specs
-	info := BuildRegisterRequest()
+	info := BuildRegisterRequest(*clusterFlag) // Pass clusterFlag
 
 	// Register
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -211,7 +222,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				hbReq := BuildHeartbeatRequest(satelliteId)
+				hbReq := BuildHeartbeatRequest(satelliteId, *clusterFlag)
 				_, err := client.SendHeartbeat(context.Background(), hbReq)
 				if err != nil {
 					log.Printf("Heartbeat failed: %v", err)

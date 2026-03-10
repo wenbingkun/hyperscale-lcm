@@ -25,6 +25,7 @@ public class Satellite extends PanacheEntityBase {
     @Id
     private String id; // UUID assigned by Core
 
+    private String clusterId; // ID of the multi-cluster region/data-center (default: "default")
     private String hostname;
     private String ipAddress;
     private String osVersion;
@@ -41,8 +42,10 @@ public class Satellite extends PanacheEntityBase {
     // Heartbeat timestamp
     private LocalDateTime lastHeartbeat;
 
-    public Satellite(String id, String hostname, String ipAddress, String osVersion, String agentVersion) {
+    public Satellite(String id, String clusterId, String hostname, String ipAddress, String osVersion,
+            String agentVersion) {
         this.id = id;
+        this.clusterId = (clusterId == null || clusterId.isBlank()) ? "default" : clusterId;
         this.hostname = hostname;
         this.ipAddress = ipAddress;
         this.osVersion = osVersion;
