@@ -2,7 +2,6 @@ package com.sc.lcm.core.api;
 
 import com.sc.lcm.core.domain.DiscoveredDevice;
 import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryMethod;
-import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus;
 import com.sc.lcm.core.domain.Satellite;
 import com.sc.lcm.core.grpc.DiscoveryRequest;
 import com.sc.lcm.core.grpc.DiscoveryResponse;
@@ -14,13 +13,14 @@ import com.sc.lcm.core.grpc.RegisterResponse;
 import com.sc.lcm.core.grpc.StreamRequest;
 import com.sc.lcm.core.grpc.StreamResponse;
 import com.sc.lcm.core.service.JobStatusForwarder;
-import com.sc.lcm.core.service.RegistrationNodeSpecsProvider;
+import com.sc.lcm.core.service.SatelliteRegistrationService;
 import com.sc.lcm.core.service.SatelliteStateCache;
 import com.sc.lcm.core.service.StreamRegistry;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.quarkus.grpc.GrpcService;
 import io.quarkus.hibernate.reactive.panache.Panache;
+import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.smallrye.faulttolerance.api.RateLimit;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -31,7 +31,6 @@ import org.eclipse.microprofile.faulttolerance.Bulkhead;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.UUID;
 
 /**
  * gRPC 服务 - 使用 Hibernate Reactive + 限流熔断保护
@@ -50,7 +49,7 @@ public class LcmGrpcService implements LcmService {
     StreamRegistry streamRegistry;
 
     @Inject
-    RegistrationNodeSpecsProvider registrationNodeSpecs;
+    SatelliteRegistrationService satelliteRegistrationService;
 
     @ConfigProperty(name = "lcm.discovery.require-approval", defaultValue = "false")
     boolean requireApproval;
@@ -67,70 +66,7 @@ public class LcmGrpcService implements LcmService {
     @Override
     public Uni<RegisterResponse> registerSatellite(RegisterRequest request) {
         log.info("Received registration request from host: {}", request.getHostname());
-
-        return Panache.withTransaction(() -> {
-            if (requireApproval) {
-                return DiscoveredDevice.findByIp(request.getIpAddress())
-                        .flatMap(device -> {
-                            if (device == null) {
-                                log.warn("Registration rejected for {}: device unknown", request.getIpAddress());
-                                return Uni.createFrom()
-                                        .failure(new StatusRuntimeException(Status.UNAUTHENTICATED
-                                                .withDescription("Device not discovered or approved")));
-                            }
-                            if (device.getStatus() != DiscoveryStatus.APPROVED
-                                    && device.getStatus() != DiscoveryStatus.MANAGED) {
-                                log.warn("Registration rejected for {}: device status is {}", request.getIpAddress(),
-                                        device.getStatus());
-                                return Uni.createFrom()
-                                        .failure(new StatusRuntimeException(
-                                                Status.UNAUTHENTICATED.withDescription(
-                                                        "Device not approved for registration. Current status: "
-                                                                + device.getStatus())));
-                            }
-                            // Device is approved, mark as MANAGED
-                            device.setStatus(DiscoveryStatus.MANAGED);
-                            return persistSatelliteRegistration(request);
-                        });
-            } else {
-                return persistSatelliteRegistration(request);
-            }
-        });
-    }
-
-    private Uni<RegisterResponse> persistSatelliteRegistration(RegisterRequest request) {
-        String id = UUID.randomUUID().toString();
-        Satellite satellite = new Satellite(
-                id,
-                request.getClusterId(),
-                request.getHostname(),
-                request.getIpAddress(),
-                request.getOsVersion(),
-                request.getAgentVersion());
-        satellite.setLastHeartbeat(LocalDateTime.now());
-
-        // 缓存硬件规格（用于调度时快速查询）
-        if (request.hasHardware()) {
-            registrationNodeSpecs.cacheHardwareSpecs(id, request.getHardware());
-        }
-
-        return satellite.<Satellite>persist()
-                .replaceWithVoid()
-                .flatMap(v -> {
-                    // 如果有硬件规格，同步持久化 Node 实体
-                    if (request.hasHardware()) {
-                        return registrationNodeSpecs.persistNodeInCurrentTransaction(id, request.getHardware());
-                    }
-                    return Uni.createFrom().voidItem();
-                })
-                .map(v -> {
-                    log.info("Registered satellite with ID: {} (Node synced: {})", id, request.hasHardware());
-                    return RegisterResponse.newBuilder()
-                            .setSuccess(true)
-                            .setMessage("Registration Successful")
-                            .setAssignedId(id)
-                            .build();
-                });
+        return satelliteRegistrationService.register(request, requireApproval);
     }
 
     /**
@@ -141,6 +77,7 @@ public class LcmGrpcService implements LcmService {
     @Override
     @RateLimit(value = 2000, window = 1, windowUnit = ChronoUnit.SECONDS)
     @Bulkhead(value = 200)
+    @WithSession
     public Uni<HeartbeatResponse> sendHeartbeat(HeartbeatRequest request) {
         log.debug("Heartbeat received for satellite: {}", request.getSatelliteId());
 
