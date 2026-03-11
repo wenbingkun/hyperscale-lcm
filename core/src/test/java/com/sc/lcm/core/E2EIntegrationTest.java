@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 public class E2EIntegrationTest {
 
-    @ConfigProperty(name = "kafka.bootstrap.servers")
+    @ConfigProperty(name = "kafka.bootstrap.servers", defaultValue = "unused")
     String kafkaBrokers;
 
     @GrpcClient("lcm")
@@ -66,6 +66,7 @@ public class E2EIntegrationTest {
             // 2. Send Heartbeat to ensure node is active and has resources
             HeartbeatRequest heartbeat = HeartbeatRequest.newBuilder()
                     .setSatelliteId(satelliteId)
+                    .setClusterId("default")
                     .setCpuUsagePercent(10.0f)
                     .setMemoryUsedBytes(1024L)
                     .setMemoryTotalBytes(8192L)

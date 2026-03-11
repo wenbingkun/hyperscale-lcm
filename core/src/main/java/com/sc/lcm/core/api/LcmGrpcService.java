@@ -28,7 +28,6 @@ import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.faulttolerance.Bulkhead;
-import org.eclipse.microprofile.faulttolerance.CircuitBreaker;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -66,7 +65,6 @@ public class LcmGrpcService implements LcmService {
      * - 同时持久化 Node 实体（如果包含硬件规格）
      */
     @Override
-    @CircuitBreaker(requestVolumeThreshold = 20, failureRatio = 0.5, delay = 5000, delayUnit = ChronoUnit.MILLIS)
     public Uni<RegisterResponse> registerSatellite(RegisterRequest request) {
         log.info("Received registration request from host: {}", request.getHostname());
 
@@ -92,15 +90,15 @@ public class LcmGrpcService implements LcmService {
                             }
                             // Device is approved, mark as MANAGED
                             device.setStatus(DiscoveryStatus.MANAGED);
-                            return doRegisterSatellite(request);
+                            return persistSatelliteRegistration(request);
                         });
             } else {
-                return doRegisterSatellite(request);
+                return persistSatelliteRegistration(request);
             }
         });
     }
 
-    private Uni<RegisterResponse> doRegisterSatellite(RegisterRequest request) {
+    private Uni<RegisterResponse> persistSatelliteRegistration(RegisterRequest request) {
         String id = UUID.randomUUID().toString();
         Satellite satellite = new Satellite(
                 id,
@@ -121,7 +119,7 @@ public class LcmGrpcService implements LcmService {
                 .flatMap(v -> {
                     // 如果有硬件规格，同步持久化 Node 实体
                     if (request.hasHardware()) {
-                        return registrationNodeSpecs.persistNode(id, request.getHardware());
+                        return registrationNodeSpecs.persistNodeInCurrentTransaction(id, request.getHardware());
                     }
                     return Uni.createFrom().voidItem();
                 })
@@ -146,32 +144,59 @@ public class LcmGrpcService implements LcmService {
     public Uni<HeartbeatResponse> sendHeartbeat(HeartbeatRequest request) {
         log.debug("Heartbeat received for satellite: {}", request.getSatelliteId());
 
-        double avgGpu = 0.0;
-        if (request.getGpuCount() > 0 && request.getGpuMetricsCount() > 0) {
-            avgGpu = request.getGpuMetricsList().stream()
-                    .mapToDouble(m -> m.getUtilizationPercent())
-                    .average().orElse(0.0);
+        String requestedClusterId = normalizeClusterId(request.getClusterId());
+        return Satellite.findByIdReactive(request.getSatelliteId())
+                .flatMap(satellite -> {
+                    if (satellite == null) {
+                        log.warn("Heartbeat rejected for unknown satellite: {}", request.getSatelliteId());
+                        return Uni.createFrom().failure(new StatusRuntimeException(
+                                Status.NOT_FOUND.withDescription("Satellite not found: " + request.getSatelliteId())));
+                    }
+
+                    validateHeartbeatCluster(satellite, requestedClusterId, request.getSatelliteId());
+
+                    double avgGpu = 0.0;
+                    if (request.getGpuCount() > 0 && request.getGpuMetricsCount() > 0) {
+                        avgGpu = request.getGpuMetricsList().stream()
+                                .mapToDouble(m -> m.getUtilizationPercent())
+                                .average().orElse(0.0);
+                    }
+
+                    dashboardWebSocket.broadcastHeartbeat(WsEvent.HeartbeatPayload.builder()
+                            .nodeId(request.getSatelliteId())
+                            .cpuPercent(request.getCpuUsagePercent())
+                            .loadAvg(request.getLoadAvg())
+                            .memoryUsedMb(request.getMemoryUsedBytes() / 1024 / 1024)
+                            .memoryTotalMb(request.getMemoryTotalBytes() / 1024 / 1024)
+                            .gpuCount(request.getGpuCount())
+                            .gpuAvgUtil(avgGpu)
+                            .powerState(request.getPowerState())
+                            .systemTemperatureCelsius(request.getSystemTemperatureCelsius())
+                            .build());
+
+                    return stateCache.updateHeartbeatReactive(request.getSatelliteId())
+                            .replaceWith(HeartbeatResponse.newBuilder()
+                                    .setSuccess(true)
+                                    .build());
+                });
+    }
+
+    private String normalizeClusterId(String clusterId) {
+        return (clusterId == null || clusterId.isBlank()) ? "default" : clusterId;
+    }
+
+    static void validateHeartbeatCluster(Satellite satellite, String requestedClusterId, String satelliteId) {
+        String registeredClusterId = normalizeClusterIdStatic(satellite.getClusterId());
+        String effectiveRequestedClusterId = normalizeClusterIdStatic(requestedClusterId);
+        if (!registeredClusterId.equals(effectiveRequestedClusterId)) {
+            throw new StatusRuntimeException(
+                    Status.FAILED_PRECONDITION.withDescription(
+                            "Heartbeat cluster mismatch for satellite " + satelliteId));
         }
+    }
 
-        dashboardWebSocket.broadcastHeartbeat(WsEvent.HeartbeatPayload.builder()
-                .nodeId(request.getSatelliteId())
-                .cpuPercent(request.getCpuUsagePercent())
-                .loadAvg(request.getLoadAvg())
-                .memoryUsedMb(request.getMemoryUsedBytes() / 1024 / 1024)
-                .memoryTotalMb(request.getMemoryTotalBytes() / 1024 / 1024)
-                .gpuCount(request.getGpuCount())
-                .gpuAvgUtil(avgGpu)
-                .powerState(request.getPowerState())
-                .systemTemperatureCelsius(request.getSystemTemperatureCelsius())
-                .build());
-
-        // TODO(multi-cluster): request.getClusterId() is received but not yet used.
-        // Future work: validate that the satellite's cluster affinity matches what is
-        // stored at registration time, and route scheduling partitions accordingly.
-        return stateCache.updateHeartbeatReactive(request.getSatelliteId())
-                .replaceWith(() -> HeartbeatResponse.newBuilder()
-                        .setSuccess(true)
-                        .build());
+    private static String normalizeClusterIdStatic(String clusterId) {
+        return (clusterId == null || clusterId.isBlank()) ? "default" : clusterId;
     }
 
     /**

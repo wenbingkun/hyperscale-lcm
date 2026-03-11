@@ -73,7 +73,15 @@ public class RegistrationNodeSpecsProvider implements NodeSpecsProvider {
             return Uni.createFrom().voidItem();
         }
 
-        return Panache.withTransaction(() -> Node.<Node>findById(satelliteId)
+        return Panache.withTransaction(() -> persistNodeInCurrentTransaction(satelliteId, specs));
+    }
+
+    public Uni<Void> persistNodeInCurrentTransaction(String satelliteId, HardwareSpecs specs) {
+        if (specs == null) {
+            return Uni.createFrom().voidItem();
+        }
+
+        return Node.<Node>findById(satelliteId)
                 .onItem().transformToUni(existing -> {
                     if (existing != null) {
                         // 更新已有节点
@@ -113,6 +121,6 @@ public class RegistrationNodeSpecsProvider implements NodeSpecsProvider {
                                 specs.getGpuCount(), specs.getGpuModel(), specs.getSystemModel());
                         return node.persist().replaceWithVoid();
                     }
-                }));
+                });
     }
 }
