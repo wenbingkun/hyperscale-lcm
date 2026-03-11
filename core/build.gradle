@@ -116,7 +116,7 @@ jacocoTestReport {
         xml.required = true
         html.required = true
     }
-    executionData.setFrom(fileTree(dir: "$buildDir/jacoco", include: 'test.exec'))
+    executionData.setFrom(files("$buildDir/jacoco-quarkus.exec"))
     classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
         exclude coverageExcludes
     })
@@ -124,7 +124,7 @@ jacocoTestReport {
 
 jacocoTestCoverageVerification {
     dependsOn jacocoTestReport
-    executionData.setFrom(fileTree(dir: "$buildDir/jacoco", include: 'test.exec'))
+    executionData.setFrom(files("$buildDir/jacoco-quarkus.exec"))
     classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
         exclude coverageExcludes
     })

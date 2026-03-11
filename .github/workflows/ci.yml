@@ -250,6 +250,9 @@ jobs:
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          GRPC_CERT_PATH: ../certs/server.pem
+          GRPC_KEY_PATH: ../certs/server-pkcs8.key
+          GRPC_TRUSTSTORE_PATH: ../certs/truststore.jks
         run: |
           java -jar build/quarkus-app/quarkus-run.jar &
           # Wait for Core HTTP health endpoint (port 8080) to become ready
