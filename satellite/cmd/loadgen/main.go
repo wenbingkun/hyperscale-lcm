@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
 )
@@ -30,6 +31,9 @@ var (
 	keyPath     = flag.String("key", "../certs/client.key", "Path to client key")
 	caPath      = flag.String("ca", "../certs/ca.pem", "Path to CA cert")
 	clusterFlag = flag.String("cluster", "default", "Cluster ID for load test isolation")
+	plainText   = flag.Bool("plaintext", false, "Use plaintext gRPC instead of TLS")
+
+	registrationErrorLogs int64
 )
 
 type stats struct {
@@ -56,24 +60,7 @@ func main() {
 	flag.Parse()
 	log.Printf("🚀 Starting LoadGen: %d connections x %d sats = %d total satellites", *conns, *satsPerConn, (*conns)*(*satsPerConn))
 
-	// Load mTLS creds
-	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
-	if err != nil {
-		log.Fatalf("failed to load client certs: %v", err)
-	}
-	caCert, err := os.ReadFile(*caPath)
-	if err != nil {
-		log.Fatalf("failed to read CA cert: %v", err)
-	}
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		log.Fatalf("failed to parse CA certificate from %s", *caPath)
-	}
-	creds := credentials.NewTLS(&tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-		ServerName:   "localhost",
-	})
+	creds := loadCredentials()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *duration)
 	defer cancel()
@@ -137,6 +124,32 @@ func main() {
 	printSummary(*duration, *conns, *satsPerConn, atomic.LoadInt32(&activeSats), runStats)
 }
 
+func loadCredentials() credentials.TransportCredentials {
+	if *plainText {
+		log.Printf("🔓 Using plaintext gRPC transport for %s", *serverAddr)
+		return insecure.NewCredentials()
+	}
+
+	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
+	if err != nil {
+		log.Fatalf("failed to load client certs: %v", err)
+	}
+	caCert, err := os.ReadFile(*caPath)
+	if err != nil {
+		log.Fatalf("failed to read CA cert: %v", err)
+	}
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatalf("failed to parse CA certificate from %s", *caPath)
+	}
+
+	return credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+		ServerName:   "localhost",
+	})
+}
+
 func simulateSatellite(ctx context.Context, connId, satIdx int, client pb.LcmServiceClient, activeCounter *int32,
 	runStats *stats) {
 	// 1. Register
@@ -156,6 +169,7 @@ func simulateSatellite(ctx context.Context, connId, satIdx int, client pb.LcmSer
 	resp, err := client.RegisterSatellite(regCtx, regReq)
 	if err != nil {
 		atomic.AddInt64(&runStats.RegistrationFailures, 1)
+		logRegistrationFailure(hostname, err)
 		return
 	}
 
@@ -195,6 +209,13 @@ func simulateSatellite(ctx context.Context, connId, satIdx int, client pb.LcmSer
 			continue
 		}
 		atomic.AddInt64(&runStats.HeartbeatSuccess, 1)
+	}
+}
+
+func logRegistrationFailure(hostname string, err error) {
+	const maxRegistrationErrorLogs = 5
+	if atomic.AddInt64(&registrationErrorLogs, 1) <= maxRegistrationErrorLogs {
+		log.Printf("❌ registration failed for %s: %v", hostname, err)
 	}
 }
 
