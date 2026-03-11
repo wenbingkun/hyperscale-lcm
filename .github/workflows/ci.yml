@@ -248,6 +248,7 @@ jobs:
           QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://localhost:5432/lcm
           QUARKUS_DATASOURCE_USERNAME: lcm
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
+          QUARKUS_HTTP_INSECURE_REQUESTS: enabled
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
           GRPC_CERT_PATH: ../certs/server.pem
@@ -255,8 +256,8 @@ jobs:
           GRPC_TRUSTSTORE_PATH: ../certs/truststore.jks
         run: |
           java -jar build/quarkus-app/quarkus-run.jar &
-          # Wait for Core HTTP health endpoint (port 8080) to become ready
-          timeout 60 bash -c 'until curl -sf http://localhost:8080/q/health/ready; do sleep 2; done'
+          # application-prod.properties overrides the health root to /health
+          timeout 60 bash -c 'until curl -sf http://localhost:8080/health/ready; do sleep 2; done'
 
       - name: Execute Load Profile (500 satellites for 30s)
         working-directory: satellite

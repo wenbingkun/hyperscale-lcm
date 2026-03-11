@@ -37,11 +37,11 @@ core:
   # 健康检查
   health:
     liveness:
-      path: /q/health/live
+      path: /health/live
       initialDelaySeconds: 30
       periodSeconds: 10
     readiness:
-      path: /q/health/ready
+      path: /health/ready
       initialDelaySeconds: 10
       periodSeconds: 5
   
