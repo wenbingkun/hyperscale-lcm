@@ -75,7 +75,7 @@ public class JobResourceTest {
         // Health endpoint may return 503 if Kafka is not available
         int statusCode = given()
                 .when()
-                .get("/q/health")
+                .get("/health")
                 .then()
                 .extract().statusCode();
 
