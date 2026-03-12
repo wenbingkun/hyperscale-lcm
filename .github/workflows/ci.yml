@@ -254,9 +254,9 @@ jobs:
           GRPC_CERT_PATH: ../certs/server.pem
           GRPC_KEY_PATH: ../certs/server-pkcs8.key
           GRPC_TRUSTSTORE_PATH: ../certs/truststore.jks
+          LCM_DISCOVERY_REQUIRE_APPROVAL: false
         run: |
           java -jar build/quarkus-app/quarkus-run.jar &
-          # application-prod.properties overrides the health root to /health
           timeout 60 bash -c 'until curl -sf http://localhost:8080/health/ready; do sleep 2; done'
 
       - name: Execute Load Profile (500 satellites for 30s)
