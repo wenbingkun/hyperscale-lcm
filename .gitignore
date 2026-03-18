@@ -38,6 +38,7 @@ hs_err_pid*
 satellite/satellite
 satellite/loadgen
 satellite/rogue_client
+scripts/loadgen/loadgen
 
 # Test binary
 *.test

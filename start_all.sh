@@ -42,13 +42,15 @@ cd ..
 echo "🛰️ Starting Satellite Service (Go)..."
 cd satellite
 # go run compiles and runs.
+export LCM_CORE_ADDR=localhost:8080
+export LCM_CERTS_DIR="../certs"
 nohup go run ./cmd/satellite > ../satellite.log 2>&1 &
 SAT_PID=$!
 echo "   Satellite Service PID: $SAT_PID (Logs: satellite.log)"
 
 echo "🛰️ Starting Mock Satellites..."
 for i in {1..4}; do
-    LCM_MOCK_HOSTNAME="mock-node-0$i" nohup go run ./cmd/satellite > ../satellite_mock_$i.log 2>&1 &
+    LCM_MOCK_HOSTNAME="mock-node-0$i" LCM_CORE_ADDR=localhost:8080 LCM_CERTS_DIR="../certs" nohup go run ./cmd/satellite > ../satellite_mock_$i.log 2>&1 &
     MOCK_PID=$!
     echo "   Mock Satellite $i PID: $MOCK_PID"
 done

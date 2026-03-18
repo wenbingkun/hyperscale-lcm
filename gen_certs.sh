@@ -55,9 +55,13 @@ openssl req -new -key client.key -out client.csr -subj "/C=US/ST=State/L=City/O=
 # Sign Client Certificate
 openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem -days 365 -sha256
 
-# Convert Server Key to PKCS#8 for Java (Quarkus prefers this or JKS, but PEM works with recent versions)
-# For Quarkus netty/vertx, PEM is fine usually, but let's have pkcs8 just in case
+# Convert Server Key to PKCS#8 for Java
 openssl pkcs8 -topk8 -inform PEM -outform PEM -in server.key -out server-pkcs8.key -nocrypt
+
+# Create Java Truststore for Core mTLS
+rm -f truststore.jks
+keytool -import -trustcacerts -keystore truststore.jks -storepass changeit -alias lcm-ca -file ca.pem -noprompt -storetype JKS
+
 
 echo "✅ Certificates generated in certs/"
 ls -l *.pem
