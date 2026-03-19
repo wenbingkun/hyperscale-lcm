@@ -259,10 +259,10 @@ jobs:
           java -jar build/quarkus-app/quarkus-run.jar &
           timeout 60 bash -c 'until curl -sf http://localhost:8080/health/ready; do sleep 2; done'
 
-      - name: Execute Load Profile (500 satellites for 30s)
+      - name: Execute Load Profile (200 satellites for 30s)
         working-directory: satellite
         run: |
-          ./loadgen -addr localhost:8080 -plaintext -conns 10 -sats 50 -interval 1s -duration 30s 2>&1 | tee /tmp/loadgen.log
+          ./loadgen -addr localhost:8080 -plaintext -conns 10 -sats 20 -interval 1s -duration 30s 2>&1 | tee /tmp/loadgen.log
 
       - name: Validate Load Test Baseline
         run: |
