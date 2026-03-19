@@ -25,8 +25,9 @@ openssl x509 -req -days 365 -in client.csr -CA ca.pem -CAkey ca.key -CAcreateser
 # Cleanup CSR and Srl
 rm -f *.csr *.srl
 
-# Generate truststore.jks for gRPC
-keytool -import -alias ca -file ca.pem -keystore truststore.jks -storepass changeit -noprompt
+# Generate truststore.jks for gRPC (explicit JKS format; JDK 17+ defaults to PKCS12)
+rm -f truststore.jks
+keytool -import -alias ca -file ca.pem -keystore truststore.jks -storepass changeit -noprompt -storetype JKS
 
 cd ..
 
