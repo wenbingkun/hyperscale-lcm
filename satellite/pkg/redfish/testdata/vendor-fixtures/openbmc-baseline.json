@@ -1,0 +1,58 @@
+{
+  "/redfish/v1/Systems": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Systems/system"
+      }
+    ]
+  },
+  "/redfish/v1/Systems/system": {
+    "@odata.id": "/redfish/v1/Systems/system",
+    "SerialNumber": "OBMC-001",
+    "Model": "OpenBMC Reference Board",
+    "PowerState": "On"
+  },
+  "/redfish/v1/Managers": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/bmc"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/bmc": {
+    "@odata.id": "/redfish/v1/Managers/bmc",
+    "EthernetInterfaces": {
+      "@odata.id": "/redfish/v1/Managers/bmc/EthernetInterfaces"
+    }
+  },
+  "/redfish/v1/Managers/bmc/EthernetInterfaces": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/bmc/EthernetInterfaces/eth0"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/bmc/EthernetInterfaces/eth0": {
+    "MACAddress": "02:00:00:00:00:01"
+  },
+  "/redfish/v1/Chassis": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Chassis/chassis"
+      }
+    ]
+  },
+  "/redfish/v1/Chassis/chassis": {
+    "@odata.id": "/redfish/v1/Chassis/chassis",
+    "Thermal": {
+      "@odata.id": "/redfish/v1/Chassis/chassis/Thermal"
+    }
+  },
+  "/redfish/v1/Chassis/chassis/Thermal": {
+    "Temperatures": [
+      {
+        "ReadingCelsius": 31
+      }
+    ]
+  }
+}

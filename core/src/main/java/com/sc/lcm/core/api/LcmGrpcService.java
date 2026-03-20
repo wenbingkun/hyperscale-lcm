@@ -13,6 +13,7 @@ import com.sc.lcm.core.grpc.RegisterResponse;
 import com.sc.lcm.core.grpc.StreamRequest;
 import com.sc.lcm.core.grpc.StreamResponse;
 import com.sc.lcm.core.service.JobStatusForwarder;
+import com.sc.lcm.core.service.DeviceClaimPlanner;
 import com.sc.lcm.core.service.SatelliteRegistrationService;
 import com.sc.lcm.core.service.SatelliteStateCache;
 import com.sc.lcm.core.service.StreamRegistry;
@@ -56,6 +57,9 @@ public class LcmGrpcService implements LcmService {
 
     @Inject
     JobStatusForwarder jobStatusForwarder;
+
+    @Inject
+    DeviceClaimPlanner deviceClaimPlanner;
 
     /**
      * 响应式 Satellite 注册
@@ -156,7 +160,7 @@ public class LcmGrpcService implements LcmService {
                         existing.setLastProbedAt(LocalDateTime.now());
                         existing.setMacAddress(request.getMacAddress());
                         log.debug("Updated existing device: {}", request.getDiscoveredIp());
-                        return Uni.createFrom().item(existing);
+                        return deviceClaimPlanner.plan(existing);
                     } else {
                         DiscoveredDevice device = new DiscoveredDevice();
                         device.setIpAddress(request.getDiscoveredIp());
@@ -164,7 +168,8 @@ public class LcmGrpcService implements LcmService {
                         device.setDiscoveryMethod(mapDiscoveryMethod(request.getDiscoveryMethod()));
                         device.setDiscoveredAt(LocalDateTime.now());
                         log.info("New device discovered and persisted: {}", request.getDiscoveredIp());
-                        return device.persist();
+                        return deviceClaimPlanner.plan(device)
+                                .onItem().transformToUni(planned -> planned.persist().replaceWith(planned));
                     }
                 })).replaceWith(
                         DiscoveryResponse.newBuilder()

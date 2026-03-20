@@ -1,0 +1,35 @@
+{
+  "name": "lenovo-xcc",
+  "description": "Lenovo XClarity Controller-compatible Redfish baseline template",
+  "priority": 95,
+  "match": {
+    "manufacturer_patterns": [
+      "Lenovo",
+      "XClarity",
+      "XCC"
+    ],
+    "model_patterns": [
+      "ThinkSystem",
+      "SR[0-9]{3}"
+    ]
+  },
+  "resources": {
+    "systems": "/redfish/v1/Systems",
+    "managers": "/redfish/v1/Managers",
+    "manager_ethernet_interfaces": [
+      "EthernetInterfaces",
+      "NetworkInterfaces"
+    ],
+    "chassis": "/redfish/v1/Chassis"
+  },
+  "fields": {
+    "system_serial": "SerialNumber",
+    "system_model": "Model",
+    "power_state": "PowerState",
+    "system_temperature_celsius": "Temperatures.0.ReadingCelsius",
+    "bmc_mac": [
+      "MACAddress",
+      "PermanentMACAddress"
+    ]
+  }
+}

@@ -33,6 +33,9 @@ public class NetworkScanService {
     @Inject
     Vertx vertx;
 
+    @Inject
+    DeviceClaimPlanner deviceClaimPlanner;
+
     private final ExecutorService scanExecutor = Executors.newFixedThreadPool(50);
     private volatile boolean cancelRequested = false;
 
@@ -109,6 +112,7 @@ public class NetworkScanService {
         if (portSpec == null || portSpec.isEmpty()) {
             ports.add(22); // SSH
             ports.add(8080); // HTTP
+            ports.add(443); // Redfish HTTPS
             ports.add(9000); // gRPC
             ports.add(623); // IPMI/BMC
             return ports;
@@ -167,7 +171,7 @@ public class NetworkScanService {
      * 根据开放端口推断设备类型
      */
     private String inferDeviceType(List<Integer> openPorts) {
-        if (openPorts.contains(623))
+        if (openPorts.contains(623) || openPorts.contains(443))
             return "BMC_ENABLED";
         if (openPorts.contains(9000))
             return "LCM_AGENT";
@@ -241,8 +245,13 @@ public class NetworkScanService {
                 .flatMap(existing -> {
                     if (existing != null) {
                         existing.setLastProbedAt(LocalDateTime.now());
+                        existing.setHostname(result.hostname);
+                        existing.setInferredType(result.inferredType);
                         existing.setOpenPorts(result.openPorts.toString());
-                        return existing.persist();
+                        if ("BMC_ENABLED".equalsIgnoreCase(result.inferredType)) {
+                            existing.setBmcAddress(result.ip);
+                        }
+                        return deviceClaimPlanner.plan(existing);
                     }
 
                     DiscoveredDevice device = new DiscoveredDevice();
@@ -252,11 +261,15 @@ public class NetworkScanService {
                     device.setInferredType(result.inferredType);
                     device.setOpenPorts(result.openPorts.toString());
                     device.setDiscoveredAt(LocalDateTime.now());
+                    if ("BMC_ENABLED".equalsIgnoreCase(result.inferredType)) {
+                        device.setBmcAddress(result.ip);
+                    }
 
                     log.info("📡 Discovered: {} ({}) - ports: {}",
                             result.ip, result.inferredType, result.openPorts);
 
-                    return device.persist();
+                    return deviceClaimPlanner.plan(device)
+                            .onItem().transformToUni(planned -> planned.persist().replaceWith(planned));
                 })).subscribe().with(
                         v -> {
                         },

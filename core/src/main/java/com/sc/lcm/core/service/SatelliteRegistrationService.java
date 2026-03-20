@@ -1,6 +1,8 @@
 package com.sc.lcm.core.service;
 
 import com.sc.lcm.core.domain.DiscoveredDevice;
+import com.sc.lcm.core.domain.DiscoveredDevice.AuthStatus;
+import com.sc.lcm.core.domain.DiscoveredDevice.ClaimStatus;
 import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus;
 import com.sc.lcm.core.domain.Satellite;
 import com.sc.lcm.core.grpc.RegisterRequest;
@@ -45,6 +47,10 @@ public class SatelliteRegistrationService {
                                                             + device.getStatus())));
                         }
                         device.setStatus(DiscoveryStatus.MANAGED);
+                        device.setClaimStatus(ClaimStatus.MANAGED);
+                        if (device.getCredentialProfileId() != null && !device.getCredentialProfileId().isBlank()) {
+                            device.setAuthStatus(AuthStatus.AUTHENTICATED);
+                        }
                         return persistSatelliteRegistration(request);
                     });
         }

@@ -1,0 +1,35 @@
+{
+  "name": "hpe-ilo",
+  "description": "HPE iLO-compatible Redfish baseline template",
+  "priority": 95,
+  "match": {
+    "manufacturer_patterns": [
+      "HPE",
+      "Hewlett Packard",
+      "iLO"
+    ],
+    "model_patterns": [
+      "ProLiant",
+      "Apollo"
+    ]
+  },
+  "resources": {
+    "systems": "/redfish/v1/Systems",
+    "managers": "/redfish/v1/Managers",
+    "chassis": "/redfish/v1/Chassis",
+    "thermal": [
+      "ThermalSubsystem",
+      "Thermal"
+    ]
+  },
+  "fields": {
+    "system_serial": "SerialNumber",
+    "system_model": [
+      "Model",
+      "Oem.Hpe.ProductName"
+    ],
+    "power_state": "PowerState",
+    "system_temperature_celsius": "Temperatures.0.ReadingCelsius",
+    "bmc_mac": "MACAddress"
+  }
+}

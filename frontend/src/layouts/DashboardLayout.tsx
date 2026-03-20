@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2, LogOut, Network } from 'lucide-react';
+import { LayoutDashboard, Satellite, Cpu, Settings, Activity, Wifi, Building2, LogOut, Network, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
@@ -50,6 +50,10 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
                     <NavLink to="/discovery" className={navLinkClass}>
                         <Wifi size={18} />
                         Discovery
+                    </NavLink>
+                    <NavLink to="/credential-profiles" className={navLinkClass}>
+                        <Shield size={18} />
+                        Credentials
                     </NavLink>
                     <NavLink to="/tenants" className={navLinkClass}>
                         <Building2 size={18} />

@@ -14,6 +14,7 @@ const TopologyPage = lazy(() => import('./pages/TopologyPage').then(m => ({ defa
 const JobsPage = lazy(() => import('./pages/JobsPage').then(m => ({ default: m.JobsPage })));
 const JobDetailPage = lazy(() => import('./pages/JobDetailPage').then(m => ({ default: m.JobDetailPage })));
 const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage').then(m => ({ default: m.DiscoveryPage })));
+const CredentialProfilesPage = lazy(() => import('./pages/CredentialProfilesPage').then(m => ({ default: m.CredentialProfilesPage })));
 const TenantsPage = lazy(() => import('./pages/TenantsPage').then(m => ({ default: m.TenantsPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(m => ({ default: m.LoginPage })));
 
@@ -70,6 +71,7 @@ function AppRoutes() {
                 <Route path="/jobs" element={<PageWrapper><JobsPage /></PageWrapper>} />
                 <Route path="/jobs/:id" element={<PageWrapper><JobDetailPage /></PageWrapper>} />
                 <Route path="/discovery" element={<PageWrapper><DiscoveryPage /></PageWrapper>} />
+                <Route path="/credential-profiles" element={<PageWrapper><CredentialProfilesPage /></PageWrapper>} />
                 <Route path="/tenants" element={<PageWrapper><TenantsPage /></PageWrapper>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -1,0 +1,35 @@
+{
+  "url": "https://cmdb.example.internal/api/bootstrap?page=1",
+  "entries_path": "result.items",
+  "next_page_path": "result.next",
+  "literal_pattern_fields": [
+    "hostname_pattern",
+    "ip_address_pattern",
+    "mac_address_pattern"
+  ],
+  "defaults": {
+    "protocol": "REDFISH",
+    "enabled": true,
+    "autoClaim": true,
+    "priority": 1000,
+    "sourceType": "CMDB",
+    "deviceType": "BMC_ENABLED",
+    "managedAccountEnabled": true,
+    "managedAccountRoleId": "Administrator"
+  },
+  "fields": {
+    "name": "asset.display_name",
+    "external_ref": "asset.id",
+    "vendor_pattern": "hardware.vendor",
+    "model_pattern": "hardware.model",
+    "hostname_pattern": "network.hostname",
+    "ip_address_pattern": "network.bmc_ip",
+    "mac_address_pattern": "network.bmc_mac",
+    "redfish_template": "redfish.template",
+    "username_secret_ref": "secrets.bootstrap.username_ref",
+    "password_secret_ref": "secrets.bootstrap.password_ref",
+    "managed_username_secret_ref": "secrets.managed.username_ref",
+    "managed_password_secret_ref": "secrets.managed.password_ref",
+    "description": "metadata.delivery_batch"
+  }
+}

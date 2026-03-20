@@ -68,7 +68,9 @@ export const SatelliteTable: React.FC = () => {
                                                 ) : <span className="text-gray-600 text-xs">—</span>}
                                             </div>
                                         </td>
-                                        <td className="py-3 text-gray-500 text-xs font-mono">{new Date(sat.lastHeartbeat).toLocaleTimeString()}</td>
+                                        <td className="py-3 text-gray-500 text-xs font-mono">
+                                            {sat.lastHeartbeat ? new Date(sat.lastHeartbeat).toLocaleTimeString() : '—'}
+                                        </td>
                                     </tr>
                                 ))
                             )}

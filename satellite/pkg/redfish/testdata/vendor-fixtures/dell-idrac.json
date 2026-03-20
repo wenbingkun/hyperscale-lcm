@@ -1,0 +1,58 @@
+{
+  "/redfish/v1/Systems": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Systems/System.Embedded.1"
+      }
+    ]
+  },
+  "/redfish/v1/Systems/System.Embedded.1": {
+    "@odata.id": "/redfish/v1/Systems/System.Embedded.1",
+    "SerialNumber": "DELL-760-001",
+    "Model": "PowerEdge R760",
+    "PowerState": "On"
+  },
+  "/redfish/v1/Managers": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/iDRAC.Embedded.1": {
+    "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1",
+    "EthernetInterfaces": {
+      "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces"
+    }
+  },
+  "/redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/NIC.1"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/iDRAC.Embedded.1/EthernetInterfaces/NIC.1": {
+    "MACAddress": "10:20:30:40:50:60"
+  },
+  "/redfish/v1/Chassis": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Chassis/System.Embedded.1"
+      }
+    ]
+  },
+  "/redfish/v1/Chassis/System.Embedded.1": {
+    "@odata.id": "/redfish/v1/Chassis/System.Embedded.1",
+    "Thermal": {
+      "@odata.id": "/redfish/v1/Chassis/System.Embedded.1/Thermal"
+    }
+  },
+  "/redfish/v1/Chassis/System.Embedded.1/Thermal": {
+    "Temperatures": [
+      {
+        "ReadingCelsius": 28
+      }
+    ]
+  }
+}

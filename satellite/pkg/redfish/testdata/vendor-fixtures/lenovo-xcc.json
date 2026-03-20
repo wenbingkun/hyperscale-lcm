@@ -1,0 +1,55 @@
+{
+  "/redfish/v1/Systems": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Systems/1"
+      }
+    ]
+  },
+  "/redfish/v1/Systems/1": {
+    "@odata.id": "/redfish/v1/Systems/1",
+    "SerialNumber": "LEN-SR650-001",
+    "Model": "ThinkSystem SR650 V3",
+    "PowerState": "Off"
+  },
+  "/redfish/v1/Managers": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/1"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/1": {
+    "@odata.id": "/redfish/v1/Managers/1"
+  },
+  "/redfish/v1/Managers/1/NetworkInterfaces": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/1/NetworkInterfaces/1"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/1/NetworkInterfaces/1": {
+    "PermanentMACAddress": "66:55:44:33:22:11"
+  },
+  "/redfish/v1/Chassis": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Chassis/1"
+      }
+    ]
+  },
+  "/redfish/v1/Chassis/1": {
+    "@odata.id": "/redfish/v1/Chassis/1",
+    "Thermal": {
+      "@odata.id": "/redfish/v1/Chassis/1/Thermal"
+    }
+  },
+  "/redfish/v1/Chassis/1/Thermal": {
+    "Temperatures": [
+      {
+        "ReadingCelsius": 26
+      }
+    ]
+  }
+}

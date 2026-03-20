@@ -10,11 +10,24 @@ export interface Satellite {
     osVersion: string;
     agentVersion: string;
     status: string; // 'ONLINE' | 'OFFLINE'
-    lastHeartbeat: string;
-    bmcIp?: string;
-    systemSerial?: string;
-    model?: string;
+    online: boolean;
+    lastHeartbeat?: string;
+    lastHeartbeatMs?: number;
+    createdAt?: string;
+    updatedAt?: string;
+    // Hardware specs (from Node entity)
+    cpuCores?: number;
     gpuCount?: number;
+    gpuModel?: string;
+    memoryGb?: number;
+    rackId?: string;
+    zoneId?: string;
+    // Redfish / BMC
+    bmcIp?: string;
+    bmcMac?: string;
+    systemSerial?: string;
+    systemModel?: string;
+    model?: string;
     powerState?: string;
     systemTemperatureCelsius?: number;
 }
@@ -50,6 +63,139 @@ export interface ClusterStats {
 
 export interface OnlineCountResponse {
     count: number;
+}
+
+export interface DiscoveredDevice {
+    id: string;
+    ipAddress: string;
+    macAddress?: string;
+    hostname?: string;
+    discoveryMethod: string;
+    status: string;
+    inferredType?: string;
+    discoveredAt: string;
+    lastProbedAt?: string;
+    openPorts?: string;
+    bmcAddress?: string;
+    manufacturerHint?: string;
+    modelHint?: string;
+    recommendedRedfishTemplate?: string;
+    authStatus?: string;
+    claimStatus?: string;
+    credentialProfileId?: string;
+    credentialProfileName?: string;
+    credentialSource?: string;
+    claimMessage?: string;
+    lastAuthAttemptAt?: string;
+    notes?: string;
+    tenantId?: string;
+}
+
+export interface DiscoveryCountResponse {
+    count: number;
+}
+
+export interface CredentialProfile {
+    id: string;
+    name: string;
+    protocol: string;
+    enabled: boolean;
+    autoClaim: boolean;
+    priority: number;
+    sourceType?: string;
+    externalRef?: string;
+    vendorPattern?: string;
+    modelPattern?: string;
+    subnetCidr?: string;
+    deviceType?: string;
+    hostnamePattern?: string;
+    ipAddressPattern?: string;
+    macAddressPattern?: string;
+    redfishTemplate?: string;
+    usernameSecretRef?: string;
+    passwordSecretRef?: string;
+    managedAccountEnabled: boolean;
+    managedUsernameSecretRef?: string;
+    managedPasswordSecretRef?: string;
+    managedAccountRoleId?: string;
+    description?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface CredentialProfileRequest {
+    name: string;
+    protocol?: string;
+    enabled?: boolean;
+    autoClaim?: boolean;
+    priority?: number;
+    sourceType?: string;
+    externalRef?: string;
+    vendorPattern?: string;
+    modelPattern?: string;
+    subnetCidr?: string;
+    deviceType?: string;
+    hostnamePattern?: string;
+    ipAddressPattern?: string;
+    macAddressPattern?: string;
+    redfishTemplate?: string;
+    usernameSecretRef?: string;
+    passwordSecretRef?: string;
+    managedAccountEnabled?: boolean;
+    managedUsernameSecretRef?: string;
+    managedPasswordSecretRef?: string;
+    managedAccountRoleId?: string;
+    description?: string;
+}
+
+export interface CredentialProfileValidation {
+    id: string;
+    name: string;
+    ready: boolean;
+    credentialSource?: string;
+    message: string;
+    usernameReady: boolean;
+    usernameMessage: string;
+    passwordReady: boolean;
+    passwordMessage: string;
+    managedAccountEnabled: boolean;
+    managedAccountReady: boolean;
+    managedAccountMessage: string;
+    managedUsernameReady: boolean;
+    managedUsernameMessage: string;
+    managedPasswordReady: boolean;
+    managedPasswordMessage: string;
+}
+
+export interface CredentialProfileImportResult {
+    created: number;
+    updated: number;
+    skipped: number;
+    results: Array<{
+        name: string;
+        status: 'CREATED' | 'UPDATED' | 'SKIPPED';
+        message: string;
+    }>;
+}
+
+export interface CmdbSyncResult {
+    status: 'SUCCESS' | 'SKIPPED' | 'FAILURE';
+    endpoint?: string;
+    sourceType?: string;
+    fetched: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    message: string;
+}
+
+export interface RedfishTemplateSummary {
+    name: string;
+    description: string;
+    priority: number;
+    manufacturerPatterns: string[];
+    modelPatterns: string[];
+    source: string;
 }
 
 export interface JobRequest {
@@ -110,6 +256,147 @@ export async function fetchSatellites(): Promise<Satellite[]> {
         console.error("API Error (Satellites):", error);
         return [];
     }
+}
+
+export async function fetchDiscoveredDevices(): Promise<DiscoveredDevice[]> {
+    const response = await apiFetch(`${API_BASE}/api/discovery`);
+    if (!response.ok) throw new Error(`Failed to load devices: ${response.statusText}`);
+    return await response.json();
+}
+
+export async function fetchPendingDiscoveryCount(): Promise<DiscoveryCountResponse> {
+    try {
+        const response = await apiFetch(`${API_BASE}/api/discovery/pending/count`);
+        if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
+        return await response.json();
+    } catch (error) {
+        console.error("API Error (DiscoveryCount):", error);
+        return { count: 0 };
+    }
+}
+
+export async function approveDiscoveredDevice(id: string): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/discovery/${id}/approve`, { method: 'POST' });
+    if (!response.ok) {
+        throw new Error(`Failed to approve device: ${response.statusText}`);
+    }
+}
+
+export async function rejectDiscoveredDevice(id: string): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/discovery/${id}/reject`, { method: 'POST' });
+    if (!response.ok) {
+        throw new Error(`Failed to reject device: ${response.statusText}`);
+    }
+}
+
+export async function refreshDiscoveryClaimPlan(id: string): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/discovery/${id}/claim-plan`, { method: 'POST' });
+    if (!response.ok) {
+        throw new Error(`Failed to refresh claim plan: ${response.statusText}`);
+    }
+}
+
+export async function executeDiscoveryClaim(id: string): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/discovery/${id}/claim`, { method: 'POST' });
+    if (!response.ok) {
+        throw new Error(`Failed to execute claim: ${response.statusText}`);
+    }
+}
+
+export async function fetchCredentialProfiles(): Promise<CredentialProfile[]> {
+    try {
+        const response = await apiFetch(`${API_BASE}/api/credential-profiles`);
+        if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
+        return await response.json();
+    } catch (error) {
+        console.error("API Error (CredentialProfiles):", error);
+        return [];
+    }
+}
+
+export async function fetchRedfishTemplates(): Promise<RedfishTemplateSummary[]> {
+    try {
+        const response = await apiFetch(`${API_BASE}/api/credential-profiles/templates`);
+        if (!response.ok) throw new Error(`Failed: ${response.statusText}`);
+        return await response.json();
+    } catch (error) {
+        console.error("API Error (RedfishTemplates):", error);
+        return [];
+    }
+}
+
+export async function createCredentialProfile(profile: CredentialProfileRequest): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/credential-profiles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to create credential profile: ${response.statusText}`);
+    }
+}
+
+export async function updateCredentialProfile(id: string, profile: CredentialProfileRequest): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/credential-profiles/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to update credential profile: ${response.statusText}`);
+    }
+}
+
+export async function deleteCredentialProfile(id: string): Promise<void> {
+    const response = await apiFetch(`${API_BASE}/api/credential-profiles/${id}`, {
+        method: 'DELETE',
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to delete credential profile: ${response.statusText}`);
+    }
+}
+
+export async function validateCredentialProfile(id: string): Promise<CredentialProfileValidation> {
+    const response = await apiFetch(`${API_BASE}/api/credential-profiles/${id}/validate`, {
+        method: 'POST',
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to validate credential profile: ${response.statusText}`);
+    }
+
+    return await response.json();
+}
+
+export async function importBootstrapCredentialProfiles(
+    entries: CredentialProfileRequest[],
+): Promise<CredentialProfileImportResult> {
+    const response = await apiFetch(`${API_BASE}/api/credential-profiles/import/bootstrap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries }),
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to import bootstrap credential profiles: ${response.statusText}`);
+    }
+
+    return await response.json();
+}
+
+export async function syncCmdbCredentialProfiles(): Promise<CmdbSyncResult> {
+    const response = await apiFetch(`${API_BASE}/api/credential-profiles/sync/cmdb`, {
+        method: 'POST',
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to sync CMDB bootstrap credential profiles: ${response.statusText}`);
+    }
+
+    return await response.json();
 }
 
 export async function fetchJobs(): Promise<Job[]> {

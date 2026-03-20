@@ -1,0 +1,62 @@
+{
+  "/redfish/v1/Systems": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Systems/1"
+      }
+    ]
+  },
+  "/redfish/v1/Systems/1": {
+    "@odata.id": "/redfish/v1/Systems/1",
+    "SerialNumber": "HPE-380-001",
+    "PowerState": "On",
+    "Oem": {
+      "Hpe": {
+        "ProductName": "ProLiant DL380 Gen11"
+      }
+    }
+  },
+  "/redfish/v1/Managers": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/1"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/1": {
+    "@odata.id": "/redfish/v1/Managers/1",
+    "EthernetInterfaces": {
+      "@odata.id": "/redfish/v1/Managers/1/EthernetInterfaces"
+    }
+  },
+  "/redfish/v1/Managers/1/EthernetInterfaces": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Managers/1/EthernetInterfaces/1"
+      }
+    ]
+  },
+  "/redfish/v1/Managers/1/EthernetInterfaces/1": {
+    "MACAddress": "AA:BB:CC:DD:EE:01"
+  },
+  "/redfish/v1/Chassis": {
+    "Members": [
+      {
+        "@odata.id": "/redfish/v1/Chassis/1"
+      }
+    ]
+  },
+  "/redfish/v1/Chassis/1": {
+    "@odata.id": "/redfish/v1/Chassis/1",
+    "ThermalSubsystem": {
+      "@odata.id": "/redfish/v1/Chassis/1/ThermalSubsystem"
+    }
+  },
+  "/redfish/v1/Chassis/1/ThermalSubsystem": {
+    "Temperatures": [
+      {
+        "ReadingCelsius": 33
+      }
+    ]
+  }
+}

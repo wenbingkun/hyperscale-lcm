@@ -1,5 +1,6 @@
 package com.sc.lcm.core.api;
 
+import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
 import com.sc.lcm.core.service.SatelliteStateCache;
 import io.smallrye.mutiny.Uni;
@@ -11,6 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 节点管理 REST API (P4-2)
@@ -25,48 +28,56 @@ public class NodeResource {
         SatelliteStateCache stateCache;
 
         /**
-         * 列出所有节点
+         * 列出所有节点（包含 Redfish/BMC 硬件规格）
          */
         @GET
-        public Uni<List<Satellite>> listNodes(
+        public Uni<List<NodeResponse>> listNodes(
                         @QueryParam("status") String status,
                         @QueryParam("limit") @DefaultValue("100") int limit) {
 
-                if ("online".equalsIgnoreCase(status)) {
-                        return Satellite.findActive(LocalDateTime.now().minusMinutes(2));
-                }
-                return Satellite.findAll().page(0, limit).list();
+                Uni<List<Satellite>> satellitesUni = "online".equalsIgnoreCase(status)
+                        ? Satellite.findActive(LocalDateTime.now().minusMinutes(2))
+                        : Satellite.findAll().page(0, limit).list();
+
+                return satellitesUni.onItem().transformToUni(satellites -> {
+                        List<String> ids = satellites.stream().map(Satellite::getId).toList();
+                        if (ids.isEmpty()) {
+                                return Uni.createFrom().item(List.<NodeResponse>of());
+                        }
+                        return Node.<Node>list("id IN (?1)", ids)
+                                .map(nodes -> {
+                                        Map<String, Node> nodeById = nodes.stream()
+                                                .collect(Collectors.toMap(Node::getId, n -> n));
+                                        return satellites.stream()
+                                                .map(s -> NodeResponse.of(s, nodeById.get(s.getId()),
+                                                        stateCache.isOnline(s.getId()),
+                                                        stateCache.getLastHeartbeat(s.getId())))
+                                                .toList();
+                                });
+                });
         }
 
         /**
-         * 获取单个节点详情
+         * 获取单个节点详情（包含 Redfish/BMC 硬件规格）
          */
         @GET
         @Path("/{id}")
         public Uni<Response> getNode(@PathParam("id") String id) {
-                return Satellite.findByIdReactive(id)
-                                .onItem().transform(satellite -> {
+                return Uni.combine().all()
+                                .unis(Satellite.<Satellite>findById(id), Node.<Node>findById(id))
+                                .asTuple()
+                                .map(tuple -> {
+                                        Satellite satellite = tuple.getItem1();
                                         if (satellite == null) {
                                                 return Response.status(Response.Status.NOT_FOUND)
                                                                 .entity(new ErrorResponse("Node not found: " + id))
                                                                 .build();
                                         }
-
-                                        // 附加在线状态
-                                        boolean isOnline = stateCache.isOnline(id);
-                                        Long lastHeartbeat = stateCache.getLastHeartbeat(id);
-
-                                        return Response.ok(new NodeDetailResponse(
-                                                        satellite.getId(),
-                                                        satellite.getHostname(),
-                                                        satellite.getIpAddress(),
-                                                        satellite.getOsVersion(),
-                                                        satellite.getAgentVersion(),
-                                                        satellite.getStatus(),
-                                                        isOnline,
-                                                        lastHeartbeat,
-                                                        satellite.getCreatedAt(),
-                                                        satellite.getUpdatedAt())).build();
+                                        return Response.ok(NodeResponse.of(
+                                                        satellite,
+                                                        tuple.getItem2(),
+                                                        stateCache.isOnline(id),
+                                                        stateCache.getLastHeartbeat(id))).build();
                                 });
         }
 
@@ -96,7 +107,7 @@ public class NodeResource {
                                                                         request.status());
 
                                                         return Uni.createFrom().item(Response.ok(
-                                                                        new NodeResponse(id, request.status(),
+                                                                        new NodeStatusResponse(id, request.status(),
                                                                                         "Status updated"))
                                                                         .build());
                                                 }));
@@ -111,19 +122,20 @@ public class NodeResource {
                 Uni<List<Satellite>> activeUni = Satellite.findActive(LocalDateTime.now().minusMinutes(2));
                 Uni<Long> totalUni = Satellite.count();
 
-                return Uni.combine().all().unis(activeUni, totalUni)
+                Uni<List<Node>> nodesUni = Node.<Node>listAll();
+
+                return Uni.combine().all().unis(activeUni, totalUni, nodesUni)
                                 .asTuple()
                                 .onItem().transform(tuple -> {
                                         long onlineCount = tuple.getItem1().size();
                                         long totalNodes = tuple.getItem2();
+                                        List<Node> nodes = tuple.getItem3();
 
-                                        return new ClusterStats(
-                                                        onlineCount,
-                                                        totalNodes,
-                                                        0L, // CPU cores: not tracked in Satellite entity yet
-                                                        0L, // GPUs: not tracked in Satellite entity yet
-                                                        0L // Memory (GB): not tracked in Satellite entity yet
-                                        );
+                                        long totalCpuCores = nodes.stream().mapToLong(Node::getCpuCores).sum();
+                                        long totalGpus = nodes.stream().mapToLong(Node::getGpuCount).sum();
+                                        long totalMemoryGb = nodes.stream().mapToLong(Node::getMemoryGb).sum();
+
+                                        return new ClusterStats(onlineCount, totalNodes, totalCpuCores, totalGpus, totalMemoryGb);
                                 });
         }
 
@@ -139,7 +151,7 @@ public class NodeResource {
 
         // ============== DTO Records ==============
 
-        public record NodeDetailResponse(
+        public record NodeResponse(
                         String id,
                         String hostname,
                         String ipAddress,
@@ -149,13 +161,49 @@ public class NodeResource {
                         boolean online,
                         Long lastHeartbeatMs,
                         LocalDateTime createdAt,
-                        LocalDateTime updatedAt) {
+                        LocalDateTime updatedAt,
+                        // Hardware specs from Node entity
+                        int cpuCores,
+                        int gpuCount,
+                        String gpuModel,
+                        long memoryGb,
+                        String rackId,
+                        String zoneId,
+                        // Redfish / BMC info
+                        String bmcIp,
+                        String bmcMac,
+                        String systemSerial,
+                        String systemModel) {
+
+                static NodeResponse of(Satellite s, Node n, boolean online, Long lastHeartbeatMs) {
+                        return new NodeResponse(
+                                        s.getId(),
+                                        s.getHostname(),
+                                        s.getIpAddress(),
+                                        s.getOsVersion(),
+                                        s.getAgentVersion(),
+                                        s.getStatus(),
+                                        online,
+                                        lastHeartbeatMs,
+                                        s.getCreatedAt(),
+                                        s.getUpdatedAt(),
+                                        n != null ? n.getCpuCores() : 0,
+                                        n != null ? n.getGpuCount() : 0,
+                                        n != null ? n.getGpuModel() : null,
+                                        n != null ? n.getMemoryGb() : 0L,
+                                        n != null ? n.getRackId() : null,
+                                        n != null ? n.getZoneId() : null,
+                                        n != null ? n.getBmcIp() : null,
+                                        n != null ? n.getBmcMac() : null,
+                                        n != null ? n.getSystemSerial() : null,
+                                        n != null ? n.getSystemModel() : null);
+                }
         }
 
         public record NodeStatusRequest(String status) {
         }
 
-        public record NodeResponse(String id, String status, String message) {
+        public record NodeStatusResponse(String id, String status, String message) {
         }
 
         public record ClusterStats(

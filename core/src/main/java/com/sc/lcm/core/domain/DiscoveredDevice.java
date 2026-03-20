@@ -63,6 +63,42 @@ public class DiscoveredDevice extends PanacheEntityBase {
     /** BMC/IPMI 地址 (如果有) */
     private String bmcAddress;
 
+    /** 厂商提示信息，可来自 OUI、CMDB 或人工补录 */
+    private String manufacturerHint;
+
+    /** 型号提示信息，可来自探测或人工补录 */
+    private String modelHint;
+
+    /** 推荐的 Redfish 模板名称 */
+    private String recommendedRedfishTemplate;
+
+    /** 首次认证状态 */
+    @Enumerated(EnumType.STRING)
+    private AuthStatus authStatus = AuthStatus.PENDING;
+
+    /** 零接触纳管 claim 状态 */
+    @Enumerated(EnumType.STRING)
+    private ClaimStatus claimStatus = ClaimStatus.DISCOVERED;
+
+    /** 匹配到的凭据档案 ID */
+    private String credentialProfileId;
+
+    /** 匹配到的凭据档案名称 */
+    private String credentialProfileName;
+
+    /** 凭据来源（例如 PROFILE / MANUAL） */
+    private String credentialSource;
+
+    /** 最近一次 claim / 认证规划说明 */
+    @Column(columnDefinition = "TEXT")
+    private String claimMessage;
+
+    /** 最近一次认证尝试时间 */
+    private LocalDateTime lastAuthAttemptAt;
+
+    /** 最近一次托管账号密码轮换时间 */
+    private LocalDateTime lastRotationAt;
+
     /** 扫描备注 */
     @Column(columnDefinition = "TEXT")
     private String notes;
@@ -83,6 +119,22 @@ public class DiscoveredDevice extends PanacheEntityBase {
         REJECTED, // 已拒绝
         MANAGED, // 已纳管
         OFFLINE // 设备离线
+    }
+
+    public enum AuthStatus {
+        PENDING, // 尚未做认证规划
+        PROFILE_MATCHED, // 已匹配自动化凭据策略
+        AUTH_PENDING, // 检测到 BMC 但缺少凭据
+        AUTH_FAILED, // 已尝试认证但失败
+        AUTHENTICATED // 已完成首次认证/接管
+    }
+
+    public enum ClaimStatus {
+        DISCOVERED, // 仅发现
+        READY_TO_CLAIM, // 已具备自动纳管条件
+        CLAIMING, // 正在执行首次接管
+        CLAIMED, // 已完成首次接管
+        MANAGED // 已进入受管态
     }
 
     // ============== 查询方法 ==============

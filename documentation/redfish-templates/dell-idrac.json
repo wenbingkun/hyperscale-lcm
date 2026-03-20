@@ -1,0 +1,28 @@
+{
+  "name": "dell-idrac",
+  "description": "Dell iDRAC-compatible Redfish baseline template",
+  "priority": 95,
+  "match": {
+    "manufacturer_patterns": [
+      "Dell",
+      "iDRAC"
+    ],
+    "model_patterns": [
+      "PowerEdge",
+      "R7[0-9]{2}",
+      "XE[0-9]{2}"
+    ]
+  },
+  "resources": {
+    "systems": "/redfish/v1/Systems",
+    "managers": "/redfish/v1/Managers",
+    "chassis": "/redfish/v1/Chassis"
+  },
+  "fields": {
+    "system_serial": "SerialNumber",
+    "system_model": "Model",
+    "power_state": "PowerState",
+    "system_temperature_celsius": "Temperatures.0.ReadingCelsius",
+    "bmc_mac": "MACAddress"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "openbmc-baseline",
+  "description": "OpenBMC-compatible Redfish baseline template",
+  "priority": 100,
+  "match": {
+    "manufacturer_patterns": [
+      "OpenBMC",
+      "AST2600"
+    ],
+    "model_patterns": []
+  },
+  "resources": {
+    "systems": "/redfish/v1/Systems",
+    "managers": "/redfish/v1/Managers",
+    "chassis": "/redfish/v1/Chassis"
+  },
+  "fields": {
+    "system_serial": "SerialNumber",
+    "system_model": "Model",
+    "power_state": "PowerState",
+    "system_temperature_celsius": "Temperatures.0.ReadingCelsius",
+    "bmc_mac": "MACAddress"
+  }
+}
