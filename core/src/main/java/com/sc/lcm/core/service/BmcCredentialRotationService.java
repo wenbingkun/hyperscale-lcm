@@ -32,7 +32,7 @@ public class BmcCredentialRotationService {
     @ConfigProperty(name = "lcm.rotation.enabled", defaultValue = "false")
     boolean rotationEnabled;
 
-    @ConfigProperty(name = "lcm.rotation.schedule", defaultValue = "0 2 * * *")
+    @ConfigProperty(name = "lcm.rotation.schedule", defaultValue = "0 0 2 * * ?")
     String rotationSchedule;
 
     /**

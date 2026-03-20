@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -43,13 +44,13 @@ public class CmdbBootstrapSyncService {
     boolean enabled = false;
 
     @ConfigProperty(name = "lcm.cmdb.sync.url", defaultValue = "")
-    String url = "";
+    Optional<String> url = Optional.empty();
 
     @ConfigProperty(name = "lcm.cmdb.sync.auth-header-name", defaultValue = "Authorization")
     String authHeaderName = "Authorization";
 
     @ConfigProperty(name = "lcm.cmdb.sync.auth-header-value", defaultValue = "")
-    String authHeaderValue = "";
+    Optional<String> authHeaderValue = Optional.empty();
 
     @ConfigProperty(name = "lcm.cmdb.sync.payload-root", defaultValue = "entries")
     String payloadRoot = "entries";
@@ -58,7 +59,7 @@ public class CmdbBootstrapSyncService {
     String sourceType = "CMDB";
 
     @ConfigProperty(name = "lcm.cmdb.sync.mapping-file", defaultValue = "")
-    String mappingFile = "";
+    Optional<String> mappingFile = Optional.empty();
 
     @ConfigProperty(name = "lcm.cmdb.sync.max-pages", defaultValue = "20")
     int maxPages = 20;
@@ -126,8 +127,8 @@ public class CmdbBootstrapSyncService {
     }
 
     SyncPlan syncBlocking(SyncTransport activeTransport) throws Exception {
-        CmdbMappingProfile profile = loadMappingProfile(objectMapper, mappingFile);
-        String startUrl = determineStartUrl(profile, url);
+        CmdbMappingProfile profile = loadMappingProfile(objectMapper, mappingFile.orElse(""));
+        String startUrl = determineStartUrl(profile, url.orElse(""));
         if (!hasText(startUrl)) {
             throw new IllegalStateException("CMDB sync URL is not configured.");
         }
@@ -141,7 +142,7 @@ public class CmdbBootstrapSyncService {
                 throw new IllegalStateException("CMDB sync exceeded max pages: " + maxPages);
             }
 
-            SyncRequest request = new SyncRequest(currentUrl, authHeaderName, authHeaderValue, connectTimeoutMs, readTimeoutMs);
+            SyncRequest request = new SyncRequest(currentUrl, authHeaderName, authHeaderValue.orElse(""), connectTimeoutMs, readTimeoutMs);
             JsonNode document = activeTransport.fetch(request);
 
             List<CredentialProfileRequest> pageEntries = profile == null

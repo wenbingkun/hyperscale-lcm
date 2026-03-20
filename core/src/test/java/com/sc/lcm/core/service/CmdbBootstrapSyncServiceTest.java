@@ -6,6 +6,7 @@ import io.smallrye.mutiny.Uni;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -56,7 +57,7 @@ class CmdbBootstrapSyncServiceTest {
         service.objectMapper = new ObjectMapper();
         service.bootstrapCredentialImportService = importService;
         service.enabled = true;
-        service.url = "https://cmdb.example.internal/api/bootstrap";
+        service.url = Optional.of("https://cmdb.example.internal/api/bootstrap");
         service.payloadRoot = "entries";
         service.sourceType = "cmdb";
         service.transport = request -> service.objectMapper.readTree("""
@@ -167,7 +168,7 @@ class CmdbBootstrapSyncServiceTest {
         service.objectMapper = new ObjectMapper();
         service.bootstrapCredentialImportService = importService;
         service.enabled = true;
-        service.url = "https://cmdb.example.internal/api/bootstrap?page=1";
+        service.url = Optional.of("https://cmdb.example.internal/api/bootstrap?page=1");
         service.maxPages = 5;
         Path mappingFile = Files.createTempFile("cmdb-sync-profile", ".json");
         Files.writeString(mappingFile, """
@@ -186,7 +187,7 @@ class CmdbBootstrapSyncServiceTest {
                   }
                 }
                 """);
-        service.mappingFile = mappingFile.toString();
+        service.mappingFile = Optional.of(mappingFile.toString());
 
         service.transport = request -> switch (request.url()) {
             case "https://cmdb.example.internal/api/bootstrap?page=1" -> service.objectMapper.readTree("""

@@ -11,6 +11,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -33,13 +34,13 @@ public class VaultSecretClient implements SecretManagerClient {
     boolean enabled = false;
 
     @ConfigProperty(name = "lcm.claim.vault.address", defaultValue = "")
-    String address = "";
+    Optional<String> address = Optional.empty();
 
     @ConfigProperty(name = "lcm.claim.vault.token", defaultValue = "")
-    String token = "";
+    Optional<String> token = Optional.empty();
 
     @ConfigProperty(name = "lcm.claim.vault.namespace", defaultValue = "")
-    String namespace = "";
+    Optional<String> namespace = Optional.empty();
 
     @ConfigProperty(name = "lcm.claim.vault.kv-engine-version", defaultValue = "2")
     int kvEngineVersion = 2;
@@ -62,10 +63,12 @@ public class VaultSecretClient implements SecretManagerClient {
         if (!enabled) {
             return SecretManagerClient.SecretResolution.unresolved("Vault secret refs are disabled by configuration.");
         }
-        if (address == null || address.isBlank()) {
+        String configuredAddress = address.orElse("");
+        if (configuredAddress.isBlank()) {
             return SecretManagerClient.SecretResolution.unresolved("Vault address is not configured.");
         }
-        if (token == null || token.isBlank()) {
+        String configuredToken = token.orElse("");
+        if (configuredToken.isBlank()) {
             return SecretManagerClient.SecretResolution.unresolved("Vault token is not configured.");
         }
 
@@ -85,9 +88,9 @@ public class VaultSecretClient implements SecretManagerClient {
         try {
             VaultTransport activeTransport = transport != null ? transport : this::readBlocking;
             Map<String, Object> document = activeTransport.read(new VaultRequest(
-                    normalizeAddress(address),
-                    token,
-                    namespace,
+                    normalizeAddress(configuredAddress),
+                    configuredToken,
+                    namespace.orElse(""),
                     reference.mount(),
                     reference.secretPath(),
                     reference.field(),

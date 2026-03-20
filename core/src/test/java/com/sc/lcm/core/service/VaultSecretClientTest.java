@@ -2,6 +2,7 @@ package com.sc.lcm.core.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -74,8 +75,8 @@ class VaultSecretClientTest {
         VaultSecretClient client = new VaultSecretClient();
         client.objectMapper = new ObjectMapper();
         client.enabled = true;
-        client.address = "https://vault.example";
-        client.token = "test-token";
+        client.address = Optional.of("https://vault.example");
+        client.token = Optional.of("test-token");
         client.cacheTtlSeconds = 0;
         return client;
     }
