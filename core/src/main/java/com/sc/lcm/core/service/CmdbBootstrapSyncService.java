@@ -43,13 +43,13 @@ public class CmdbBootstrapSyncService {
     @ConfigProperty(name = "lcm.cmdb.sync.enabled", defaultValue = "false")
     boolean enabled = false;
 
-    @ConfigProperty(name = "lcm.cmdb.sync.url", defaultValue = "")
+    @ConfigProperty(name = "lcm.cmdb.sync.url")
     Optional<String> url = Optional.empty();
 
     @ConfigProperty(name = "lcm.cmdb.sync.auth-header-name", defaultValue = "Authorization")
     String authHeaderName = "Authorization";
 
-    @ConfigProperty(name = "lcm.cmdb.sync.auth-header-value", defaultValue = "")
+    @ConfigProperty(name = "lcm.cmdb.sync.auth-header-value")
     Optional<String> authHeaderValue = Optional.empty();
 
     @ConfigProperty(name = "lcm.cmdb.sync.payload-root", defaultValue = "entries")
@@ -58,7 +58,7 @@ public class CmdbBootstrapSyncService {
     @ConfigProperty(name = "lcm.cmdb.sync.source-type", defaultValue = "CMDB")
     String sourceType = "CMDB";
 
-    @ConfigProperty(name = "lcm.cmdb.sync.mapping-file", defaultValue = "")
+    @ConfigProperty(name = "lcm.cmdb.sync.mapping-file")
     Optional<String> mappingFile = Optional.empty();
 
     @ConfigProperty(name = "lcm.cmdb.sync.max-pages", defaultValue = "20")

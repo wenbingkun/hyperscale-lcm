@@ -33,13 +33,13 @@ public class VaultSecretClient implements SecretManagerClient {
     @ConfigProperty(name = "lcm.claim.vault.enabled", defaultValue = "false")
     boolean enabled = false;
 
-    @ConfigProperty(name = "lcm.claim.vault.address", defaultValue = "")
+    @ConfigProperty(name = "lcm.claim.vault.address")
     Optional<String> address = Optional.empty();
 
-    @ConfigProperty(name = "lcm.claim.vault.token", defaultValue = "")
+    @ConfigProperty(name = "lcm.claim.vault.token")
     Optional<String> token = Optional.empty();
 
-    @ConfigProperty(name = "lcm.claim.vault.namespace", defaultValue = "")
+    @ConfigProperty(name = "lcm.claim.vault.namespace")
     Optional<String> namespace = Optional.empty();
 
     @ConfigProperty(name = "lcm.claim.vault.kv-engine-version", defaultValue = "2")
