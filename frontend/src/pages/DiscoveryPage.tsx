@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { Wifi, Check, X, RefreshCw, Monitor, Play, Square, Search, Shield, KeyRound } from 'lucide-react';
 import {
@@ -60,7 +60,7 @@ export const DiscoveryPage: React.FC = () => {
         return matchesQuery && matchesStatus && matchesAuth && matchesClaim;
     });
 
-    const loadDevices = async () => {
+    const loadDevices = useCallback(async () => {
         try {
             const data = await fetchDiscoveredDevices();
             setDevices(data);
@@ -69,23 +69,14 @@ export const DiscoveryPage: React.FC = () => {
             console.error('Failed to load devices:', error);
             setLoadError(error instanceof Error ? error.message : 'Failed to load devices');
         }
-    };
+    }, []);
 
-    const loadPendingCount = async () => {
+    const loadPendingCount = useCallback(async () => {
         const data = await fetchPendingDiscoveryCount();
         setPendingCount(data.count);
-    };
+    }, []);
 
-    const loadOverview = async () => {
-        setLoading(true);
-        try {
-            await Promise.all([loadDevices(), loadPendingCount(), checkRunningScan()]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const checkRunningScan = async () => {
+    const checkRunningScan = useCallback(async () => {
         try {
             const response = await apiFetch(`${API_BASE}/api/scan/running`);
             if (response.ok) {
@@ -95,7 +86,16 @@ export const DiscoveryPage: React.FC = () => {
         } catch (error) {
             console.error('Failed to check running scan:', error);
         }
-    };
+    }, []);
+
+    const loadOverview = useCallback(async () => {
+        setLoading(true);
+        try {
+            await Promise.all([loadDevices(), loadPendingCount(), checkRunningScan()]);
+        } finally {
+            setLoading(false);
+        }
+    }, [checkRunningScan, loadDevices, loadPendingCount]);
 
     const runningScanRef = useRef(runningScan);
     useEffect(() => {
@@ -103,7 +103,7 @@ export const DiscoveryPage: React.FC = () => {
     }, [runningScan]);
 
     useEffect(() => {
-        loadOverview();
+        void loadOverview();
 
         const interval = setInterval(() => {
             checkRunningScan();
@@ -113,7 +113,7 @@ export const DiscoveryPage: React.FC = () => {
         }, 2000);
 
         return () => clearInterval(interval);
-    }, []);
+    }, [checkRunningScan, loadDevices, loadOverview, loadPendingCount]);
 
     const startScan = async () => {
         if (!scanTarget) return;

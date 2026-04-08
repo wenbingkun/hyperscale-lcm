@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-03-09
+> 最后更新: 2026-04-08
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -79,6 +79,24 @@
     *   [x] Prometheus 指标采集 + 告警规则。
     *   [x] Grafana 监控仪表盘（集群概览、Job 指标、JVM 内存、HTTP 请求）。
 
+## 📅 阶段六：质量加固与落地推进 (Quality Hardening & Delivery Excellence) 🚧 进行中
+**目标**: 收敛 MVP 后续的质量、可观测性与落地缺口，推动项目从“功能可用”进入“可持续演进”。
+*   **质量**:
+    *   [x] 前端测试补全 — 为 Dashboard、Job 管理、设备发现建立 `Vitest + React Testing Library` 回归测试，并补充 AuthContext / JobSubmissionForm 基础用例。
+    *   [ ] 测试覆盖率量化 — 为 Core JaCoCo 设定基线门槛（如 60%）并在 CI 中卡控。
+    *   [ ] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景。
+*   **调度与执行**:
+    *   [ ] 分区并行调度（按 Zone 分片）。
+    *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
+    *   [ ] 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
+*   **可观测性与运维**:
+    *   [ ] OpenTelemetry 全链路串联 — 补全 Satellite → Kafka → Core 的 trace propagation。
+    *   [ ] AlertManager 集成（邮件 / Slack / PagerDuty 通知）。
+    *   [ ] 真实硬件验证 — 使用真实 Redfish / BMC 环境验证采集链路。
+*   **展示与落地**:
+    *   [ ] 调度结果拓扑图可视化（GPU / NVLink / IB Fabric 分配展示）。
+    *   [ ] 编写完整 Demo 脚本（零接触发现 → 自动纳管 → 调度 → 执行）。
+
 ---
 
 ## 🎯 当前状态 (Current Status)
@@ -92,11 +110,27 @@
 4.  ✅ **Prometheus 生产配置** — 分离 dev/prod 配置，修复容器间服务发现
 5.  ✅ **Helm 监控模板** — ServiceMonitor、PrometheusRule、Grafana Dashboard ConfigMap
 
-## 📌 未来迭代方向
+**Sprint 7 (Frontend Quality Hardening)** — 🚧 进行中
 
-- 分区并行调度 (Zone 分片)
-- Ansible/SSH 远程命令下发
-- PXE/iPXE 裸金属 OS 自动化重装
-- 调度结果拓扑图可视化
-- 测试覆盖率提升至 70%
-- AlertManager 集成（邮件/Slack 通知）
+完成内容：
+1.  ✅ **前端测试基础设施** — 接入 `Vitest + React Testing Library + jsdom`
+2.  ✅ **核心页面测试补齐** — 覆盖 Dashboard、Job 管理、设备发现
+3.  ✅ **关键前端状态测试** — 补充 AuthContext、JobSubmissionForm 回归用例
+4.  ✅ **前端质量清理** — 修复 `DiscoveryPage` 的 `react-hooks/exhaustive-deps` 告警
+5.  ✅ **测试验证** — `cd frontend && npm test`（5 个测试文件 / 10 个用例通过）与 `cd frontend && npm run lint` 通过
+
+## 🔍 项目评估 (Project Assessment)
+
+*   **整体状态**:
+    *   MVP 已完成，当前进入稳定期与质量加固阶段。
+    *   近期推进重点从 CI 审计修复转向前端快速回归能力建设。
+*   **子系统概况**:
+    *   Core (Java/Quarkus): API / Service / E2E / Solver 覆盖相对完善。
+    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。
+    *   Frontend (React): 已建立首批 `Vitest + React Testing Library` 单元 / 组件测试能力，仍需继续扩大覆盖率。
+*   **关键结论**:
+    *   [x] 前端零测试覆盖风险已开始收敛。
+    *   [ ] Core 覆盖率基线与 CI 门禁仍待落地。
+    *   [ ] 跨服务 E2E 场景仍需增强。
+    *   [ ] Zone 分片、SSH / Ansible、拓扑可视化等差异化能力仍待补齐。
+    *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。
