@@ -83,7 +83,7 @@
 **目标**: 收敛 MVP 后续的质量、可观测性与落地缺口，推动项目从“功能可用”进入“可持续演进”。
 *   **质量**:
     *   [x] 前端测试补全 — 为 Dashboard、Job 管理、设备发现建立 `Vitest + React Testing Library` 回归测试，并补充 AuthContext / JobSubmissionForm 基础用例。
-    *   [ ] 测试覆盖率量化 — 为 Core JaCoCo 设定基线门槛（如 60%）并在 CI 中卡控。
+    *   [x] 测试覆盖率量化 — 为 Core JaCoCo 设定 `30%` 指令覆盖率基线并在 `check` 中卡控；当前实测指令覆盖率为 `42.88%`。
     *   [ ] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景。
 *   **调度与执行**:
     *   [ ] 分区并行调度（按 Zone 分片）。
@@ -110,7 +110,7 @@
 4.  ✅ **Prometheus 生产配置** — 分离 dev/prod 配置，修复容器间服务发现
 5.  ✅ **Helm 监控模板** — ServiceMonitor、PrometheusRule、Grafana Dashboard ConfigMap
 
-**Sprint 7 (Frontend Quality Hardening)** — 🚧 进行中
+**Sprint 7 (Frontend Quality Hardening)** — ✅ 已完成
 
 完成内容：
 1.  ✅ **前端测试基础设施** — 接入 `Vitest + React Testing Library + jsdom`
@@ -118,6 +118,14 @@
 3.  ✅ **关键前端状态测试** — 补充 AuthContext、JobSubmissionForm 回归用例
 4.  ✅ **前端质量清理** — 修复 `DiscoveryPage` 的 `react-hooks/exhaustive-deps` 告警
 5.  ✅ **测试验证** — `cd frontend && npm test`（5 个测试文件 / 10 个用例通过）与 `cd frontend && npm run lint` 通过
+
+**Sprint 8 (Coverage Baseline Enforcement)** — ✅ 已完成
+
+完成内容：
+1.  ✅ **JaCoCo 基线接线修复** — 修复 `core/build.gradle` 中覆盖率任务对执行数据文件的定位，避免 `jacocoTestReport` / `jacocoTestCoverageVerification` 被跳过
+2.  ✅ **覆盖率门槛参数化** — 增加 `jacocoMinimumCoverage` 属性，默认基线为 `30%`
+3.  ✅ **覆盖率量化** — 当前 Core 指令覆盖率实测为 `42.88%`
+4.  ✅ **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
 
 ## 🔍 项目评估 (Project Assessment)
 
@@ -130,7 +138,7 @@
     *   Frontend (React): 已建立首批 `Vitest + React Testing Library` 单元 / 组件测试能力，仍需继续扩大覆盖率。
 *   **关键结论**:
     *   [x] 前端零测试覆盖风险已开始收敛。
-    *   [ ] Core 覆盖率基线与 CI 门禁仍待落地。
+    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `30%`。
     *   [ ] 跨服务 E2E 场景仍需增强。
     *   [ ] Zone 分片、SSH / Ansible、拓扑可视化等差异化能力仍待补齐。
     *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。

@@ -110,33 +110,46 @@ def coverageExcludes = [
     'com/sc/lcm/core/grpc/**'
 ]
 
+def jacocoExecutionDataFiles = files(fileTree(buildDir) {
+    include 'jacoco/*.exec'
+    include 'jacoco-quarkus.exec'
+})
+
+def hasJacocoExecutionData = {
+    jacocoExecutionDataFiles.files.any { it.exists() }
+}
+
+def jacocoMinimumCoverage = new BigDecimal(
+    (findProperty('jacocoMinimumCoverage') ?: '0.30').toString()
+)
+
 jacocoTestReport {
     dependsOn test
     reports {
         xml.required = true
         html.required = true
     }
-    executionData.setFrom(files("$buildDir/jacoco-quarkus.exec"))
+    executionData.setFrom(jacocoExecutionDataFiles)
     classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
         exclude coverageExcludes
     })
+    onlyIf { hasJacocoExecutionData() }
 }
 
 jacocoTestCoverageVerification {
     dependsOn jacocoTestReport
-    executionData.setFrom(files("$buildDir/jacoco-quarkus.exec"))
+    executionData.setFrom(jacocoExecutionDataFiles)
     classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
         exclude coverageExcludes
     })
     violationRules {
         rule {
             limit {
-                // Start at 30% and increase as test coverage improves
-                // Target: 70% by end of next sprint
-                minimum = 0.30
+                minimum = jacocoMinimumCoverage
             }
         }
     }
+    onlyIf { hasJacocoExecutionData() }
 }
 
 check.dependsOn jacocoTestCoverageVerification
