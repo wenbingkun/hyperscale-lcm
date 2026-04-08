@@ -1,6 +1,7 @@
 package com.sc.lcm.core.api;
 
 import com.sc.lcm.core.domain.Job;
+import com.sc.lcm.core.domain.Job.ExecutionType;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.service.SchedulingService;
 import com.sc.lcm.core.service.PartitionedSchedulingService;
@@ -50,6 +51,24 @@ public class JobResource {
          */
         @POST
         public Uni<Response> submitJob(JobRequest request) {
+                ExecutionType executionType;
+                try {
+                        executionType = parseExecutionType(request.executionType());
+                } catch (IllegalArgumentException error) {
+                        return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                                        .entity(new ErrorResponse(error.getMessage()))
+                                        .build());
+                }
+
+                String executionPayload;
+                try {
+                        executionPayload = normalizeExecutionPayload(executionType, request.executionPayload());
+                } catch (IllegalArgumentException error) {
+                        return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                                        .entity(new ErrorResponse(error.getMessage()))
+                                        .build());
+                }
+
                 String jobId = UUID.randomUUID().toString();
 
                 Job job = new Job();
@@ -65,6 +84,8 @@ public class JobResource {
                 job.setTenantId(request.tenantId());
                 job.setClusterId(request.clusterId());
                 job.setStatus(JobStatus.PENDING);
+                job.setExecutionType(executionType);
+                job.setExecutionPayload(executionPayload);
                 Job schedulingJob = copyJob(job);
 
                 log.info("📝 Submitting new job: {} ({})", request.name(), jobId);
@@ -104,7 +125,34 @@ public class JobResource {
                 copy.setTenantId(original.getTenantId());
                 copy.setClusterId(original.getClusterId());
                 copy.setStatus(original.getStatus());
+                copy.setExecutionType(original.getExecutionType());
+                copy.setExecutionPayload(original.getExecutionPayload());
                 return copy;
+        }
+
+        private ExecutionType parseExecutionType(String requestedExecutionType) {
+                if (requestedExecutionType == null || requestedExecutionType.isBlank()) {
+                        return ExecutionType.DOCKER;
+                }
+
+                try {
+                        return ExecutionType.valueOf(requestedExecutionType.trim().toUpperCase());
+                } catch (IllegalArgumentException ignored) {
+                        throw new IllegalArgumentException("Unsupported executionType: " + requestedExecutionType);
+                }
+        }
+
+        private String normalizeExecutionPayload(ExecutionType executionType, String requestedExecutionPayload) {
+                if (requestedExecutionPayload != null && !requestedExecutionPayload.isBlank()) {
+                        return requestedExecutionPayload;
+                }
+
+                if (executionType == ExecutionType.DOCKER) {
+                        return "hello-world";
+                }
+
+                throw new IllegalArgumentException(
+                                "executionPayload is required for executionType " + executionType.name());
         }
 
         /**
@@ -226,7 +274,9 @@ public class JobResource {
                         boolean requiresNvlink,
                         int minNvlinkBandwidthGbps,
                         String tenantId,
-                        String clusterId) {
+                        String clusterId,
+                        String executionType,
+                        String executionPayload) {
         }
 
         public record JobResponse(String id, String status, String message) {

@@ -1,6 +1,7 @@
 package com.sc.lcm.core.service;
 
 import com.sc.lcm.core.domain.Job;
+import com.sc.lcm.core.domain.Job.ExecutionType;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
@@ -14,6 +15,9 @@ import java.util.Map;
 public class JobDispatcher {
 
     private static final Logger LOG = Logger.getLogger(JobDispatcher.class);
+
+    private record ExecutionCommand(String commandType, String payload) {
+    }
 
     @Inject
     StreamRegistry streamRegistry;
@@ -35,15 +39,31 @@ public class JobDispatcher {
         String nodeId = job.getAssignedNode().getId();
         LOG.infof("📨 [Kafka -> Dispatcher] Processing Job %s for Node %s", job.getId(), nodeId);
 
-        // In a real app, Payload would be derived from Job spec
-        // For Phase 7, we stick to "hello-world" or use job.Name if available
-        String payload = "hello-world";
+        ExecutionCommand executionCommand = resolveExecutionCommand(job);
 
         // Extract Context
         Map<String, String> traceContext = new HashMap<>();
         openTelemetry.getPropagators().getTextMapPropagator()
                 .inject(Context.current(), traceContext, Map::put);
 
-        streamRegistry.sendCommand(nodeId, job.getId(), "EXEC_DOCKER", payload, traceContext);
+        streamRegistry.sendCommand(
+                nodeId,
+                job.getId(),
+                executionCommand.commandType(),
+                executionCommand.payload(),
+                traceContext);
+    }
+
+    private ExecutionCommand resolveExecutionCommand(Job job) {
+        ExecutionType executionType = job.getExecutionType() == null ? ExecutionType.DOCKER : job.getExecutionType();
+        String payload = job.getExecutionPayload();
+
+        return switch (executionType) {
+            case SHELL -> new ExecutionCommand("EXEC_SHELL", payload);
+            case ANSIBLE -> new ExecutionCommand("EXEC_ANSIBLE", payload);
+            case SSH -> new ExecutionCommand("EXEC_SSH", payload);
+            case DOCKER -> new ExecutionCommand("EXEC_DOCKER",
+                    payload == null || payload.isBlank() ? "hello-world" : payload);
+        };
     }
 }

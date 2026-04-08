@@ -87,7 +87,7 @@
     *   [x] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景，并修复调度后 Job 状态未从 `PENDING` 推进到 `SCHEDULED` 的一致性缺口。
 *   **调度与执行**:
     *   [x] 分区并行调度（按 Zone 分片）。
-    *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
+    *   [x] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
     *   [ ] 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
 *   **可观测性与运维**:
     *   [ ] OpenTelemetry 全链路串联 — 补全 Satellite → Kafka → Core 的 trace propagation。
@@ -145,6 +145,15 @@
 4.  ✅ **文档状态对齐** — 同步勾选阶段三与阶段六中的“按 Zone 分片”条目，消除路线图与实现状态不一致的问题
 5.  ✅ **测试验证** — `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、`cd core && ./gradlew test --tests com.sc.lcm.core.service.PartitionedSchedulingServiceTest --no-daemon` 与按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
 
+**Sprint 11 (Command Dispatch Execution Modes)** — ✅ 已完成
+
+完成内容：
+1.  ✅ **作业执行策略建模** — `Job` 新增 `executionType` / `executionPayload`，支持 Docker、Shell、Ansible、SSH 四种下发模式，并通过 Flyway 迁移补齐持久化字段
+2.  ✅ **Core 分发链路补强** — `JobResource` 支持接收执行模式，`SchedulingService` / `PartitionedSchedulingService` 保留执行元数据，`JobDispatcher` 按作业配置分发 `EXEC_DOCKER` / `EXEC_SHELL` / `EXEC_ANSIBLE` / `EXEC_SSH`
+3.  ✅ **Satellite SSH 执行器** — 新增 `RunSSH`，通过本地 OpenSSH 客户端执行远程命令，支持私钥认证、可选 `sshpass` 密码认证以及 `known_hosts` / 非严格校验策略
+4.  ✅ **回归测试补齐** — `JobDispatcherTest` 覆盖多执行模式映射；`E2EIntegrationTest` 新增 Shell 作业分发链路验证；`satellite/pkg/executor/ssh_test.go` 覆盖 SSH 执行成功、失败与参数校验
+5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.JobDispatcherTest --tests com.sc.lcm.core.E2EIntegrationTest --no-daemon` 通过；`docker run --rm -e GOPROXY=off -e GOMODCACHE=/go/pkg/mod -v /home/wenbk/go/pkg/mod:/go/pkg/mod -v /home/wenbk/projects/work/hyperscale-lcm:/workspace -w /workspace/satellite golang:1.24.7 go test ./... -count=1` 通过；并补跑 `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
+
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
@@ -158,5 +167,5 @@
     *   [x] 前端零测试覆盖风险已开始收敛。
     *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `30%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
-    *   [ ] SSH / Ansible、拓扑可视化等差异化能力仍待补齐。
+    *   [ ] 拓扑可视化等差异化能力仍待补齐。
     *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。

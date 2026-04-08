@@ -70,6 +70,13 @@ public class Job extends PanacheEntityBase {
     // 节点亲和性 (P5-4): e.g., "gpu=a100,zone=us-west"
     private String nodeSelector;
 
+    // 执行策略 (Stage 6): 决定 Core 下发到 Satellite 的命令类型
+    @Enumerated(EnumType.STRING)
+    private ExecutionType executionType = ExecutionType.DOCKER;
+
+    @Column(columnDefinition = "TEXT")
+    private String executionPayload;
+
     // 时间戳
     @CreationTimestamp
     private LocalDateTime createdAt;
@@ -135,5 +142,12 @@ public class Job extends PanacheEntityBase {
         COMPLETED, // 已完成
         FAILED, // 失败
         CANCELLED // 已取消
+    }
+
+    public enum ExecutionType {
+        DOCKER,
+        SHELL,
+        ANSIBLE,
+        SSH
     }
 }

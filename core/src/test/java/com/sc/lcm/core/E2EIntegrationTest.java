@@ -40,6 +40,15 @@ import static org.junit.jupiter.api.Assertions.fail;
 @QuarkusTest
 public class E2EIntegrationTest {
 
+    private record TestStreamContext(
+            String satelliteId,
+            String clusterId,
+            AtomicReference<MultiEmitter<? super StreamRequest>> streamEmitterRef,
+            CompletableFuture<String> commandTypeFuture,
+            CompletableFuture<String> payloadFuture,
+            Cancellable streamSubscription) {
+    }
+
     @ConfigProperty(name = "kafka.bootstrap.servers", defaultValue = "unused")
     String kafkaBrokers;
 
@@ -49,61 +58,12 @@ public class E2EIntegrationTest {
     @Test
     public void testEndToEndJobLifecycle() throws Exception {
         try (KafkaCompanion companion = new KafkaCompanion(kafkaBrokers)) {
-            AtomicReference<MultiEmitter<? super StreamRequest>> streamEmitterRef = new AtomicReference<>();
-            CompletableFuture<String> commandTypeFuture = new CompletableFuture<>();
+            TestStreamContext streamContext = registerSatelliteAndOpenStream(
+                    "test-node-1",
+                    "192.168.1.100",
+                    "cluster-e2e-docker");
+            String token = authenticate();
 
-            // 1. Register Satellite (Mocking Satellite startup)
-            RegisterRequest registerRequest = RegisterRequest.newBuilder()
-                    .setHostname("test-node-1")
-                    .setIpAddress("192.168.1.100")
-                    .setAgentVersion("1.0.0")
-                    .setOsVersion("Ubuntu 24.04")
-                    .build();
-
-            var registerResponse = grpcClient.registerSatellite(registerRequest)
-                    .await().atMost(Duration.ofSeconds(5));
-
-            // Use the assigned ID from the registration response
-            String satelliteId = registerResponse.getAssignedId();
-            assertNotNull(satelliteId, "Registration should return an assigned ID");
-
-            // 2. Send Heartbeat to ensure node is active and has resources
-            HeartbeatRequest heartbeat = HeartbeatRequest.newBuilder()
-                    .setSatelliteId(satelliteId)
-                    .setClusterId("default")
-                    .setCpuUsagePercent(10.0f)
-                    .setMemoryUsedBytes(1024L)
-                    .setMemoryTotalBytes(8192L)
-                    .setGpuCount(1)
-                    .addGpuMetrics(
-                            com.sc.lcm.core.grpc.GpuMetric.newBuilder().setIndex(0)
-                                    .setUtilizationPercent(0).build())
-                    .build();
-            grpcClient.sendHeartbeat(heartbeat).await().atMost(Duration.ofSeconds(5));
-
-            // 3. Keep a bi-directional stream open so the dispatcher can deliver commands.
-            Multi<StreamRequest> requestStream = Multi.createFrom().emitter(emitter -> {
-                streamEmitterRef.set(emitter);
-                emitter.emit(StreamRequest.newBuilder()
-                        .setSatelliteId(satelliteId)
-                        .setInit(true)
-                        .build());
-            });
-            Cancellable streamSubscription = grpcClient.connectStream(requestStream).subscribe().with(resp -> {
-                commandTypeFuture.complete(resp.getCommandType());
-            });
-
-            // 4. Authenticate via HTTP API
-            String token = given()
-                    .contentType(ContentType.JSON)
-                    .body("{\"username\":\"admin\",\"password\":\"admin123\",\"tenantId\":\"default\"}")
-                    .when()
-                    .post("/api/auth/login")
-                    .then()
-                    .statusCode(200)
-                    .extract().path("token");
-
-            // 5. Submit a new Job via HTTP API
             JobRequest jobReq = new JobRequest(
                     "E2E Test Job",
                     "Integration test job",
@@ -114,45 +74,30 @@ public class E2EIntegrationTest {
                     false,
                     0,
                     "default",
-                    "default");
+                    streamContext.clusterId(),
+                    null,
+                    null);
 
-            String jobId = given()
-                    .header("Authorization", "Bearer " + token)
-                    .contentType(ContentType.JSON)
-                    .body(jobReq)
-                    .when()
-                    .post("/api/jobs")
-                    .then()
-                    .statusCode(201)
-                    .extract().path("id");
+            String jobId = submitJob(token, jobReq);
 
             assertNotNull(jobId, "Job ID should not be null after submission");
 
-            String commandType = commandTypeFuture.get(5, TimeUnit.SECONDS);
-            assertTrue(commandType != null && !commandType.isBlank(), "Core should dispatch a command over the stream");
+            String commandType = streamContext.commandTypeFuture().get(5, TimeUnit.SECONDS);
+            String payload = streamContext.payloadFuture().get(5, TimeUnit.SECONDS);
+            assertEquals("EXEC_DOCKER", commandType, "Default jobs should dispatch Docker commands");
+            assertEquals("hello-world", payload, "Default Docker jobs should use the placeholder image");
 
             JobStatusResponse scheduledStatus = awaitJobStatus(token, jobId, status ->
                     "SCHEDULED".equals(status.status())
-                            && satelliteId.equals(status.assignedNodeId()),
+                            && streamContext.satelliteId().equals(status.assignedNodeId()),
                     Duration.ofSeconds(15));
             assertEquals("SCHEDULED", scheduledStatus.status(), "Job should be marked scheduled after dispatch");
-            assertEquals(satelliteId, scheduledStatus.assignedNodeId(), "Scheduled job should target the registered node");
+            assertEquals(streamContext.satelliteId(), scheduledStatus.assignedNodeId(),
+                    "Scheduled job should target the registered node");
             assertNotNull(scheduledStatus.scheduledAt(), "Scheduled job should record its scheduled timestamp");
 
-            // 6. Send the job completion update on the same open stream.
-            MultiEmitter<? super StreamRequest> streamEmitter = streamEmitterRef.get();
-            assertNotNull(streamEmitter, "Expected an initialized stream emitter");
-            streamEmitter.emit(StreamRequest.newBuilder()
-                    .setSatelliteId(satelliteId)
-                    .setStatusUpdate(JobStatusUpdate.newBuilder()
-                            .setJobId(jobId)
-                            .setStatus(com.sc.lcm.core.grpc.JobStatus.COMPLETED)
-                            .setMessage("Mock completed")
-                            .setExitCode(0)
-                            .build())
-                    .build());
+            emitCompletion(streamContext, jobId, "Mock completed", 0);
 
-            // 7. Verify the status was forwarded to `jobs.status` topic
             ConsumerRecord<String, String> statusRecord = awaitStatusRecord(
                     companion,
                     jobId,
@@ -169,9 +114,155 @@ public class E2EIntegrationTest {
             assertEquals(0, completedStatus.exitCode(), "Completed job should carry the callback exit code");
             assertNotNull(completedStatus.completedAt(), "Completed job should record its completion time");
 
-            streamEmitter.complete();
-            streamSubscription.cancel();
+            closeStream(streamContext);
         }
+    }
+
+    @Test
+    public void testShellJobDispatchUsesRequestedCommandTypeAndPayload() throws Exception {
+        TestStreamContext streamContext = registerSatelliteAndOpenStream(
+                "test-node-shell",
+                "192.168.1.101",
+                "cluster-e2e-shell");
+        try {
+            String token = authenticate();
+            JobRequest jobReq = new JobRequest(
+                    "Shell Dispatch Job",
+                    "Dispatch a shell command",
+                    1,
+                    1,
+                    0,
+                    null,
+                    false,
+                    0,
+                    "default",
+                    streamContext.clusterId(),
+                    "SHELL",
+                    "echo shell-e2e");
+
+            String jobId = submitJob(token, jobReq);
+
+            String commandType = streamContext.commandTypeFuture().get(5, TimeUnit.SECONDS);
+            String payload = streamContext.payloadFuture().get(5, TimeUnit.SECONDS);
+
+            assertEquals("EXEC_SHELL", commandType, "Shell jobs should dispatch shell commands");
+            assertEquals("echo shell-e2e", payload, "Shell jobs should preserve the submitted command");
+
+            JobStatusResponse scheduledStatus = awaitJobStatus(token, jobId, status ->
+                    "SCHEDULED".equals(status.status())
+                            && streamContext.satelliteId().equals(status.assignedNodeId()),
+                    Duration.ofSeconds(15));
+            assertEquals("SCHEDULED", scheduledStatus.status(), "Shell job should still be marked scheduled");
+            assertEquals(streamContext.satelliteId(), scheduledStatus.assignedNodeId(),
+                    "Shell job should target the registered node");
+
+            emitCompletion(streamContext, jobId, "Shell completed", 0);
+
+            JobStatusResponse completedStatus = awaitJobStatus(token, jobId, status ->
+                    "COMPLETED".equals(status.status()) && Integer.valueOf(0).equals(status.exitCode()),
+                    Duration.ofSeconds(15));
+            assertEquals("COMPLETED", completedStatus.status(), "Shell job should complete after callback");
+        } finally {
+            closeStream(streamContext);
+        }
+    }
+
+    private TestStreamContext registerSatelliteAndOpenStream(String hostname, String ipAddress, String clusterId) {
+        AtomicReference<MultiEmitter<? super StreamRequest>> streamEmitterRef = new AtomicReference<>();
+        CompletableFuture<String> commandTypeFuture = new CompletableFuture<>();
+        CompletableFuture<String> payloadFuture = new CompletableFuture<>();
+
+        RegisterRequest registerRequest = RegisterRequest.newBuilder()
+                .setHostname(hostname)
+                .setIpAddress(ipAddress)
+                .setClusterId(clusterId)
+                .setAgentVersion("1.0.0")
+                .setOsVersion("Ubuntu 24.04")
+                .build();
+
+        var registerResponse = grpcClient.registerSatellite(registerRequest)
+                .await().atMost(Duration.ofSeconds(5));
+
+        String satelliteId = registerResponse.getAssignedId();
+        assertNotNull(satelliteId, "Registration should return an assigned ID");
+
+        HeartbeatRequest heartbeat = HeartbeatRequest.newBuilder()
+                .setSatelliteId(satelliteId)
+                .setClusterId(clusterId)
+                .setCpuUsagePercent(10.0f)
+                .setMemoryUsedBytes(1024L)
+                .setMemoryTotalBytes(8192L)
+                .setGpuCount(1)
+                .addGpuMetrics(
+                        com.sc.lcm.core.grpc.GpuMetric.newBuilder().setIndex(0)
+                                .setUtilizationPercent(0).build())
+                .build();
+        grpcClient.sendHeartbeat(heartbeat).await().atMost(Duration.ofSeconds(5));
+
+        Multi<StreamRequest> requestStream = Multi.createFrom().emitter(emitter -> {
+            streamEmitterRef.set(emitter);
+            emitter.emit(StreamRequest.newBuilder()
+                    .setSatelliteId(satelliteId)
+                    .setInit(true)
+                    .build());
+        });
+        Cancellable streamSubscription = grpcClient.connectStream(requestStream).subscribe().with(resp -> {
+            commandTypeFuture.complete(resp.getCommandType());
+            payloadFuture.complete(resp.getPayload());
+        });
+
+        return new TestStreamContext(
+                satelliteId,
+                clusterId,
+                streamEmitterRef,
+                commandTypeFuture,
+                payloadFuture,
+                streamSubscription);
+    }
+
+    private String authenticate() {
+        return given()
+                .contentType(ContentType.JSON)
+                .body("{\"username\":\"admin\",\"password\":\"admin123\",\"tenantId\":\"default\"}")
+                .when()
+                .post("/api/auth/login")
+                .then()
+                .statusCode(200)
+                .extract().path("token");
+    }
+
+    private String submitJob(String token, JobRequest jobReq) {
+        return given()
+                .header("Authorization", "Bearer " + token)
+                .contentType(ContentType.JSON)
+                .body(jobReq)
+                .when()
+                .post("/api/jobs")
+                .then()
+                .statusCode(201)
+                .extract().path("id");
+    }
+
+    private void emitCompletion(TestStreamContext streamContext, String jobId, String message, int exitCode) {
+        MultiEmitter<? super StreamRequest> streamEmitter = streamContext.streamEmitterRef().get();
+        assertNotNull(streamEmitter, "Expected an initialized stream emitter");
+        streamEmitter.emit(StreamRequest.newBuilder()
+                .setSatelliteId(streamContext.satelliteId())
+                .setStatusUpdate(JobStatusUpdate.newBuilder()
+                        .setJobId(jobId)
+                        .setStatus(com.sc.lcm.core.grpc.JobStatus.COMPLETED)
+                        .setMessage(message)
+                        .setExitCode(exitCode)
+                        .build())
+                .build());
+    }
+
+    private void closeStream(TestStreamContext streamContext) {
+        MultiEmitter<? super StreamRequest> streamEmitter = streamContext.streamEmitterRef().get();
+        if (streamEmitter != null) {
+            streamEmitter.complete();
+        }
+        streamContext.streamSubscription().cancel();
     }
 
     private JobStatusResponse awaitJobStatus(String token, String jobId,

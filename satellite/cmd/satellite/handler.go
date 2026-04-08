@@ -100,6 +100,30 @@ func handleCommand(resp *pb.StreamResponse, satelliteId string, dockerExec *dock
 			ExitCode:     int32(exitCode),
 			TraceContext: injectContext(ctx),
 		})
+	} else if resp.CommandType == "EXEC_SSH" {
+		log.Printf("Executing SSH Command")
+
+		sendStatus(stream, satelliteId, &pb.JobStatusUpdate{
+			JobId:        resp.CommandId,
+			Status:       pb.JobStatus_RUNNING,
+			Message:      "Executing SSH command...",
+			TraceContext: injectContext(ctx),
+		})
+
+		output, exitCode, err := executor.RunSSH(ctx, resp.Payload)
+
+		status := pb.JobStatus_COMPLETED
+		if err != nil {
+			status = pb.JobStatus_FAILED
+		}
+
+		sendStatus(stream, satelliteId, &pb.JobStatusUpdate{
+			JobId:        resp.CommandId,
+			Status:       status,
+			Message:      output,
+			ExitCode:     int32(exitCode),
+			TraceContext: injectContext(ctx),
+		})
 	} else if resp.CommandType == "EXEC_DOCKER" {
 		if dockerExec == nil {
 			log.Printf("Cannot execute Docker command: Docker client not initialized")

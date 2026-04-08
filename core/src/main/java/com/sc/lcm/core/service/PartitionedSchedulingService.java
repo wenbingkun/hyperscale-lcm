@@ -181,6 +181,8 @@ public class PartitionedSchedulingService {
         clone.setPriority(original.getPriority());
         clone.setPreemptible(original.isPreemptible());
         clone.setNodeSelector(original.getNodeSelector());
+        clone.setExecutionType(original.getExecutionType());
+        clone.setExecutionPayload(original.getExecutionPayload());
         return clone;
     }
 

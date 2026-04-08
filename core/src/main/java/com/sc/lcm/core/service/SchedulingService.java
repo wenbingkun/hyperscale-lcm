@@ -117,6 +117,8 @@ public class SchedulingService {
         copy.setPriority(original.getPriority());
         copy.setPreemptible(original.isPreemptible());
         copy.setNodeSelector(original.getNodeSelector());
+        copy.setExecutionType(original.getExecutionType());
+        copy.setExecutionPayload(original.getExecutionPayload());
         return copy;
     }
 
