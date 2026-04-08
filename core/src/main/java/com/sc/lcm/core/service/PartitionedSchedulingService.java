@@ -1,7 +1,5 @@
 package com.sc.lcm.core.service;
 
-import ai.timefold.solver.core.api.solver.SolverManager;
-import ai.timefold.solver.core.api.solver.SolverJob;
 import ai.timefold.solver.core.api.score.buildin.hardsoft.HardSoftScore;
 import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.LcmSolution;
@@ -38,13 +36,13 @@ import java.util.stream.Collectors;
 public class PartitionedSchedulingService {
 
     @Inject
-    SolverManager<LcmSolution, UUID> solverManager;
-
-    @Inject
     NodeSpecsProvider nodeSpecsProvider;
 
     @Inject
     JobExecutionService jobExecutionService;
+
+    @Inject
+    LcmSolverFacade lcmSolverFacade;
 
     @Inject
     @Channel("job-queue-out")
@@ -112,16 +110,8 @@ public class PartitionedSchedulingService {
             solution.setNodeList(new ArrayList<>(nodes));
             solution.setJobList(List.of(cloneJob(job)));
 
-            UUID problemId = UUID.randomUUID();
             try {
-                SolverJob<LcmSolution, UUID> solverJob = solverManager.solve(
-                        problemId,
-                        id -> solution,
-                        s -> {
-                        } // 不需要回调，我们会手动获取结果
-                );
-
-                LcmSolution finalSolution = solverJob.getFinalBestSolution();
+                LcmSolution finalSolution = lcmSolverFacade.solveBlocking(solution);
                 return new ZoneSolution(zoneId, finalSolution);
 
             } catch (Exception e) {

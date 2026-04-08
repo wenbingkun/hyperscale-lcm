@@ -1,7 +1,5 @@
 package com.sc.lcm.core.service;
 
-import ai.timefold.solver.core.api.solver.SolverManager;
-import ai.timefold.solver.core.api.solver.SolverJob;
 import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.LcmSolution;
 import com.sc.lcm.core.domain.Node;
@@ -13,8 +11,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.reactive.messaging.Channel;
@@ -28,13 +24,13 @@ import org.eclipse.microprofile.reactive.messaging.Emitter;
 public class SchedulingService {
 
     @Inject
-    SolverManager<LcmSolution, UUID> solverManager;
-
-    @Inject
     NodeSpecsProvider nodeSpecsProvider;
 
     @Inject
     JobExecutionService jobExecutionService;
+
+    @Inject
+    LcmSolverFacade lcmSolverFacade;
 
     @Inject
     @Channel("job-queue-out")
@@ -94,14 +90,10 @@ public class SchedulingService {
     public Uni<Void> scheduleJob(Job job) {
         return loadProblemReactive(job)
                 .invoke(solution -> {
-                    UUID problemId = UUID.randomUUID();
                     log.info("🚀 Starting asynchronous solving for Job {}", job.getId());
 
                     // 异步启动求解，结果将通过 this::saveSolution 回调
-                    solverManager.solve(
-                            problemId,
-                            id -> solution,
-                            this::saveSolution);
+                    lcmSolverFacade.solveAsync(solution, this::saveSolution);
                 })
                 .replaceWithVoid();
     }

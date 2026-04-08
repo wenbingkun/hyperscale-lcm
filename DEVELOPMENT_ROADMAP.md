@@ -45,7 +45,7 @@
     *   [x] GPU 拓扑模型 (NVLink, NVSwitch, IB Fabric 建模)。
     *   [x] Timefold 约束求解器集成（GPU 型号匹配、拓扑感知）。
     *   [x] PartitionedSchedulingService 分区调度框架。
-    *   [ ] 完善分区并行调度（按 Zone 分片）(Optional — 未来迭代)。
+    *   [x] 完善分区并行调度（按 Zone 分片）(Optional — 已完成)。
     *   [x] 独立调度 API：`POST /api/v1/allocations`。
 
 ## 📅 阶段四：执行与交付 (Execution & Delivery) ✅ 已完成
@@ -86,7 +86,7 @@
     *   [x] 测试覆盖率量化 — 为 Core JaCoCo 设定 `30%` 指令覆盖率基线并在 `check` 中卡控；当前实测指令覆盖率为 `42.88%`。
     *   [x] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景，并修复调度后 Job 状态未从 `PENDING` 推进到 `SCHEDULED` 的一致性缺口。
 *   **调度与执行**:
-    *   [ ] 分区并行调度（按 Zone 分片）。
+    *   [x] 分区并行调度（按 Zone 分片）。
     *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
     *   [ ] 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
 *   **可观测性与运维**:
@@ -136,6 +136,15 @@
 4.  ✅ **E2E 场景增强** — `E2EIntegrationTest` 现在校验 Satellite 注册 → Job 调度落库 → Kafka 状态回调 → Job 完成状态持久化的完整链路，并按 `jobId` 精确匹配 `jobs.status` 主题消息
 5.  ✅ **测试验证** — `./scripts/check_ci_contract.sh` 通过；`cd frontend && npm test`（6 个测试文件 / 12 个用例通过）、`cd frontend && npm run lint`、`cd frontend && npm run build` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
 
+**Sprint 10 (Zone Partition Scheduling Regression Guard)** — ✅ 已完成
+
+完成内容：
+1.  ✅ **求解器封装抽象** — 新增 `LcmSolverFacade`，统一承接 `SchedulingService` / `PartitionedSchedulingService` 对 Timefold `SolverManager` 的访问，便于在 Quarkus 集成测试中稳定注入替身
+2.  ✅ **Zone 分片调度回归测试** — 新增 `PartitionedSchedulingServiceTest`，覆盖“跨 Zone 选择最优解”与“所有 Zone 均不可分配时保持 `PENDING`”两类关键路径
+3.  ✅ **状态持久化校验** — 回归测试显式验证分区调度命中节点后会落库 `SCHEDULED`、写入 `assignedNodeId` / `scheduledAt`，避免仅靠日志判断
+4.  ✅ **文档状态对齐** — 同步勾选阶段三与阶段六中的“按 Zone 分片”条目，消除路线图与实现状态不一致的问题
+5.  ✅ **测试验证** — `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、`cd core && ./gradlew test --tests com.sc.lcm.core.service.PartitionedSchedulingServiceTest --no-daemon` 与按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
+
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
@@ -149,5 +158,5 @@
     *   [x] 前端零测试覆盖风险已开始收敛。
     *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `30%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
-    *   [ ] Zone 分片、SSH / Ansible、拓扑可视化等差异化能力仍待补齐。
+    *   [ ] SSH / Ansible、拓扑可视化等差异化能力仍待补齐。
     *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。
