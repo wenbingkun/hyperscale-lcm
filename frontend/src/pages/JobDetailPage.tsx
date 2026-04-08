@@ -33,7 +33,8 @@ export const JobDetailPage: React.FC = () => {
 
     // Real-time updates
     useEffect(() => {
-        if (lastEvent?.type === 'SCHEDULE_EVENT' && lastEvent.payload?.jobId === id) {
+        if ((lastEvent?.type === 'SCHEDULE_EVENT' || lastEvent?.type === 'JOB_STATUS')
+            && lastEvent.payload?.jobId === id) {
             // Refresh job data when we get an update for this job
             fetchJobs().then((jobs) => {
                 const found = jobs.find((j) => j.id === id);

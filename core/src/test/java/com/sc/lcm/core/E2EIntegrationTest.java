@@ -1,11 +1,12 @@
 package com.sc.lcm.core;
 
 import com.sc.lcm.core.api.JobResource.JobRequest;
+import com.sc.lcm.core.api.JobResource.JobStatusResponse;
 import com.sc.lcm.core.grpc.HeartbeatRequest;
 import com.sc.lcm.core.grpc.LcmService;
+import com.sc.lcm.core.grpc.JobStatusUpdate;
 import com.sc.lcm.core.grpc.RegisterRequest;
 import com.sc.lcm.core.grpc.StreamRequest;
-import com.sc.lcm.core.grpc.JobStatusUpdate;
 import io.quarkus.grpc.GrpcClient;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
@@ -21,10 +22,13 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 
 import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * End-to-end integration test that exercises the full job lifecycle.
@@ -127,6 +131,14 @@ public class E2EIntegrationTest {
             String commandType = commandTypeFuture.get(5, TimeUnit.SECONDS);
             assertTrue(commandType != null && !commandType.isBlank(), "Core should dispatch a command over the stream");
 
+            JobStatusResponse scheduledStatus = awaitJobStatus(token, jobId, status ->
+                    "SCHEDULED".equals(status.status())
+                            && satelliteId.equals(status.assignedNodeId()),
+                    Duration.ofSeconds(15));
+            assertEquals("SCHEDULED", scheduledStatus.status(), "Job should be marked scheduled after dispatch");
+            assertEquals(satelliteId, scheduledStatus.assignedNodeId(), "Scheduled job should target the registered node");
+            assertNotNull(scheduledStatus.scheduledAt(), "Scheduled job should record its scheduled timestamp");
+
             // 6. Send the job completion update on the same open stream.
             MultiEmitter<? super StreamRequest> streamEmitter = streamEmitterRef.get();
             assertNotNull(streamEmitter, "Expected an initialized stream emitter");
@@ -141,16 +153,83 @@ public class E2EIntegrationTest {
                     .build());
 
             // 7. Verify the status was forwarded to `jobs.status` topic
-            ConsumerRecord<String, String> statusRecord = companion.consumeStrings()
-                    .fromTopics("jobs.status", 1)
-                    .awaitCompletion(Duration.ofSeconds(15))
-                    .getFirstRecord();
+            ConsumerRecord<String, String> statusRecord = awaitStatusRecord(
+                    companion,
+                    jobId,
+                    Duration.ofSeconds(15));
 
             assertNotNull(statusRecord, "Should have received a status message on jobs.status topic");
             assertTrue(statusRecord.value().contains("COMPLETED"), "Status message should contain COMPLETED");
+            assertTrue(statusRecord.value().contains(jobId), "Status message should contain the job ID");
+
+            JobStatusResponse completedStatus = awaitJobStatus(token, jobId, status ->
+                    "COMPLETED".equals(status.status()) && Integer.valueOf(0).equals(status.exitCode()),
+                    Duration.ofSeconds(15));
+            assertEquals("COMPLETED", completedStatus.status(), "Job should be marked completed after callback");
+            assertEquals(0, completedStatus.exitCode(), "Completed job should carry the callback exit code");
+            assertNotNull(completedStatus.completedAt(), "Completed job should record its completion time");
 
             streamEmitter.complete();
             streamSubscription.cancel();
         }
+    }
+
+    private JobStatusResponse awaitJobStatus(String token, String jobId,
+            Predicate<JobStatusResponse> condition,
+            Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        JobStatusResponse latestStatus = null;
+
+        while (System.nanoTime() < deadline) {
+            latestStatus = given()
+                    .header("Authorization", "Bearer " + token)
+                    .when()
+                    .get("/api/jobs/{id}/status", jobId)
+                    .then()
+                    .statusCode(200)
+                    .extract()
+                    .as(JobStatusResponse.class);
+
+            if (condition.test(latestStatus)) {
+                return latestStatus;
+            }
+
+            Thread.sleep(250);
+        }
+
+        String latest = latestStatus == null ? "null"
+                : latestStatus.status() + "@" + latestStatus.assignedNodeId() + "/" + latestStatus.exitCode();
+        fail("Timed out waiting for job status transition for " + jobId + ", latest=" + latest);
+        return latestStatus;
+    }
+
+    private ConsumerRecord<String, String> awaitStatusRecord(KafkaCompanion companion, String jobId, Duration timeout)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+
+        try (var statusTask = companion.consumeStrings().fromTopics("jobs.status")) {
+            int inspectedRecords = 0;
+
+            while (System.nanoTime() < deadline) {
+                try {
+                    statusTask.awaitNextRecord(Duration.ofMillis(500));
+                } catch (AssertionError ignored) {
+                    // Keep polling until timeout so unrelated quiet periods do not fail the test early.
+                }
+
+                var records = statusTask.getRecords();
+                for (int i = inspectedRecords; i < records.size(); i++) {
+                    ConsumerRecord<String, String> record = records.get(i);
+                    if (record.value() != null && record.value().contains(jobId)) {
+                        return record;
+                    }
+                }
+                inspectedRecords = records.size();
+                Thread.sleep(100);
+            }
+        }
+
+        fail("Timed out waiting for Kafka status message for job " + jobId);
+        return null;
     }
 }

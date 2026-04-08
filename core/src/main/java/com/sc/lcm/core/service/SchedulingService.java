@@ -34,6 +34,9 @@ public class SchedulingService {
     NodeSpecsProvider nodeSpecsProvider;
 
     @Inject
+    JobExecutionService jobExecutionService;
+
+    @Inject
     @Channel("job-queue-out")
     Emitter<Job> jobEmitter;
 
@@ -71,8 +74,14 @@ public class SchedulingService {
             String nodeId = job.getAssignedNode().getId();
             job.setAssignedNodeId(nodeId);
             log.info("Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
-            Job dispatchJob = copyJob(job);
-            vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
+            try {
+                jobExecutionService.recordScheduledDispatchBlocking(job.getId(), nodeId);
+                job.setStatus(Job.JobStatus.SCHEDULED);
+                Job dispatchJob = copyJob(job);
+                vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
+            } catch (RuntimeException error) {
+                log.error("Failed to persist scheduled state for job {}", job.getId(), error);
+            }
         } else {
             log.warn("Job {} could not be assigned!", job.getId());
         }

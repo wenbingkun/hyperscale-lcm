@@ -84,7 +84,7 @@
 *   **质量**:
     *   [x] 前端测试补全 — 为 Dashboard、Job 管理、设备发现建立 `Vitest + React Testing Library` 回归测试，并补充 AuthContext / JobSubmissionForm 基础用例。
     *   [x] 测试覆盖率量化 — 为 Core JaCoCo 设定 `30%` 指令覆盖率基线并在 `check` 中卡控；当前实测指令覆盖率为 `42.88%`。
-    *   [ ] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景。
+    *   [x] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景，并修复调度后 Job 状态未从 `PENDING` 推进到 `SCHEDULED` 的一致性缺口。
 *   **调度与执行**:
     *   [ ] 分区并行调度（按 Zone 分片）。
     *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
@@ -127,6 +127,15 @@
 3.  ✅ **覆盖率量化** — 当前 Core 指令覆盖率实测为 `42.88%`
 4.  ✅ **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
 
+**Sprint 9 (Cross-Service Integration Hardening)** — ✅ 已完成
+
+完成内容：
+1.  ✅ **调度状态持久化补强** — 在非分区 / 分区调度找到目标节点后先将 Job 持久化为 `SCHEDULED`，补齐 `assignedNodeId` 与 `scheduledAt`
+2.  ✅ **回调链路广播增强** — Job 状态回调除保留既有调度事件外，新增 `JOB_STATUS` WebSocket 广播，前端可按作业状态变化即时刷新
+3.  ✅ **前端实时刷新补齐** — Job 列表页与详情页统一监听 `SCHEDULE_EVENT` / `JOB_STATUS`，新增详情页实时刷新测试
+4.  ✅ **E2E 场景增强** — `E2EIntegrationTest` 现在校验 Satellite 注册 → Job 调度落库 → Kafka 状态回调 → Job 完成状态持久化的完整链路，并按 `jobId` 精确匹配 `jobs.status` 主题消息
+5.  ✅ **测试验证** — `./scripts/check_ci_contract.sh` 通过；`cd frontend && npm test`（6 个测试文件 / 12 个用例通过）、`cd frontend && npm run lint`、`cd frontend && npm run build` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
+
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
@@ -139,6 +148,6 @@
 *   **关键结论**:
     *   [x] 前端零测试覆盖风险已开始收敛。
     *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `30%`。
-    *   [ ] 跨服务 E2E 场景仍需增强。
+    *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
     *   [ ] Zone 分片、SSH / Ansible、拓扑可视化等差异化能力仍待补齐。
     *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。

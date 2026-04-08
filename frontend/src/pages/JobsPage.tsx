@@ -1,37 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useEffectEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GlassCard } from '../components/GlassCard';
 import { fetchJobs, type Job } from '../api/client';
 import { RefreshCcw, Search, ExternalLink } from 'lucide-react';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
 
 export const JobsPage: React.FC = () => {
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState(true);
+    const { lastEvent } = useWebSocketContext();
 
-    const loadJobs = async () => {
+    const refreshJobs = async () => {
         setLoading(true);
         const data = await fetchJobs();
         setJobs(data);
         setLoading(false);
     };
 
+    const loadJobs = useEffectEvent(() => {
+        void refreshJobs();
+    });
+
     useEffect(() => {
-        let cancelled = false;
-        const doLoadJobs = async () => {
-            setLoading(true);
-            const data = await fetchJobs();
-            if (!cancelled) {
-                setJobs(data);
-                setLoading(false);
-            }
-        };
-        doLoadJobs();
-        const interval = setInterval(doLoadJobs, 5000);
+        void loadJobs();
+        const interval = setInterval(() => {
+            void loadJobs();
+        }, 5000);
         return () => {
-            cancelled = true;
             clearInterval(interval);
         };
     }, []);
+
+    useEffect(() => {
+        if (lastEvent?.type === 'SCHEDULE_EVENT' || lastEvent?.type === 'JOB_STATUS') {
+            void loadJobs();
+        }
+    }, [lastEvent]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -52,7 +56,7 @@ export const JobsPage: React.FC = () => {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={loadJobs}
+                        onClick={() => void refreshJobs()}
                         className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-colors"
                     >
                         <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} />

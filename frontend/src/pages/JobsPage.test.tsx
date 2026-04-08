@@ -4,6 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobsPage } from './JobsPage';
 import { fetchJobs } from '../api/client';
+import { useWebSocketContext } from '../contexts/WebSocketContext';
+import type { WebSocketMessage } from '../hooks/useWebSocket';
 
 vi.mock('../api/client', async () => {
     const actual = await vi.importActual<typeof import('../api/client')>('../api/client');
@@ -13,7 +15,23 @@ vi.mock('../api/client', async () => {
     };
 });
 
+vi.mock('../contexts/WebSocketContext', () => ({
+    useWebSocketContext: vi.fn(),
+}));
+
 const mockedFetchJobs = vi.mocked(fetchJobs);
+const mockedUseWebSocketContext = vi.mocked(useWebSocketContext);
+
+function createWebSocketContext(lastEvent: WebSocketMessage | null = null) {
+    return {
+        isConnected: true,
+        onlineNodes: 0,
+        alerts: [],
+        lastEvent,
+        clearAlerts: vi.fn(),
+        dismissAlert: vi.fn(),
+    };
+}
 
 describe('JobsPage', () => {
     beforeEach(() => {
@@ -21,6 +39,7 @@ describe('JobsPage', () => {
             () => 0 as unknown as ReturnType<typeof setInterval>,
         );
         vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
+        mockedUseWebSocketContext.mockReturnValue(createWebSocketContext());
     });
 
     it('renders jobs returned from the API and supports manual refresh', async () => {
@@ -73,5 +92,47 @@ describe('JobsPage', () => {
         );
 
         expect(await screen.findByText('No active jobs found in queue.')).toBeInTheDocument();
+    });
+
+    it('refreshes the queue immediately when a schedule event arrives', async () => {
+        let webSocketContext = createWebSocketContext();
+        mockedUseWebSocketContext.mockImplementation(() => webSocketContext);
+        mockedFetchJobs
+            .mockResolvedValueOnce([
+                {
+                    id: 'job-1234567890',
+                    name: 'LLM-Training',
+                    status: 'RUNNING',
+                },
+            ])
+            .mockResolvedValueOnce([
+                {
+                    id: 'job-1234567890',
+                    name: 'LLM-Training',
+                    status: 'COMPLETED',
+                },
+            ]);
+
+        const { rerender } = render(
+            <MemoryRouter>
+                <JobsPage />
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByText('RUNNING')).toBeInTheDocument();
+
+        webSocketContext = createWebSocketContext({
+            type: 'SCHEDULE_EVENT',
+            payload: { jobId: 'job-1234567890', action: 'DISPATCHED' },
+        });
+
+        rerender(
+            <MemoryRouter>
+                <JobsPage />
+            </MemoryRouter>,
+        );
+
+        await waitFor(() => expect(mockedFetchJobs).toHaveBeenCalledTimes(2));
+        expect(screen.getByText('COMPLETED')).toBeInTheDocument();
     });
 });

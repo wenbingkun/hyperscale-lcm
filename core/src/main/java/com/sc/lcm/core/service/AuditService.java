@@ -50,6 +50,14 @@ public class AuditService {
     }
 
     /**
+     * 记录作业调度
+     */
+    public Uni<Void> logJobScheduled(String jobId, String actor, String tenantId, String nodeId) {
+        return logEvent(AuditEventType.JOB_SCHEDULED, "JOB", jobId, actor, tenantId,
+                String.format("{\"action\":\"scheduled\",\"nodeId\":\"%s\"}", nodeId));
+    }
+
+    /**
      * 记录作业失败
      */
     public Uni<Void> logJobFailed(String jobId, String actor, String tenantId, String error) {

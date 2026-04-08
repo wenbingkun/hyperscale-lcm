@@ -44,6 +44,9 @@ public class PartitionedSchedulingService {
     NodeSpecsProvider nodeSpecsProvider;
 
     @Inject
+    JobExecutionService jobExecutionService;
+
+    @Inject
     @Channel("job-queue-out")
     Emitter<Job> jobEmitter;
 
@@ -147,10 +150,16 @@ public class PartitionedSchedulingService {
                     log.info("🎉 Job {} assigned to Node {} in Zone '{}'",
                             originalJob.getId(), assignedNode.getId(), bestZone.zoneId);
 
-                    Job dispatchJob = cloneJob(originalJob);
-                    dispatchJob.setAssignedNode(assignedNode);
-                    dispatchJob.setAssignedNodeId(assignedNode.getId());
-                    vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
+                    try {
+                        jobExecutionService.recordScheduledDispatchBlocking(originalJob.getId(), assignedNode.getId());
+                        Job dispatchJob = cloneJob(originalJob);
+                        dispatchJob.setAssignedNode(assignedNode);
+                        dispatchJob.setAssignedNodeId(assignedNode.getId());
+                        dispatchJob.setStatus(Job.JobStatus.SCHEDULED);
+                        vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
+                    } catch (RuntimeException error) {
+                        log.error("Failed to persist scheduled state for job {}", originalJob.getId(), error);
+                    }
 
                     return Map.of(originalJob.getId(), assignedNode);
                 })
@@ -166,13 +175,22 @@ public class PartitionedSchedulingService {
     private Job cloneJob(Job original) {
         Job clone = new Job();
         clone.setId(original.getId());
+        clone.setName(original.getName());
+        clone.setDescription(original.getDescription());
         clone.setRequiredCpuCores(original.getRequiredCpuCores());
         clone.setRequiredMemoryGb(original.getRequiredMemoryGb());
         clone.setRequiredGpuCount(original.getRequiredGpuCount());
         clone.setRequiredGpuModel(original.getRequiredGpuModel());
         clone.setRequiresNvlink(original.isRequiresNvlink());
         clone.setMinNvlinkBandwidthGbps(original.getMinNvlinkBandwidthGbps());
+        clone.setStatus(original.getStatus());
+        clone.setAssignedNodeId(original.getAssignedNodeId());
+        clone.setAssignedNode(original.getAssignedNode());
+        clone.setTenantId(original.getTenantId());
         clone.setClusterId(normalizeClusterId(original.getClusterId()));
+        clone.setPriority(original.getPriority());
+        clone.setPreemptible(original.isPreemptible());
+        clone.setNodeSelector(original.getNodeSelector());
         return clone;
     }
 

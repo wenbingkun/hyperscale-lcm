@@ -8,6 +8,7 @@ import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.domain.JobExecutionMessage;
 import com.sc.lcm.core.domain.JobStatusCallback;
 import io.quarkus.hibernate.reactive.panache.Panache;
+import io.quarkus.vertx.VertxContextSupport;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -28,6 +29,13 @@ import java.time.LocalDateTime;
 @ApplicationScoped
 @Slf4j
 public class JobExecutionService {
+
+    private record ScheduledDispatchSnapshot(String jobId, String jobName, String tenantId, String assignedNodeId) {
+    }
+
+    private record JobStatusSnapshot(String jobId, String jobName, String assignedNodeId, String status,
+            Integer exitCode) {
+    }
 
     @Inject
     ObjectMapper objectMapper;
@@ -61,23 +69,92 @@ public class JobExecutionService {
 
             log.info("📤 Job {} dispatched to node {} via Kafka", job.getId(), job.getAssignedNodeId());
 
-            // 更新状态
-            return Panache.withTransaction(() -> Job.<Job>findById(job.getId())
-                    .onItem().transformToUni(j -> {
-                        if (j != null) {
-                            j.setAssignedNodeId(job.getAssignedNodeId());
-                            j.setStatus(JobStatus.SCHEDULED);
-                            j.setScheduledAt(LocalDateTime.now());
-                        }
-                        return Uni.createFrom().voidItem();
-                    })).invoke(() -> {
-                        dashboardWebSocket.broadcastScheduleEvent(job.getId(), job.getAssignedNodeId(), "DISPATCHED");
-                    });
+            return recordScheduledDispatch(job.getId(), job.getAssignedNodeId());
 
         } catch (JsonProcessingException e) {
             log.error("❌ Failed to serialize job execution message", e);
             return Uni.createFrom().failure(e);
         }
+    }
+
+    /**
+     * 记录作业已进入调度队列，避免 UI / API 仍停留在 PENDING。
+     */
+    public Uni<Void> recordScheduledDispatch(String jobId, String assignedNodeId) {
+        return persistScheduledDispatch(jobId, assignedNodeId);
+    }
+
+    public void recordScheduledDispatchBlocking(String jobId, String assignedNodeId) {
+        try {
+            VertxContextSupport.subscribeAndAwait(() -> persistScheduledDispatch(jobId, assignedNodeId));
+        } catch (Throwable t) {
+            throw new IllegalStateException("Failed to persist scheduled state for job " + jobId, t);
+        }
+    }
+
+    private Uni<Void> persistScheduledDispatch(String jobId, String assignedNodeId) {
+        return Panache.withTransaction(() -> Job.<Job>findById(jobId)
+                .onItem().transform(job -> {
+                    if (job == null) {
+                        log.warn("Cannot mark job {} as scheduled because it does not exist", jobId);
+                        return null;
+                    }
+
+                    if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.SCHEDULED) {
+                        log.debug("Skipping schedule update for job {} because status is {}", jobId, job.getStatus());
+                        return null;
+                    }
+
+                    boolean updated = false;
+                    if (job.getStatus() == JobStatus.PENDING) {
+                        job.setStatus(JobStatus.SCHEDULED);
+                        updated = true;
+                    }
+                    if (assignedNodeId != null
+                            && !assignedNodeId.isBlank()
+                            && !assignedNodeId.equals(job.getAssignedNodeId())) {
+                        job.setAssignedNodeId(assignedNodeId);
+                        updated = true;
+                    }
+                    if (job.getScheduledAt() == null) {
+                        job.setScheduledAt(LocalDateTime.now());
+                        updated = true;
+                    }
+
+                    if (!updated) {
+                        return null;
+                    }
+
+                    return new ScheduledDispatchSnapshot(
+                            job.getId(),
+                            job.getName(),
+                            job.getTenantId(),
+                            job.getAssignedNodeId());
+                }))
+                .invoke(snapshot -> {
+                    if (snapshot == null) {
+                        return;
+                    }
+
+                    dashboardWebSocket.broadcastScheduleEvent(
+                            snapshot.jobId(),
+                            snapshot.assignedNodeId(),
+                            "DISPATCHED");
+                    dashboardWebSocket.broadcastJobStatus(
+                            snapshot.jobId(),
+                            snapshot.jobName(),
+                            JobStatus.SCHEDULED.name(),
+                            snapshot.assignedNodeId(),
+                            null);
+                    auditService.logJobScheduled(
+                            snapshot.jobId(),
+                            "SYSTEM",
+                            snapshot.tenantId(),
+                            snapshot.assignedNodeId())
+                            .subscribe().with(v -> {
+                            }, e -> log.error("Audit log failed", e));
+                })
+                .replaceWithVoid();
     }
 
     /**
@@ -94,50 +171,80 @@ public class JobExecutionService {
             return Uni.createFrom().voidItem();
         }
 
+        JobStatus callbackStatus;
+        try {
+            callbackStatus = JobStatus.valueOf(callback.status());
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid job status callback {}, sending to DLQ", callback.status(), e);
+            dlqEmitter.send(message);
+            return Uni.createFrom().voidItem();
+        }
+
         log.info("Received status callback for job {}: {}", callback.jobId(), callback.status());
+
+        JobStatus finalCallbackStatus = callbackStatus;
 
         return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
                 .onItem().transformToUni(job -> {
                     if (job == null) {
                         log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
                         dlqEmitter.send(message);
-                        return Uni.createFrom().voidItem();
+                        return Uni.createFrom().nullItem();
                     }
 
                     // 更新作业状态
-                    job.setStatus(JobStatus.valueOf(callback.status()));
+                    job.setStatus(finalCallbackStatus);
+                    if (callback.nodeId() != null && !callback.nodeId().isBlank()) {
+                        job.setAssignedNodeId(callback.nodeId());
+                    }
                     job.setExitCode(callback.exitCode());
                     job.setErrorMessage(callback.errorMessage());
                     job.setCompletedAt(callback.completedAt());
 
-                    return Uni.createFrom().voidItem();
-                })).invoke(() -> {
+                    return Uni.createFrom().item(new JobStatusSnapshot(
+                            job.getId(),
+                            job.getName(),
+                            job.getAssignedNodeId(),
+                            job.getStatus().name(),
+                            job.getExitCode()));
+                })).invoke(snapshot -> {
+                    if (snapshot == null) {
+                        return;
+                    }
+
                     // 更新指标
-                    if ("COMPLETED".equals(callback.status())) {
+                    if ("COMPLETED".equals(snapshot.status())) {
                         metricsService.recordJobCompleted();
-                    } else if ("FAILED".equals(callback.status())) {
+                    } else if ("FAILED".equals(snapshot.status())) {
                         metricsService.recordJobFailed();
                     }
 
                     // WebSocket 通知
                     dashboardWebSocket.broadcastScheduleEvent(
-                            callback.jobId(),
-                            callback.nodeId(),
-                            callback.status());
+                            snapshot.jobId(),
+                            snapshot.assignedNodeId(),
+                            snapshot.status());
+                    dashboardWebSocket.broadcastJobStatus(
+                            snapshot.jobId(),
+                            snapshot.jobName(),
+                            snapshot.status(),
+                            snapshot.assignedNodeId(),
+                            snapshot.exitCode());
 
                     // 审计日志
-                    if ("COMPLETED".equals(callback.status())) {
-                        auditService.logJobCompleted(callback.jobId(), "SYSTEM", null, callback.exitCode())
+                    if ("COMPLETED".equals(snapshot.status())) {
+                        auditService.logJobCompleted(snapshot.jobId(), "SYSTEM", null, callback.exitCode())
                                 .subscribe().with(v -> {
                                 }, e -> log.error("Audit log failed", e));
-                    } else if ("FAILED".equals(callback.status())) {
-                        auditService.logJobFailed(callback.jobId(), "SYSTEM", null, callback.errorMessage())
+                    } else if ("FAILED".equals(snapshot.status())) {
+                        auditService.logJobFailed(snapshot.jobId(), "SYSTEM", null, callback.errorMessage())
                                 .subscribe().with(v -> {
                                 }, e -> log.error("Audit log failed", e));
                     }
                 }).onFailure().invoke(err -> {
                     log.error("Database or business logic failure processing callback, routing to DLQ", err);
                     dlqEmitter.send(message);
-                }).onFailure().recoverWithNull();
+                }).onFailure().recoverWithNull()
+                .replaceWithVoid();
     }
 }
