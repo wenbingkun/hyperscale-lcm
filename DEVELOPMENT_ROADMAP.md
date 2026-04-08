@@ -52,13 +52,13 @@
 **目标**: 闭环"分配-执行"流程。
 *   **Execution**:
     *   [x] Docker 容器执行 + Kafka 状态回调。
-    *   [ ] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发 (Optional — 未来迭代)。
+    *   [x] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发 (Optional — 已完成)。
     *   [ ] (高级) 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
 *   **Frontend**:
     *   [x] React Dashboard 大屏（7 页面 + 5 组件 + WebSocket）。
     *   [x] 前端登录流程 + Token 管理。
     *   [x] 强化 UI/UX 动效与 Redfish 深层指标展示。
-    *   [ ] 调度结果可视化（拓扑图展示分配情况）(Optional — 未来迭代)。
+    *   [x] 调度结果可视化（拓扑图展示分配情况）(Optional — 已完成)。
 
 ## 📅 阶段五：生产就绪 (Production Ready) ✅ 已完成
 **目标**: 达到可部署的 MVP 水平。
@@ -94,7 +94,7 @@
     *   [ ] AlertManager 集成（邮件 / Slack / PagerDuty 通知）。
     *   [ ] 真实硬件验证 — 使用真实 Redfish / BMC 环境验证采集链路。
 *   **展示与落地**:
-    *   [ ] 调度结果拓扑图可视化（GPU / NVLink / IB Fabric 分配展示）。
+    *   [x] 调度结果拓扑图可视化（GPU / NVLink / IB Fabric 分配展示）。
     *   [ ] 编写完整 Demo 脚本（零接触发现 → 自动纳管 → 调度 → 执行）。
 
 ---
@@ -154,6 +154,15 @@
 4.  ✅ **回归测试补齐** — `JobDispatcherTest` 覆盖多执行模式映射；`E2EIntegrationTest` 新增 Shell 作业分发链路验证；`satellite/pkg/executor/ssh_test.go` 覆盖 SSH 执行成功、失败与参数校验
 5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.JobDispatcherTest --tests com.sc.lcm.core.E2EIntegrationTest --no-daemon` 通过；`docker run --rm -e GOPROXY=off -e GOMODCACHE=/go/pkg/mod -v /home/wenbk/go/pkg/mod:/go/pkg/mod -v /home/wenbk/projects/work/hyperscale-lcm:/workspace -w /workspace/satellite golang:1.24.7 go test ./... -count=1` 通过；并补跑 `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
 
+**Sprint 12 (Topology Visualization Delivery)** — ✅ 已完成
+
+完成内容：
+1.  ✅ **拓扑元数据出参补齐** — `/api/nodes` 现在返回 `gpuTopology`、`nvlinkBandwidthGbps`、`ibFabricId`，前端可直接按 GPU / NVLink / IB Fabric 维度渲染物理布局
+2.  ✅ **Topology 页面重构** — 原先基于固定 8 GPU 假设的示意图改为按 Zone / Rack 分组、按真实 `gpuCount` 和作业 `requiredGpuCount` 着色的分配视图，并新增活动作业图例与 IB Fabric 总览
+3.  ✅ **实时刷新补齐** — Topology 页面现已监听 `SCHEDULE_EVENT` / `JOB_STATUS` / `NODE_STATUS` / `HEARTBEAT_UPDATE`，在调度和状态变更时即时刷新布局
+4.  ✅ **回归测试补齐** — 新增 `NodeResourceTest` 校验拓扑字段映射，新增 `TopologyPage.test.tsx` 覆盖 Zone / Rack / NVLink / IB Fabric 展示、Idle 过滤与 WebSocket 刷新
+5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.api.NodeResourceTest --no-daemon` 通过；`cd frontend && npm test -- src/pages/TopologyPage.test.tsx` 通过；并补跑 `cd frontend && npm test`、`cd frontend && npm run lint`、`cd frontend && npm run build`、`./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon`
+
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
@@ -167,5 +176,5 @@
     *   [x] 前端零测试覆盖风险已开始收敛。
     *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `30%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
-    *   [ ] 拓扑可视化等差异化能力仍待补齐。
+    *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
     *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。

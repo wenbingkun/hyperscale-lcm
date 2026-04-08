@@ -22,6 +22,9 @@ export interface Satellite {
     memoryGb?: number;
     rackId?: string;
     zoneId?: string;
+    gpuTopology?: string;
+    nvlinkBandwidthGbps?: number;
+    ibFabricId?: string;
     // Redfish / BMC
     bmcIp?: string;
     bmcMac?: string;
