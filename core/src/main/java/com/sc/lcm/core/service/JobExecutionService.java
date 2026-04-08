@@ -7,6 +7,12 @@ import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.domain.JobExecutionMessage;
 import com.sc.lcm.core.domain.JobStatusCallback;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.quarkus.vertx.VertxContextSupport;
 import io.smallrye.mutiny.Uni;
@@ -18,6 +24,7 @@ import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 作业执行服务 (P6-1, P6-3)
@@ -56,6 +63,21 @@ public class JobExecutionService {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    OpenTelemetry openTelemetry;
+
+    private static final TextMapGetter<Map<String, String>> TRACE_CONTEXT_GETTER = new TextMapGetter<>() {
+        @Override
+        public Iterable<String> keys(Map<String, String> carrier) {
+            return carrier.keySet();
+        }
+
+        @Override
+        public String get(Map<String, String> carrier, String key) {
+            return carrier.get(key);
+        }
+    };
 
     /**
      * 派发作业到指定节点执行
@@ -183,68 +205,89 @@ public class JobExecutionService {
         log.info("Received status callback for job {}: {}", callback.jobId(), callback.status());
 
         JobStatus finalCallbackStatus = callbackStatus;
+        Context extractedContext = extractTraceContext(callback);
+        Span callbackSpan = openTelemetry.getTracer("hyperscale-lcm-core")
+                .spanBuilder("job-status-callback")
+                .setSpanKind(SpanKind.CONSUMER)
+                .setParent(extractedContext)
+                .setAttribute("job.id", callback.jobId())
+                .setAttribute("node.id", callback.nodeId() == null ? "unknown" : callback.nodeId())
+                .setAttribute("job.status", callback.status())
+                .startSpan();
 
-        return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
-                .onItem().transformToUni(job -> {
-                    if (job == null) {
-                        log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
+        try (Scope ignored = callbackSpan.makeCurrent()) {
+            return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
+                    .onItem().transformToUni(job -> {
+                        if (job == null) {
+                            log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
+                            dlqEmitter.send(message);
+                            return Uni.createFrom().nullItem();
+                        }
+
+                        // 更新作业状态
+                        job.setStatus(finalCallbackStatus);
+                        if (callback.nodeId() != null && !callback.nodeId().isBlank()) {
+                            job.setAssignedNodeId(callback.nodeId());
+                        }
+                        job.setExitCode(callback.exitCode());
+                        job.setErrorMessage(callback.errorMessage());
+                        job.setCompletedAt(callback.completedAt());
+
+                        return Uni.createFrom().item(new JobStatusSnapshot(
+                                job.getId(),
+                                job.getName(),
+                                job.getAssignedNodeId(),
+                                job.getStatus().name(),
+                                job.getExitCode()));
+                    })).invoke(snapshot -> {
+                        if (snapshot == null) {
+                            return;
+                        }
+
+                        // 更新指标
+                        if ("COMPLETED".equals(snapshot.status())) {
+                            metricsService.recordJobCompleted();
+                        } else if ("FAILED".equals(snapshot.status())) {
+                            metricsService.recordJobFailed();
+                        }
+
+                        // WebSocket 通知
+                        dashboardWebSocket.broadcastScheduleEvent(
+                                snapshot.jobId(),
+                                snapshot.assignedNodeId(),
+                                snapshot.status());
+                        dashboardWebSocket.broadcastJobStatus(
+                                snapshot.jobId(),
+                                snapshot.jobName(),
+                                snapshot.status(),
+                                snapshot.assignedNodeId(),
+                                snapshot.exitCode());
+
+                        // 审计日志
+                        if ("COMPLETED".equals(snapshot.status())) {
+                            auditService.logJobCompleted(snapshot.jobId(), "SYSTEM", null, callback.exitCode())
+                                    .subscribe().with(v -> {
+                                    }, e -> log.error("Audit log failed", e));
+                        } else if ("FAILED".equals(snapshot.status())) {
+                            auditService.logJobFailed(snapshot.jobId(), "SYSTEM", null, callback.errorMessage())
+                                    .subscribe().with(v -> {
+                                    }, e -> log.error("Audit log failed", e));
+                        }
+                    }).onFailure().invoke(err -> {
+                        log.error("Database or business logic failure processing callback, routing to DLQ", err);
                         dlqEmitter.send(message);
-                        return Uni.createFrom().nullItem();
-                    }
+                    }).onFailure().recoverWithNull()
+                    .replaceWithVoid()
+                    .onTermination().invoke(() -> callbackSpan.end());
+        }
+    }
 
-                    // 更新作业状态
-                    job.setStatus(finalCallbackStatus);
-                    if (callback.nodeId() != null && !callback.nodeId().isBlank()) {
-                        job.setAssignedNodeId(callback.nodeId());
-                    }
-                    job.setExitCode(callback.exitCode());
-                    job.setErrorMessage(callback.errorMessage());
-                    job.setCompletedAt(callback.completedAt());
-
-                    return Uni.createFrom().item(new JobStatusSnapshot(
-                            job.getId(),
-                            job.getName(),
-                            job.getAssignedNodeId(),
-                            job.getStatus().name(),
-                            job.getExitCode()));
-                })).invoke(snapshot -> {
-                    if (snapshot == null) {
-                        return;
-                    }
-
-                    // 更新指标
-                    if ("COMPLETED".equals(snapshot.status())) {
-                        metricsService.recordJobCompleted();
-                    } else if ("FAILED".equals(snapshot.status())) {
-                        metricsService.recordJobFailed();
-                    }
-
-                    // WebSocket 通知
-                    dashboardWebSocket.broadcastScheduleEvent(
-                            snapshot.jobId(),
-                            snapshot.assignedNodeId(),
-                            snapshot.status());
-                    dashboardWebSocket.broadcastJobStatus(
-                            snapshot.jobId(),
-                            snapshot.jobName(),
-                            snapshot.status(),
-                            snapshot.assignedNodeId(),
-                            snapshot.exitCode());
-
-                    // 审计日志
-                    if ("COMPLETED".equals(snapshot.status())) {
-                        auditService.logJobCompleted(snapshot.jobId(), "SYSTEM", null, callback.exitCode())
-                                .subscribe().with(v -> {
-                                }, e -> log.error("Audit log failed", e));
-                    } else if ("FAILED".equals(snapshot.status())) {
-                        auditService.logJobFailed(snapshot.jobId(), "SYSTEM", null, callback.errorMessage())
-                                .subscribe().with(v -> {
-                                }, e -> log.error("Audit log failed", e));
-                    }
-                }).onFailure().invoke(err -> {
-                    log.error("Database or business logic failure processing callback, routing to DLQ", err);
-                    dlqEmitter.send(message);
-                }).onFailure().recoverWithNull()
-                .replaceWithVoid();
+    Context extractTraceContext(JobStatusCallback callback) {
+        if (callback == null || callback.traceContext() == null || callback.traceContext().isEmpty()) {
+            return Context.current();
+        }
+        return openTelemetry.getPropagators()
+                .getTextMapPropagator()
+                .extract(Context.root(), callback.traceContext(), TRACE_CONTEXT_GETTER);
     }
 }

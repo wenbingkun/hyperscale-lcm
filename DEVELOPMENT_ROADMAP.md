@@ -90,7 +90,7 @@
     *   [x] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
     *   [ ] 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
 *   **可观测性与运维**:
-    *   [ ] OpenTelemetry 全链路串联 — 补全 Satellite → Kafka → Core 的 trace propagation。
+    *   [x] OpenTelemetry 全链路串联 — 补全 Satellite → Kafka → Core 的 trace propagation。
     *   [ ] AlertManager 集成（邮件 / Slack / PagerDuty 通知）。
     *   [ ] 真实硬件验证 — 使用真实 Redfish / BMC 环境验证采集链路。
 *   **展示与落地**:
@@ -163,6 +163,15 @@
 4.  ✅ **回归测试补齐** — 新增 `NodeResourceTest` 校验拓扑字段映射，新增 `TopologyPage.test.tsx` 覆盖 Zone / Rack / NVLink / IB Fabric 展示、Idle 过滤与 WebSocket 刷新
 5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.api.NodeResourceTest --no-daemon` 通过；`cd frontend && npm test -- src/pages/TopologyPage.test.tsx` 通过；并补跑 `cd frontend && npm test`、`cd frontend && npm run lint`、`cd frontend && npm run build`、`./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon`
 
+**Sprint 13 (Trace Propagation Hardening)** — ✅ 已完成
+
+完成内容：
+1.  ✅ **状态回调 trace 载荷补齐** — `JobStatusCallback` 新增 `traceContext` 字段，Satellite 回传的 `trace_context` 不再在 Kafka `jobs.status` 这一跳丢失
+2.  ✅ **Core 消费端上下文恢复** — `JobExecutionService` 在处理状态回调时会从 `traceContext` 提取父上下文，并创建 `job-status-callback` consumer span，补齐 Satellite → Kafka → Core 的 trace 续接
+3.  ✅ **Kafka 透传回归测试** — 新增 `JobStatusForwarderTest` 验证 Kafka payload 会保留 traceContext，新添 `JobExecutionServiceTraceContextTest` 验证 Core 能恢复 remote parent trace
+4.  ✅ **E2E 断言增强** — `E2EIntegrationTest` 现在显式上报 `traceparent`，并校验 `jobs.status` 主题中的状态消息仍包含原始 traceContext
+5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.JobStatusForwarderTest --tests com.sc.lcm.core.service.JobExecutionServiceTraceContextTest --tests com.sc.lcm.core.E2EIntegrationTest --no-daemon` 通过；并补跑 `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon`
+
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
@@ -177,4 +186,5 @@
     *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `30%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
-    *   [ ] 真实硬件 Redfish / BMC 验证与 OTel 全链路 propagation 仍待补齐。
+    *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
+    *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐。

@@ -19,6 +19,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -96,7 +97,8 @@ public class E2EIntegrationTest {
                     "Scheduled job should target the registered node");
             assertNotNull(scheduledStatus.scheduledAt(), "Scheduled job should record its scheduled timestamp");
 
-            emitCompletion(streamContext, jobId, "Mock completed", 0);
+            String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+            emitCompletion(streamContext, jobId, "Mock completed", 0, Map.of("traceparent", traceparent));
 
             ConsumerRecord<String, String> statusRecord = awaitStatusRecord(
                     companion,
@@ -106,6 +108,10 @@ public class E2EIntegrationTest {
             assertNotNull(statusRecord, "Should have received a status message on jobs.status topic");
             assertTrue(statusRecord.value().contains("COMPLETED"), "Status message should contain COMPLETED");
             assertTrue(statusRecord.value().contains(jobId), "Status message should contain the job ID");
+            assertTrue(statusRecord.value().contains("\"traceContext\""),
+                    "Status message should preserve trace context across Kafka");
+            assertTrue(statusRecord.value().contains(traceparent),
+                    "Status message should retain the propagated traceparent");
 
             JobStatusResponse completedStatus = awaitJobStatus(token, jobId, status ->
                     "COMPLETED".equals(status.status()) && Integer.valueOf(0).equals(status.exitCode()),
@@ -244,16 +250,24 @@ public class E2EIntegrationTest {
     }
 
     private void emitCompletion(TestStreamContext streamContext, String jobId, String message, int exitCode) {
+        emitCompletion(streamContext, jobId, message, exitCode, Map.of());
+    }
+
+    private void emitCompletion(TestStreamContext streamContext, String jobId, String message, int exitCode,
+            Map<String, String> traceContext) {
         MultiEmitter<? super StreamRequest> streamEmitter = streamContext.streamEmitterRef().get();
         assertNotNull(streamEmitter, "Expected an initialized stream emitter");
+        JobStatusUpdate.Builder update = JobStatusUpdate.newBuilder()
+                .setJobId(jobId)
+                .setStatus(com.sc.lcm.core.grpc.JobStatus.COMPLETED)
+                .setMessage(message)
+                .setExitCode(exitCode);
+        if (traceContext != null && !traceContext.isEmpty()) {
+            update.putAllTraceContext(traceContext);
+        }
         streamEmitter.emit(StreamRequest.newBuilder()
                 .setSatelliteId(streamContext.satelliteId())
-                .setStatusUpdate(JobStatusUpdate.newBuilder()
-                        .setJobId(jobId)
-                        .setStatus(com.sc.lcm.core.grpc.JobStatus.COMPLETED)
-                        .setMessage(message)
-                        .setExitCode(exitCode)
-                        .build())
+                .setStatusUpdate(update.build())
                 .build());
     }
 

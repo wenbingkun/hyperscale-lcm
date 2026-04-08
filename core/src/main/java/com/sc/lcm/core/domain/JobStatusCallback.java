@@ -1,6 +1,7 @@
 package com.sc.lcm.core.domain;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 作业状态回调消息 (P6-3)
@@ -16,7 +17,8 @@ public record JobStatusCallback(
         String stdout,
         String stderr,
         long executionTimeMs,
-        LocalDateTime completedAt) {
+        LocalDateTime completedAt,
+        Map<String, String> traceContext) {
 
     /**
      * 创建成功回调
@@ -25,7 +27,7 @@ public record JobStatusCallback(
             long executionTimeMs, String stdout) {
         return new JobStatusCallback(
                 jobId, nodeId, "COMPLETED", 0, null,
-                stdout, null, executionTimeMs, LocalDateTime.now());
+                stdout, null, executionTimeMs, LocalDateTime.now(), null);
     }
 
     /**
@@ -36,6 +38,6 @@ public record JobStatusCallback(
             long executionTimeMs, String stderr) {
         return new JobStatusCallback(
                 jobId, nodeId, "FAILED", exitCode, errorMessage,
-                null, stderr, executionTimeMs, LocalDateTime.now());
+                null, stderr, executionTimeMs, LocalDateTime.now(), null);
     }
 }
