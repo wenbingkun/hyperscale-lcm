@@ -1,34 +1,35 @@
 # 任务完成审查报告 (Task Completion Audit)
 
-> 审查日期: 2026-03-10 (基于 main 分支最新代码 `4cb1b98`)
-> 基于: `documentation/PROJECT_ANALYSIS_AND_NEXT_STEPS.md` 待办任务清单
+> 审查日期: 2026-04-08 (基于 main 分支最新代码 `19fbc81`)
+> 基于: `DEVELOPMENT_ROADMAP.md` 与 `documentation/PROJECT_ANALYSIS_AND_NEXT_STEPS.md` 当前状态
 
 ---
 
 ## 一、总体完成度
 
-| 阶段 | 任务数 | 完成 | 部分完成 | 未实现 |
-|------|--------|------|----------|--------|
-| 近期 (1-2 周) | 3 | 2 | 1 | 0 |
-| 中期 (3-4 周) | 4 | 4 | 0 | 0 |
-| 远期 (5-8 周) | 5 | 2 | 3 | 0 |
-| **合计** | **12** | **8** | **4** | **0** |
+| 任务范围 | 完成 | 部分完成 | 未实现 | 加权完成度 |
+|----------|------|----------|--------|------------|
+| **6.x 工程质量与可观测性** | 2 | 2 | 0 | **96%** |
+| **7.x 功能深化与自动化** | 4 | 1 | 0 | **96%** |
+| **8.x 生产运营能力** | 1 | 2 | 0 | **92%** |
+| **合计** | **7** | **5** | **0** | **95%** |
 
 ---
 
 ## 二、逐项审查
 
-### 近期 (1-2 周): 工程质量保证
+### 6.x 工程质量与可观测性
 
 #### 6.1 集成 JaCoCo 测试覆盖率 — 完成度 95%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| Gradle 配置 JaCoCo 插件 | 已完成 | `core/build.gradle` lines 104-134, `id 'jacoco'`, toolVersion 0.8.11 |
-| CI 生成测试覆盖率报告 | 已完成 | `.github/workflows/ci.yml` lines 96-103, 上传 XML+HTML 报告 |
-| 设置 70% 最低测试通过门槛 | **未达标** | 当前阈值为 **30%** (`build.gradle:127`)，注释标注目标 70% |
+| Gradle 配置 JaCoCo 插件 | 已完成 | `core/build.gradle` 已集成 `jacoco` |
+| `check` 中执行覆盖率校验 | 已完成 | `jacocoTestCoverageVerification` 已接入 `check` |
+| 量化覆盖率基线 | 已完成 | 当前门槛为 `30%`，本地最新实测指令覆盖率约 **45.90%** |
+| 达到长期目标 `70%` | **未达标** | 当前采用渐进式提升策略，基线已落地但目标值尚未达到 |
 
-**遗留问题**: `jacocoTestCoverageVerification` 的 `minimum` 设为 `0.30`，未达到文档要求的 `0.70`。注释写明 "Target: 70% by end of next sprint"，属于渐进式提升策略，非遗漏。
+**结论**: 覆盖率从“无门槛”提升到“可量化、可阻断”，工程能力已闭环；遗留仅在于门槛继续抬升。
 
 ---
 
@@ -36,53 +37,54 @@
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| Core TraceId 注入 Kafka | 已完成 | `JobDispatcher.java`, 使用 OTel Propagator 注入 |
-| Kafka → gRPC 透传 | 已完成 | `StreamRegistry.java`, `putAllTraceContext()` |
-| Satellite 提取 TraceId | 已完成 | `handler.go:38-40`, `otel.GetTextMapPropagator().Extract()` |
-| Satellite 创建子 Span | 已完成 | `handler.go:43-44`, `tracer.Start(ctx, ...)` |
-| Proto 定义 trace_context | 已完成 | `lcm.proto`: `JobStatusUpdate.trace_context`, `StreamResponse.trace_context` |
-| gRPC OTel 自动插桩 | 已完成 | `main.go:110`, `otelgrpc.NewClientHandler()` |
+| Core 调度消息注入 trace context | 已完成 | `JobDispatcher.java` 注入 `traceContext` |
+| Kafka → gRPC 透传到 Satellite | 已完成 | `StreamRegistry.java` 透传 `trace_context` |
+| Satellite 提取父上下文并创建子 Span | 已完成 | `satellite/cmd/satellite/handler.go` 提取并创建 consumer span |
+| Satellite 状态回调保留 trace context | 已完成 | `JobStatusUpdate.trace_context` 回传 |
+| Kafka `jobs.status` 保留 trace context | 已完成 | `JobStatusCallback.traceContext` 已持久化进 payload |
+| Core 消费端恢复上下文 | 已完成 | `JobExecutionService` 处理回调时提取父上下文并续接 `job-status-callback` span |
+| 回归测试 | 已完成 | `JobStatusForwarderTest`、`JobExecutionServiceTraceContextTest`、`E2EIntegrationTest` |
 
-**结论**: 端到端链路追踪完整实现，无遗漏。
+**结论**: 现在不只是“基础接线完成”，而是 **Satellite → Kafka → Core** 这段最容易断链的状态回调路径也已显式打通并有测试兜底。
 
 ---
 
-#### 6.3 添加集成测试套件 — 完成度 80%
+#### 6.3 添加集成测试套件 — 完成度 90%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| Testcontainers 集成 | 已完成 | 通过 Quarkus DevServices 自动启动容器 |
-| Core + PG + Kafka + Redis | 已完成 | `application.properties` DevServices 启用三者；CI 也提供完整 services |
-| E2E 测试类 | 已完成 | `E2EIntegrationTest.java`, 覆盖注册→心跳→Stream→认证→作业→Kafka |
+| Testcontainers / DevServices 集成 | 已完成 | Quarkus DevServices 已覆盖 PostgreSQL / Kafka / Redis |
+| Core 端到端集成测试 | 已完成 | `E2EIntegrationTest.java` 覆盖注册、心跳、作业提交、Kafka 回调 |
+| 执行模式集成测试 | 已完成 | E2E 已覆盖 Docker 默认下发与 Shell 模式链路 |
+| Trace propagation E2E | 已完成 | E2E 已断言 `jobs.status` 消息保留原始 `traceContext` |
+| 前端实时刷新增强验证 | 已完成 | Jobs / JobDetail / Topology 等页面已有 WebSocket 响应测试 |
+| 错误场景与并发场景 | **仍有缺口** | 失败重试、断连恢复、压力级集成场景仍不充分 |
 
-**不足**:
-- 只有 happy path 测试，缺少错误场景 (注册失败、Stream 断连、超时)
-- 缺少压力/并发测试场景
-- 缺少数据清理和测试隔离机制
+**结论**: 集成测试已经从“基础 happy path”提升到“跨服务主链路回归保护”，但极端和故障场景仍有扩展空间。
 
 ---
-
-### 中期 (3-4 周): 核心功能与运维能力
 
 #### 6.4 部署 CI 质量门禁 — 完成度 100%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| CodeQL 或 SonarQube | 已完成 | `.github/workflows/codeql.yml`, 支持 Go/Java/JavaScript |
-| PR 自动静态分析 | 已完成 | 触发条件: PR 创建 + 每周定时扫描 |
+| CodeQL / 静态分析 | 已完成 | 已在仓库中配置工作流 |
+| Core 质量门禁 | 已完成 | `gradlew check` + JaCoCo |
+| Frontend 质量门禁 | 已完成 | `npm test` / `lint` / `build` |
+| Satellite 测试 | 已完成 | Go tests 已可在标准 Go 1.24 环境验证 |
 
 ---
 
-#### 7.1 实现 Zone 分区并行调度 — 完成度 100% ✅ (已修复)
+### 7.x 功能深化与自动化
+
+#### 7.1 实现 Zone 分区并行调度 — 完成度 100%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| Zone 分区调度服务 | 已完成 | `PartitionedSchedulingService.java` (176 lines), zone 分区 + 并行求解 |
-| 并行求解与合并 | 已完成 | `ExecutorService` 线程池, `CompletableFuture`, 最优解选择 |
-| Node 域模型支持 | 已完成 | `Node.java`: `zoneId`, `rackId`, GPU 拓扑字段 |
-| API 层接入 | 已完成 | `JobResource.java:38-42`: 注入 `PartitionedSchedulingService`，通过 `lcm.scheduling.partitioned.enabled` 配置开关切换 |
-
-**修复说明**: commit `1a4cc73` 将 `PartitionedSchedulingService` 注入到 `JobResource`，增加了 `ConfigProperty` 配置项 `lcm.scheduling.partitioned.enabled`。API 现在根据配置在全局调度和分区调度之间切换 (`JobResource.java:69-81`)。
+| Zone 分区求解框架 | 已完成 | `PartitionedSchedulingService` |
+| 并行求解与结果合并 | 已完成 | `CompletableFuture` + `ExecutorService` |
+| API 接入 | 已完成 | `JobResource` / `AllocationResource` 已接入 |
+| 状态持久化与回归测试 | 已完成 | 已验证 `SCHEDULED`、`assignedNodeId`、`scheduledAt` |
 
 ---
 
@@ -90,162 +92,144 @@
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| GPU 拓扑图组件 | 已完成 | `SatelliteDetailPage.tsx`: `GpuTopologyView` 含 NVLink/NVSwitch 可视化 |
-| 集群级拓扑页面 | 已完成 | `TopologyPage.tsx` (194 lines): 集群级 GPU 拓扑和分配热力图 |
-| 分配热力图 | 已完成 | 利用率颜色编码 (红/黄/绿)，温度监控 |
-| 可视化库 | 已完成 | `recharts ^3.6.0`, `framer-motion ^12.26.2` |
-| 路由集成 | 已完成 | `App.tsx` 新增路由, `DashboardLayout.tsx` 新增导航链接 |
+| 集群级拓扑页面 | 已完成 | `TopologyPage.tsx` |
+| 按 Zone / Rack / IB Fabric 分组展示 | 已完成 | 页面已按真实物理结构组织 |
+| 基于实际 GPU 数量与作业需求着色 | 已完成 | 不再依赖固定 8 GPU 假设 |
+| WebSocket 实时刷新 | 已完成 | 监听 `SCHEDULE_EVENT` / `JOB_STATUS` / `NODE_STATUS` / `HEARTBEAT_UPDATE` |
+| 回归测试 | 已完成 | `TopologyPage.test.tsx` + `NodeResourceTest` |
+
+**结论**: 拓扑页已从“示意性占位”演进为实际可用于排查和展示调度结果的页面。
 
 ---
-
-#### 8.1 配置 Grafana 告警仪表盘 — 完成度 100%
-
-| 要求 | 状态 | 说明 |
-|------|------|------|
-| Dashboard 面板 | 已完成 | `infra/grafana/dashboards/hyperscale-lcm-overview.json` (增强版) |
-| Prometheus 告警规则 | 已完成 | `infra/prometheus-alerts.yml`, 8 条规则 |
-| Grafana Provisioning | 已完成 | `infra/grafana/provisioning/datasources/prometheus.yaml` + `dashboards/dashboards.yaml` |
-
-**告警规则覆盖**: NoOnlineNodes (CRITICAL), NodeCountDrop, HighJobFailureRate, JobQueueBacklog, SchedulingLatencyHigh, CoreServiceDown (CRITICAL), HighJvmMemoryUsage, HighHttpErrorRate
-
----
-
-### 远期 (5-8 周): 深度管理与自动化
 
 #### 7.3 研发 DHCP Listener 设备自动发现功能 — 完成度 100%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| DHCP 广播监听 | 已完成 | `satellite/pkg/discovery/dhcp.go` (174 lines), UDP :67, RFC 2131 解析 |
-| ARP 扫描器 | 已完成 | `arp_scanner.go`, 60s 周期扫描, `ip neigh show` |
-| Discovery Manager | 已完成 | `discovery.go`, 协调 DHCP+ARP, OUI 厂商识别, gRPC 上报 |
-| 单元测试 | 已完成 | `dhcp_test.go` (95 lines, 8 个测试用例), `oui_resolver_test.go` |
-| main.go 集成 | 已完成 | `main.go:199-201`: `discovery.NewManager()` + `discoveryMgr.Start(bgCtx)` |
+| DHCP 监听 | 已完成 | 已具备独立实现与测试 |
+| ARP 扫描 | 已完成 | 已接入发现链路 |
+| Discovery 上报与规划 | 已完成 | 已对接 Core 发现设备池与 claim 规划 |
 
 ---
 
-#### 7.4 集成 Ansible/SSH 远程命令执行 — 完成度 85% ✅ (大幅改进)
+#### 7.4 集成 Ansible/SSH 远程命令执行 — 完成度 100%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| Shell 命令执行 | 已完成 | `satellite/pkg/executor/shell.go`: 使用 `exec.CommandContext` 实际执行 `bash -c`，捕获 stdout/stderr 和 exit code |
-| Shell 单元测试 | 已完成 | `satellite/pkg/executor/shell_test.go` (65 lines): 覆盖成功/失败/退出码场景 |
-| Ansible Playbook 执行 | 已完成 | `satellite/pkg/executor/ansible.go` (54 lines): 接收 YAML 写入临时文件，调用 `ansible-playbook`，捕获输出和退出码 |
-| handler.go 集成 | 已完成 | `handler.go:52-101`: `EXEC_SHELL` 和 `EXEC_ANSIBLE` 均调用 `executor` 包，正确处理错误和状态上报 |
-| SSH 远程执行 | **未实现** | 无 SSH 客户端库引入，无 `EXEC_SSH` 命令类型 |
+| Shell 执行 | 已完成 | `RunShell` |
+| Ansible Playbook 执行 | 已完成 | `RunAnsiblePlaybook` |
+| SSH 远程执行 | 已完成 | `RunSSH`，支持私钥认证、可选 `sshpass` 密码认证、`known_hosts` / 非严格校验 |
+| Core 执行策略建模 | 已完成 | `Job.executionType / executionPayload` |
+| Dispatcher 命令映射 | 已完成 | `EXEC_DOCKER` / `EXEC_SHELL` / `EXEC_ANSIBLE` / `EXEC_SSH` |
+| 单元 / E2E 测试 | 已完成 | `JobDispatcherTest`、`ssh_test.go`、`E2EIntegrationTest` |
 
-**修复说明**: commit `12a26c5` 完全重写了命令执行逻辑。`EXEC_SHELL` 不再是假实现，改为调用 `executor.RunShell()` 实际执行命令。新增 `EXEC_ANSIBLE` 命令类型和 `executor.RunAnsiblePlaybook()` 实现。仅 SSH 远程执行尚未实现。
+**结论**: 这一项已不应再被视为“部分完成”。当前缺的不是 SSH 执行本身，而是更高阶的自动化运维编排。
 
 ---
 
-#### 7.5 实现 PXE/iPXE 裸金属自动装机 — 完成度 80% ✅ (从 0% 提升)
+#### 7.5 实现 PXE/iPXE 裸金属自动装机 — 完成度 80%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| TFTP 服务器 | 已完成 | `satellite/pkg/pxe/server.go:65-98`: 基于 `github.com/pin/tftp/v3` 实现，含路径遍历防护 |
-| iPXE Boot 脚本生成 | 已完成 | `server.go:125-152`: `handleIpxeScript()` 根据 MAC 地址动态生成 iPXE 引导脚本 |
-| Cloud-Init 模板 | 已完成 | `server.go:155-184`: `handleCloudInit()` 返回 `#cloud-config` 自动安装配置 |
-| Meta-Data 端点 | 已完成 | `pxe/meta.go:9-12`: `handleMetaData()` 提供 nocloud datasource instance-id |
-| HTTP PXE 服务器 | 已完成 | `server.go:102-121`: 端口 `:8090` (避免与 Satellite :8080 冲突) |
-| 单元测试 | 已完成 | `pxe/server_test.go` (93 lines): 4 个测试用例覆盖 iPXE/CloudInit/MetaData/参数验证 |
-| main.go 集成 | 已完成 | `main.go:209`: `go pxe.StartPXEServices(bgCtx, pxe.DefaultConfig)` |
-| 安全防护 | 已完成 | `server.go:72-76`: 路径遍历攻击防御 (commit `115f1f1` 修复) |
+| TFTP 服务 | 已完成 | `satellite/pkg/pxe/server.go` |
+| iPXE 脚本生成 | 已完成 | `/ipxe` 动态脚本 |
+| Cloud-Init 模板 | 已完成 | `/cloud-init/user-data` |
+| Meta-Data 端点 | 已完成 | `/cloud-init/meta-data` |
+| main.go 集成 | 已完成 | Satellite 启动时拉起 PXE 服务 |
+| 单元测试 | 已完成 | `pxe/server_test.go` |
+| DHCP option 66/67 联动 | **未完成** | 仍未与 DHCP 分发策略形成闭环 |
+| 镜像仓库 / 节点特定模板 | **未完成** | 当前仍偏静态化 |
 
-**未完成部分**:
-- DHCP option 66/67 集成 (当前 DHCP Listener 和 PXE 服务独立运行)
-- OS 镜像仓库管理 (TFTP root 目录需手动预置文件)
-- Cloud-Init 模板未与 Core gRPC 集成获取节点特定配置 (当前为硬编码模板)
+**结论**: 该能力已完成“基础 PXE 服务”层，但还没有到“生产级自动化重装闭环”。
 
 ---
 
-#### 8.2 建设负载测试自动化能力 — 完成度 95% ✅ (大幅改进)
+### 8.x 生产运营能力
+
+#### 8.1 配置 Grafana 告警仪表盘 — 完成度 100%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| loadgen 工具 | 已完成 | `satellite/cmd/loadgen/main.go`, 支持并发 Satellite 模拟 |
-| mTLS 支持 | 已完成 | 证书路径可配置 (`-cert`, `-key`, `-ca` flags) |
-| CI 流水线集成 | 已完成 | `.github/workflows/ci.yml` lines 159-267: `load-test` job, 500 connections for 30s |
-| Core 健康检查 | 已完成 | CI 中 `Start Core Server Background` + `Verify Core Health Post-Load` |
-| 完整依赖服务 | 已完成 | CI load-test job 配置了 PostgreSQL + Redis + Kafka services |
-| 性能基线/回归检测 | **未完成** | 无阈值断言、无趋势对比 (仅验证 Core 存活) |
+| Dashboard 面板 | 已完成 | 已有预置 Grafana 仪表盘 |
+| Prometheus 告警规则 | 已完成 | PrometheusRule / alerts 已具备 |
+| Provisioning 资产 | 已完成 | Helm / infra 资产齐全 |
 
-**修复说明**: commit `0d72b26` 和 `7feef8e` 添加了完整的 `load-test` CI job，包括构建 Core 和 loadgen、启动 Core 后台进程、执行压测、验证 Core 健康状态。
+**注意**: 这里的“已完成”指 **监控面板与规则**，不等同于 `AlertManager` 外部通知渠道已经完成。
 
 ---
 
-#### 8.3 提供多集群管理能力 — 完成度 50% ✅ (提升)
+#### 8.2 建设负载测试自动化能力 — 完成度 95%
 
 | 要求 | 状态 | 说明 |
 |------|------|------|
-| 多租户隔离 | 已完成 | `Tenant.java`: 配额管理、CRUD API、暂停/激活 |
-| Satellite cluster_id | 已完成 | `Satellite.java:28`: `clusterId` 字段，构造函数默认 `"default"` |
-| 数据库迁移 | 已完成 | `V2.0.0__Multi_Cluster.sql`: 添加 `cluster_id` 列 + NOT NULL + 默认值 |
-| gRPC cluster 标识 | 已完成 | `main.go:44`: `--cluster` flag, `lcm.proto` 新增字段 |
-| 心跳携带 cluster_id | 已完成 | `main.go:215`: `BuildHeartbeatRequest(satelliteId, *clusterFlag)` |
-| 跨集群调度隔离 | **未完成** | `SchedulingService` 仍全局加载所有 Satellite，未按 cluster_id 过滤 |
-| Cluster 管理 API | **未完成** | 无 Cluster CRUD API (列出集群、集群状态、集群内节点) |
-| 集群联邦 | **未实现** | 单 Core 实例管理所有节点，无多 Core 分布式协调 |
-
-**修复说明**: commit `9ae238f` 和 `4cb1b98` 为 Satellite 添加了 `cluster_id` 字段和 Flyway 迁移脚本，gRPC Satellite Agent 通过 `--cluster` flag 上报所属集群。但调度层和 API 层尚未利用此字段实现集群隔离。
+| loadgen 工具 | 已完成 | Satellite 侧已有负载模拟器 |
+| CI 中执行压测 | 已完成 | 流水线已有 load-test 路径 |
+| 基础健康验证 | 已完成 | 压测后会校验 Core 存活 |
+| 明确阈值 / 趋势回归 | **未完成** | 仍缺性能回归阈值与趋势分析基线 |
 
 ---
 
-## 三、需修复的关键问题
+#### 8.3 提供多集群管理能力 — 完成度 80%
 
-### P0 — 已全部解决 ✅
+| 要求 | 状态 | 说明 |
+|------|------|------|
+| `clusterId` 模型落地 | 已完成 | `Satellite` / `Job` / gRPC / Flyway 已支持 |
+| 心跳 / 注册的集群校验 | 已完成 | `LcmGrpcService` 已校验 heartbeat cluster mismatch |
+| 调度按集群隔离 | 已完成 | `SchedulingService` / `PartitionedSchedulingService` 已按 `clusterId` 过滤 |
+| 集群汇总 / 节点查询 API | 已完成 | `ClusterResource` + `ClusterResourceTest` |
+| 集群生命周期管理 | **未完成** | 仍缺更完整的 Cluster CRUD / 运维动作 |
+| 联邦 / 多 Core 协调 | **未完成** | 目前仍是单 Core 管理多集群 |
 
-| # | 原问题 | 状态 | 修复 commit |
-|---|--------|------|-------------|
-| ~~1~~ | ~~`PartitionedSchedulingService` 未被 API 调用~~ | **已修复** | `1a4cc73` |
-| ~~2~~ | ~~`EXEC_SHELL` 假实现~~ | **已修复** | `12a26c5` |
+**结论**: 多集群已从“字段存在”提升到“查询、校验、调度隔离可用”，但尚未达到联邦化运营阶段。
 
-### P1 — 配置/阈值问题
+---
 
-| # | 问题 | 文件 | 修复方案 |
-|---|------|------|----------|
-| 1 | JaCoCo 覆盖率阈值 30% 低于目标 70% | `build.gradle:127` | 渐进式提升策略，当前属于预期行为，需在测试覆盖率达标后调整 |
+## 三、当前仍待推进的关键项
 
-### P2 — 功能缺失 (需新增开发)
-
-| # | 问题 | 预估工作量 |
-|---|------|------------|
-| 2 | SSH 远程命令执行 | 1-2 周 (需引入 `golang.org/x/crypto/ssh`) |
-| 3 | 集群调度隔离 (SchedulingService 按 cluster_id 过滤) | 1 周 |
-| 4 | Cluster 管理 API | 1-2 周 |
-| 5 | PXE/DHCP option 66/67 集成 + 镜像管理 | 2-3 周 |
-| 6 | 负载测试性能基线/回归检测 | 2-3 天 |
+| 优先级 | 事项 | 说明 |
+|--------|------|------|
+| 🔴 P0 | 真实硬件 Redfish / BMC 验证 | 核心接入链路仍需真实设备验收 |
+| 🔴 P0 | AlertManager 外部通知 | 告警规则已存在，但邮件 / Slack / PagerDuty 尚未打通 |
+| 🟡 P1 | PXE/iPXE 闭环补齐 | DHCP option 66/67、镜像管理、动态 Cloud-Init 仍缺 |
+| 🟡 P1 | 完整 Demo 脚本 | 缺少可重复演示“发现 → 纳管 → 调度 → 执行”的标准脚本 |
+| 🟡 P1 | 覆盖率门槛继续提升 | 当前基线为 30%，已不再是零门槛，但仍未达到长期目标 70% |
+| 🟠 P2 | Playwright E2E 扩充 | 浏览器级流程覆盖仍可继续补强 |
+| 🟠 P2 | 负载测试趋势基线 | 需要把性能验证从“能跑”提升到“可比较” |
 
 ---
 
 ## 四、完成度可视化
 
 ```
-6.1 JaCoCo 覆盖率      [██████████████████░░] 95%  ← 阈值按计划渐进提升
-6.2 OTel 全链路追踪     [████████████████████] 100%
-6.3 集成测试套件        [████████████████░░░░] 80%
-6.4 CI 质量门禁         [████████████████████] 100%
-7.1 Zone 分区调度       [████████████████████] 100% ✅ 已接入 API
-7.2 拓扑可视化          [████████████████████] 100%
-7.3 DHCP 设备发现       [████████████████████] 100%
-7.4 Ansible/Shell 命令  [█████████████████░░░] 85%  ← 缺 SSH
-7.5 PXE/iPXE 裸金属装机  [████████████████░░░░] 80%  ✅ TFTP+iPXE+CloudInit 已实现
-8.1 Grafana 告警仪表盘   [████████████████████] 100%
-8.2 负载测试自动化       [███████████████████░] 95%  ✅ CI 已集成
-8.3 多集群管理           [██████████░░░░░░░░░░] 50%  ✅ cluster_id 已落地
+6.1 JaCoCo 覆盖率       [██████████████████░░] 95%
+6.2 OTel 全链路追踪      [████████████████████] 100%
+6.3 集成测试套件         [██████████████████░░] 90%
+6.4 CI 质量门禁          [████████████████████] 100%
+7.1 Zone 分区调度        [████████████████████] 100%
+7.2 拓扑可视化           [████████████████████] 100%
+7.3 DHCP 设备发现        [████████████████████] 100%
+7.4 Ansible / SSH 执行   [████████████████████] 100%
+7.5 PXE / iPXE 裸机装机   [████████████████░░░░] 80%
+8.1 Grafana 告警仪表盘    [████████████████████] 100%
+8.2 负载测试自动化        [███████████████████░] 95%
+8.3 多集群管理            [████████████████░░░░] 80%
 ```
 
-**总体加权完成度: ~90%** (较上次审查提升 19%)
+**总体加权完成度: 95%**
 
 ---
 
-## 五、与上次审查 (基于旧代码) 的差异说明
+## 五、与上次审查相比的关键变化
 
-| 任务 | 旧评估 | 新评估 | 关键 commit |
-|------|--------|--------|-------------|
-| 7.1 Zone 分区调度 | 70% (未接入 API) | **100%** | `1a4cc73` |
-| 7.4 远程命令执行 | 30% (假实现) | **85%** | `12a26c5` |
-| 7.5 PXE/iPXE | 0% (完全未实现) | **80%** | `247cb1a`, `115f1f1` |
-| 8.2 负载测试 | 70% (未集成 CI) | **95%** | `0d72b26`, `7feef8e` |
-| 8.3 多集群管理 | 30% (仅多租户) | **50%** | `9ae238f`, `4cb1b98` |
+| 项目 | 上次审查结论 | 当前结论 | 变化说明 |
+|------|--------------|----------|----------|
+| 6.2 OTel 全链路 | 名义 100%，但文档未覆盖状态回调经 Kafka 续接 | **100%（已显式覆盖 Satellite → Kafka → Core）** | 状态消息 traceContext 已保留并具备回归测试 |
+| 7.2 拓扑可视化 | 100%，但描述仍停留在旧版页面 | **100%（已升级为真实 Zone / Rack / IB Fabric 可视化）** | 页面与测试已显著增强 |
+| 7.4 远程命令执行 | 85%，缺 SSH | **100%** | SSH 执行模式已落地并测试覆盖 |
+| 8.3 多集群管理 | 50%，仅 `clusterId` 初步落地 | **80%** | 已有调度隔离、集群汇总 API 与测试 |
 
-上次审查基于较旧的代码快照，遗漏了 main 分支后续的多次功能修复和新增提交。本次审查已基于 main 分支最新 commit `4cb1b98` 全面校正。
+**说明**: 上一版审查文档已经明显落后于当前主干状态，本次已按代码现状整体校正。
+
+---
+
+*本审查报告已根据当前主干代码与最近一轮验证结果重新生成。*

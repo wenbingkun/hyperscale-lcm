@@ -1,20 +1,27 @@
 # Hyperscale LCM 项目深度分析报告与下一步计划
 
-> 生成日期: 2026-03-07
+> 更新日期: 2026-04-08
+> 基于: main 分支当前代码状态与最近一轮本地验证结果
 
 ---
 
 ## 一、项目概览
 
-**Hyperscale LCM** (Lifecycle Management) 是一个企业级分布式 GPU 集群作业调度平台，设计目标为管理 **10,000+ GPU 节点**。项目采用三层微服务架构：
+**Hyperscale LCM** (Lifecycle Management) 是一个面向企业级 GPU / 裸金属资源池的分布式生命周期管理平台，目标是统一完成 **发现、纳管、调度、执行、观测** 五条主链路。
 
 | 层级 | 技术栈 | 职责 |
 |------|--------|------|
-| **Core Service** | Java 21 + Quarkus 3.6.4 | 调度引擎、API 网关、业务逻辑中心 |
-| **Satellite Agent** | Go 1.24 | 节点代理、硬件采集、容器执行 |
-| **Frontend** | React 19 + TypeScript + Vite | 可视化仪表盘、作业管理 UI |
+| **Core Service** | Java 21 + Quarkus 3.6.4 | 调度引擎、API 网关、业务逻辑中心、Kafka / gRPC / WebSocket 编排 |
+| **Satellite Agent** | Go 1.24 | 节点代理、网络发现、Redfish/BMC 采集、Docker / Shell / Ansible / SSH 执行、PXE 服务 |
+| **Frontend** | React 19 + TypeScript + Vite | 仪表盘、作业管理、设备发现、拓扑可视化、集群运维界面 |
 
-**核心能力**: 资产自动发现 → GPU 拓扑感知调度 (Timefold AI) → Docker 容器执行 → 实时监控回调
+**当前核心能力**:
+- 零接触发现与待纳管设备池
+- 基于 Timefold 的 GPU / NVLink / IB Fabric 拓扑感知调度
+- 按 `clusterId` 和 `zoneId` 的调度隔离与分区并行求解
+- Docker / Shell / Ansible / SSH 多执行模式下发
+- 作业状态回调、WebSocket 实时刷新、拓扑分配可视化
+- Prometheus / Grafana / OpenTelemetry 基础观测链路
 
 ---
 
@@ -24,54 +31,65 @@
 
 ```
 Frontend (React)
-    │ REST/WebSocket
+    │ REST / WebSocket
     ▼
 Core Service (Quarkus)
-    │ gRPC + mTLS          │ Kafka
-    ▼                      ▼
-Satellite Agent (Go)    异步消息管道
-    │                   (jobs.scheduled / jobs.execution / jobs.status)
+    │ gRPC + mTLS              │ Kafka
+    ▼                          ▼
+Satellite Agent (Go)      异步消息管道
+    │                      (jobs.scheduled / jobs.execution / jobs.status / DLQ)
     ▼
-Docker / Redfish BMC / 网络扫描
+Docker / Shell / SSH / Redfish / PXE / 网络扫描
 ```
 
-**评价**: 架构设计合理，gRPC + mTLS 用于实时控制面通信，Kafka 用于异步数据面消息传递，WebSocket 用于前端实时推送。关注点分离良好。
+**评价**: 控制面和数据面边界清晰。`gRPC + mTLS` 负责 Core 与 Satellite 的实时控制，Kafka 负责调度与执行回调闭环，WebSocket 负责前端实时态同步，整体架构已经具备生产可演进性。
 
 ### 2.2 数据层
 
-- **PostgreSQL 15** + Hibernate Reactive (非阻塞)
-- **Flyway** 迁移管理 (V1.0.0 ~ V1.6.0)，共 6 个版本，覆盖全部核心表
-- **Redis** 用于 Satellite 状态缓存 (SatelliteStateCacheService)
-- **Kafka** 用于作业调度-执行-回调消息闭环 + DLQ 容错
+- **PostgreSQL 15** + Hibernate Reactive，承担核心业务持久化
+- **Flyway** 迁移已推进到 `V2.6.0`，当前共 `16` 个版本脚本，覆盖多集群、发现设备、凭据档案、托管账号、执行策略等模型
+- **Redis** 负责 Satellite 在线状态与心跳缓存
+- **Kafka** 负责调度、执行、状态回调与 DLQ 容错
 
-**核心数据模型**: Satellite, Node, Job, Tenant, ResourceQuota, AuditLog, DiscoveredDevice, Allocation
+**核心数据模型**:
+- `Satellite`, `Node`, `Job`, `Tenant`, `ResourceQuota`, `AuditLog`
+- `DiscoveredDevice`, `CredentialProfile`, `ScanJob`, `Allocation`
 
 ### 2.3 调度引擎
 
-- 基于 **Timefold Solver 1.4.0** (AI 约束求解)
-- 约束维度: GPU 型号匹配、NVLink 拓扑亲和性、IB Fabric 优化、租户配额
-- 分区调度框架 (PartitionedSchedulingService) 已搭建，Zone 分片待完善
-- 求解时限: 30 秒 (开发环境)
+- 基于 **Timefold Solver 1.4.0**
+- 约束维度覆盖:
+  - GPU 型号匹配
+  - NVLink / NVSwitch 拓扑亲和性
+  - IB Fabric 优化
+  - 租户与资源条件
+- **`SchedulingService` 与 `PartitionedSchedulingService` 均已按 `clusterId` 过滤活跃节点**
+- **Zone 分区并行调度已落地**，并具备回归测试
+- 独立分配 API 已提供: `POST /api/v1/allocations`
 
 ### 2.4 安全体系
 
 | 机制 | 实现状态 |
 |------|---------|
 | JWT 认证 | ✅ 已完成 |
-| RBAC 权限 (ADMIN/OPERATOR/USER) | ✅ 已完成 |
+| RBAC 权限控制 | ✅ 已完成 |
 | gRPC mTLS 双向认证 | ✅ 已完成 |
 | 多租户资源配额 | ✅ 已完成 |
-| 证书自动生成 (gen_certs.sh) | ✅ 已完成 |
+| 测试 / 开发证书自动生成 | ✅ 已完成 |
 
 ### 2.5 可观测性
 
 | 组件 | 状态 |
 |------|------|
-| Prometheus 指标采集 | ✅ 已集成 |
-| Jaeger 分布式追踪 | ✅ 基础集成 |
-| OpenTelemetry SDK | ⚠️ 部分实现，全链路串联未完成 |
+| Prometheus 指标采集 | ✅ 已完成 |
+| Grafana 仪表盘 | ✅ 已完成 |
+| Jaeger / OpenTelemetry 基础接线 | ✅ 已完成 |
+| Satellite → Kafka → Core trace propagation | ✅ 已完成 |
 | WebSocket 实时仪表盘 | ✅ 已完成 |
-| 健康检查 (Liveness/Readiness) | ✅ 已完成 |
+| 健康检查 (Liveness / Readiness) | ✅ 已完成 |
+| AlertManager 外部通知渠道 | ❌ 尚未完成 |
+
+**说明**: 当前 OTel 链路已不止停留在 `Core → Satellite → Kafka` 基础注入，`JobStatusCallback` 已显式保留 `traceContext`，Core 在消费 `jobs.status` 时会恢复父上下文并续接 consumer span。
 
 ---
 
@@ -79,31 +97,33 @@ Docker / Redfish BMC / 网络扫描
 
 ### 3.1 优势
 
-1. **架构规范**: 严格遵循 DDD 分层 (domain → service → api → infra)，依赖方向正确
-2. **技术选型先进**: Quarkus 响应式 + Go 高并发 + React 现代前端，三语言各取所长
-3. **容错机制完善**: Rate Limiter (2000 req/s)、Bulkhead (200 并发)、Circuit Breaker、DLQ
-4. **部署就绪**: Docker 多阶段构建 + K8s 清单 + Helm Chart + CI/CD 全链路
-5. **文档体系丰富**: 架构文档、开发路线图、项目规范、实现计划均齐全
-6. **Conventional Commits**: Git 提交规范化，可追溯
+1. **架构分层清晰**: Domain / Service / API / Agent 的职责分界稳定，扩展点明确。
+2. **跨技术栈协同成熟**: Quarkus、Go、React 三端已形成稳定闭环，不再是单点原型。
+3. **测试基础明显提升**:
+   - Frontend 已建立 `Vitest + React Testing Library`，当前有 `7` 个测试文件、`14` 个用例
+   - Core 已具备 E2E 集成测试、Zone 调度回归测试、拓扑展示回归测试、OTel trace 透传测试
+   - Satellite 已具备 discovery / executor / pxe 等路径的 Go 单测
+4. **CI 质量门禁落地**:
+   - Core `gradlew check` 已纳入 JaCoCo 校验
+   - 当前本地 JaCoCo 指令覆盖率实测约 **45.90%**
+   - CodeQL、load-test、Helm / K8s 资产均已接入仓库
+5. **可视化能力不再停留在占位页**: Topology 页面已升级为按 `Zone / Rack / IB Fabric` 的真实分组与分配视图。
 
-### 3.2 待改进项
+### 3.2 当前主要缺口
 
 | 问题 | 优先级 | 说明 |
 |------|--------|------|
-| 测试覆盖率无量化指标 | 🔴 高 | 无 JaCoCo / 覆盖率报告，无法评估测试充分性 |
-| OpenTelemetry 链路不完整 | 🟡 中 | Trace 无法端到端串联，排障能力受限 |
-| 集成测试薄弱 | 🟡 中 | 单元测试基础具备，但跨服务集成测试缺失 |
-| 代码质量门禁缺失 | 🟡 中 | CI 中无 SonarQube / CodeQL 等静态分析 |
-| Satellite 真实硬件验证不足 | 🟡 中 | Redfish/BMC 采集依赖真实硬件环境验证 |
-| 负载测试未纳入 CI | 🟠 低 | loadgen 工具已有，但未自动化到流水线 |
-| 前端 E2E 测试覆盖有限 | 🟠 低 | Playwright 已配置但测试用例需扩充 |
+| 真实硬件 Redfish / BMC 验证不足 | 🔴 高 | 发现、claim、托管账号等链路仍主要依赖模拟或本地环境验证 |
+| AlertManager 外部通知缺失 | 🟡 中 | 已有 PrometheusRule，但邮件 / Slack / PagerDuty 渠道未打通 |
+| PXE/iPXE 裸机交付闭环未完成 | 🟡 中 | TFTP / iPXE / Cloud-Init 已具备，但 DHCP option 66/67、镜像管理、动态模板仍缺 |
+| Demo 脚本缺失 | 🟡 中 | 缺少一套可演示“发现 → 纳管 → 调度 → 执行”的标准化脚本 |
+| 前端 Playwright E2E 仍偏薄 | 🟠 低 | 单元 / 组件测试已建立，但浏览器级关键流程覆盖仍需补充 |
 
-### 3.3 技术债统计
+### 3.3 关键结论
 
-在 16 个文件中发现 TODO/FIXME 标记，主要为：
-- **路线图内的计划功能** (DHCP Listener, Zone 分片等) — 属于正常迭代范围
-- **服务层占位符** (QuotaService, PartitionedSchedulingService) — 需要逐步补全
-- **无紧急技术债** — 项目整体技术债可控
+- 项目已明显超出“仅能演示”的 MVP 阶段，进入 **稳定化与交付强化阶段**
+- 当前短板已经从“核心功能是否存在”转向“落地闭环是否足够生产化”
+- 后续优先级应从新增大块功能，转向 **真实环境验证、外部告警、交付演示闭环**
 
 ---
 
@@ -116,79 +136,85 @@ Docker / Redfish BMC / 网络扫描
 | Phase 3 | 智能调度与资源池化 (Intelligent Scheduling) | ✅ 已完成 |
 | Phase 4 | 执行与交付 (Execution & Delivery) | ✅ 已完成 |
 | Phase 5 | 生产就绪 (Production Ready) | ✅ 已完成 |
+| Phase 6 | 质量加固与落地推进 (Quality Hardening & Delivery Excellence) | 🚧 进行中 |
 
-**结论**: 5 个核心阶段全部完成，项目处于 **MVP 就绪** 状态，可进入生产部署或功能深化阶段。
+**Phase 6 已完成的关键项**:
+- 前端测试基础设施与核心页面回归测试
+- Core 覆盖率基线接线与 `check` 门禁
+- Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务集成测试
+- Zone 分区并行调度回归保障
+- Docker / Shell / Ansible / SSH 多执行模式
+- 调度结果拓扑可视化
+- Satellite → Kafka → Core 的 OTel trace propagation
+
+**Phase 6 当前剩余项**:
+- AlertManager 外部通知集成
+- 真实硬件 Redfish / BMC 验证
+- PXE/iPXE 裸金属自动化重装闭环
+- 完整 Demo 脚本
+
+**结论**: 项目当前状态更准确地说是 **“MVP 完成，进入交付强化收尾”**，而不是仍停留在基础能力补齐期。
 
 ---
 
 ## 五、CI/CD 与部署评估
 
-### 5.1 CI 流水线 (GitHub Actions)
+### 5.1 工程验证现状
 
-```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│ Backend Test │  │ Frontend    │  │ Satellite   │
-│ (JDK 21)    │  │ Build       │  │ Build       │
-│ + PG + Redis│  │ (Node 20)   │  │ (Go 1.24)   │
-└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-       │                │                │
-       └────────────────┼────────────────┘
-                        ▼
-              ┌─────────────────┐
-              │ Docker Images   │
-              │ (仅 main 分支)  │
-              └─────────────────┘
-```
+| 维度 | 当前状态 |
+|------|----------|
+| Core 验证 | `./gradlew check --no-daemon` + JaCoCo 覆盖率门禁 |
+| Frontend 验证 | `npm test` + `npm run lint` + `npm run build` |
+| Satellite 验证 | `go test ./...`（Go 1.24.7 环境） |
+| 合同检查 | `./scripts/check_ci_contract.sh` |
+| 测试证书 | `./scripts/generate_keys.sh` |
 
 ### 5.2 部署矩阵
 
 | 部署方式 | 状态 | 适用场景 |
 |----------|------|----------|
-| docker-compose (dev) | ✅ | 本地开发 |
-| docker-compose.prod | ✅ | 单机生产 |
-| K8s 原始清单 | ✅ | 手动 K8s 部署 |
+| `docker-compose` | ✅ | 本地开发 / 联调 |
+| `docker-compose.prod` | ✅ | 单机或轻量生产 |
+| Kubernetes 原始清单 | ✅ | 手动 K8s 部署 |
 | Helm Chart | ✅ | 标准化 K8s 部署 |
 
-**Helm 配置亮点**: Core 支持 HPA (2-10 副本，CPU 70% 阈值)，Satellite 以 DaemonSet 部署
+### 5.3 交付评价
+
+- 项目已经具备较完整的本地验证矩阵
+- 部署资产较齐全，基础观测与告警规则已在仓库内成型
+- 真正阻碍生产落地的关键，不再是部署形态，而是 **真实环境验收与外部告警链路**
 
 ---
 
-## 六、下一步计划 (Next Steps)
+## 六、下一步计划 (Current Next Steps)
 
-### Phase 6: 工程成熟度提升 (Engineering Maturity)
+### Phase 6 收尾: 可观测性与落地验证
 
-> 目标: 补齐质量短板，建立工程信心
-
-| # | 任务 | 优先级 | 预期效果 |
-|---|------|--------|----------|
-| 6.1 | **集成 JaCoCo 测试覆盖率** — Gradle 配置 JaCoCo 插件，CI 生成覆盖率报告，设置 70% 最低门槛 | 🔴 P0 | 量化测试质量，防止回归 |
-| 6.2 | **完善 OpenTelemetry 全链路** — Core→Kafka→Satellite 全链路 TraceId 透传与串联 | 🔴 P0 | 生产环境故障定位能力 |
-| 6.3 | **添加集成测试套件** — 使用 Testcontainers 实现 Core + PG + Kafka + Redis 端到端集成测试 | 🔴 P0 | 验证跨组件交互正确性 |
-| 6.4 | **CI 质量门禁** — 集成 CodeQL 或 SonarQube 静态分析，PR 自动扫描 | 🟡 P1 | 自动拦截安全漏洞和代码异味 |
-| 6.5 | **前端 E2E 测试扩充** — Playwright 覆盖登录、作业提交、节点管理核心流程 | 🟡 P1 | 前端回归保护 |
-
-### Phase 7: 功能深化 (Feature Enhancement)
-
-> 目标: 扩展平台能力，覆盖更多运维场景
+> 目标: 收敛生产化缺口，增强可运维性与可验收性
 
 | # | 任务 | 优先级 | 预期效果 |
 |---|------|--------|----------|
-| 7.1 | **Zone 分区并行调度** — 按数据中心/机架分区，并行求解后合并结果 | 🟡 P1 | 突破单分区调度性能瓶颈，支撑万级节点 |
-| 7.2 | **调度结果拓扑可视化** — 前端展示 GPU 拓扑图和分配热力图 | 🟡 P1 | 运维人员直观理解调度决策 |
-| 7.3 | **DHCP Listener 设备自动发现** — Satellite 监听 DHCP 广播，自动触发纳管流程 | 🟠 P2 | 真正零接触纳管 |
-| 7.4 | **Ansible/SSH 远程命令执行** — Satellite 集成命令下发通道 | 🟠 P2 | 支持操作系统级运维任务 |
-| 7.5 | **PXE/iPXE 裸金属自动装机** — 与 DHCP 联动实现 OS 自动化部署 | 🟠 P2 | 完整裸金属生命周期管理 |
+| 6.1 | **AlertManager 外部通知集成** — 打通邮件 / Slack / PagerDuty 渠道 | 🔴 P0 | 告警不只停留在规则层，能真正触达值班人 |
+| 6.2 | **真实硬件验证** — 使用真实 Redfish / BMC 环境验证发现、claim、采集链路 | 🔴 P0 | 降低生产环境接入风险 |
+| 6.3 | **前端 Playwright E2E 扩充** — 覆盖登录、发现、作业提交、拓扑查看等关键流程 | 🟡 P1 | 补齐浏览器级回归保障 |
 
-### Phase 8: 生产运营 (Production Operations)
+### Phase 7: 自动化交付闭环
 
-> 目标: 建立生产级运营能力
+> 目标: 让平台具备从发现到交付的完整自动化演示与运维路径
 
 | # | 任务 | 优先级 | 预期效果 |
 |---|------|--------|----------|
-| 8.1 | **Grafana 告警仪表盘** — 基于 Prometheus 指标构建预置告警规则 | 🟡 P1 | 主动故障预警 |
-| 8.2 | **负载测试自动化** — loadgen 纳入 CI，设定性能基线和回归检测 | 🟡 P1 | 防止性能劣化 |
-| 8.3 | **多集群管理** — Core 支持管理多个独立 Satellite 集群 | 🟠 P2 | 跨数据中心统一管理 |
-| 8.4 | **审计日志增强** — 操作审计流完整化 + 合规报告导出 | 🟠 P2 | 满足企业合规要求 |
+| 7.1 | **完善 PXE/iPXE 裸金属自动装机** — 补齐 DHCP option 66/67、镜像管理、节点特定 Cloud-Init | 🟡 P1 | 形成裸机交付闭环 |
+| 7.2 | **编写完整 Demo 脚本** — 覆盖“零接触发现 → 自动纳管 → 调度 → 执行” | 🟡 P1 | 降低演示、培训、验收成本 |
+
+### Phase 8: 运营增强建议
+
+> 目标: 为后续规模化运营预留增强方向
+
+| # | 任务 | 优先级 | 预期效果 |
+|---|------|--------|----------|
+| 8.1 | **负载测试阈值与趋势基线** — 在现有 load-test 基础上增加明确的回归阈值 | 🟠 P2 | 将性能验证从“能跑”提升到“可比较” |
+| 8.2 | **多集群运营增强** — 在现有集群汇总 / 调度隔离基础上，补齐生命周期管理与联邦能力 | 🟠 P2 | 适配跨数据中心统一运营 |
 
 ---
 
@@ -196,32 +222,27 @@ Docker / Redfish BMC / 网络扫描
 
 ```
 近期 (1-2 周):
-  ├── 6.1 JaCoCo 测试覆盖率
-  ├── 6.2 OpenTelemetry 全链路串联
-  └── 6.3 Testcontainers 集成测试
+  ├── 6.1 AlertManager 外部通知
+  ├── 6.2 真实硬件 Redfish / BMC 验证
+  └── 7.1 PXE/iPXE 自动装机闭环
 
 中期 (3-4 周):
-  ├── 6.4 CI 质量门禁 (CodeQL)
-  ├── 7.1 Zone 分区并行调度
-  ├── 7.2 调度拓扑可视化
-  └── 8.1 Grafana 告警仪表盘
+  ├── 7.2 完整 Demo 脚本
+  ├── 6.3 Frontend Playwright E2E 扩充
+  └── 8.1 负载测试阈值与趋势基线
 
 远期 (5-8 周):
-  ├── 7.3 DHCP 自动发现
-  ├── 7.4 Ansible/SSH 集成
-  ├── 7.5 PXE/iPXE 裸金属装机
-  ├── 8.2 负载测试自动化
-  └── 8.3 多集群管理
+  └── 8.2 多集群运营增强 / 联邦能力
 ```
 
 ---
 
 ## 八、总结
 
-Hyperscale LCM 是一个**架构设计扎实、技术选型先进**的企业级 GPU 集群管理平台。5 个核心阶段全部完成，已达到 MVP 可部署状态。主要短板集中在**工程成熟度**层面（测试覆盖率、全链路追踪、质量门禁），而非功能缺失。
+Hyperscale LCM 当前已经具备较强的 **调度、执行、可视化、集成测试与基础观测** 能力。过去一段时间最关键的几个缺口，例如前端零测试、SSH 执行模式、拓扑可视化、OTel trace continuity，都已经在主干代码中落地。
 
-**建议策略**: 先补齐工程质量基础设施 (Phase 6)，再推进功能深化 (Phase 7) 和生产运营能力 (Phase 8)。这样可以在坚实的质量保障下安全迭代。
+项目现在最值得投入的方向，不再是继续堆叠基础功能，而是把最后几条 **生产落地闭环** 做实：真实硬件验证、外部告警通知、PXE 交付闭环，以及一套可重复演示的标准流程。
 
 ---
 
-*本报告由项目代码库深度分析自动生成*
+*本报告已根据当前代码主干状态重新校正。*
