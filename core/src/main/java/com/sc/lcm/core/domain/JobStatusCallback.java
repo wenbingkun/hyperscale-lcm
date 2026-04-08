@@ -24,10 +24,10 @@ public record JobStatusCallback(
      * 创建成功回调
      */
     public static JobStatusCallback success(String jobId, String nodeId,
-            long executionTimeMs, String stdout) {
+            long executionTimeMs, String stdout, Map<String, String> traceContext) {
         return new JobStatusCallback(
                 jobId, nodeId, "COMPLETED", 0, null,
-                stdout, null, executionTimeMs, LocalDateTime.now(), null);
+                stdout, null, executionTimeMs, LocalDateTime.now(), traceContext);
     }
 
     /**
@@ -35,9 +35,9 @@ public record JobStatusCallback(
      */
     public static JobStatusCallback failure(String jobId, String nodeId,
             int exitCode, String errorMessage,
-            long executionTimeMs, String stderr) {
+            long executionTimeMs, String stderr, Map<String, String> traceContext) {
         return new JobStatusCallback(
                 jobId, nodeId, "FAILED", exitCode, errorMessage,
-                null, stderr, executionTimeMs, LocalDateTime.now(), null);
+                null, stderr, executionTimeMs, LocalDateTime.now(), traceContext);
     }
 }

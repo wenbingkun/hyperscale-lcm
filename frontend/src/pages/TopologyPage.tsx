@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, Cpu, Grid, Network, Server, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { fetchJobs, fetchSatellites, type Job, type Satellite } from '../api/client';
@@ -123,7 +123,8 @@ export const TopologyPage: React.FC = () => {
     const [filter, setFilter] = useState<FilterMode>('ALL');
     const { lastEvent } = useWebSocketContext();
 
-    const refreshTopology = useEffectEvent(async () => {
+    const refreshRef = useRef<() => Promise<void>>(undefined);
+    refreshRef.current = async () => {
         setLoading(true);
         const [fetchedSatellites, fetchedJobs] = await Promise.all([
             fetchSatellites(),
@@ -132,7 +133,9 @@ export const TopologyPage: React.FC = () => {
         setSatellites(fetchedSatellites);
         setJobs(fetchedJobs);
         setLoading(false);
-    });
+    };
+
+    const refreshTopology = useCallback(() => refreshRef.current?.(), []);
 
     useEffect(() => {
         void refreshTopology();
@@ -142,13 +145,13 @@ export const TopologyPage: React.FC = () => {
         return () => {
             clearInterval(interval);
         };
-    }, []);
+    }, [refreshTopology]);
 
     useEffect(() => {
         if (lastEvent && TOPOLOGY_REFRESH_EVENTS.has(lastEvent.type)) {
             void refreshTopology();
         }
-    }, [lastEvent]);
+    }, [lastEvent, refreshTopology]);
 
     const activeJobs = useMemo<ActiveJob[]>(
         () => jobs.filter(isActiveJob).map((job) => ({ ...job, gpuDemand: getGpuDemand(job) })),

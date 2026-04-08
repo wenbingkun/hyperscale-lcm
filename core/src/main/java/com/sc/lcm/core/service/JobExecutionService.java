@@ -215,35 +215,43 @@ public class JobExecutionService {
                 .setAttribute("job.status", callback.status())
                 .startSpan();
 
-        try (Scope ignored = callbackSpan.makeCurrent()) {
-            return Panache.withTransaction(() -> Job.<Job>findById(callback.jobId())
-                    .onItem().transformToUni(job -> {
-                        if (job == null) {
-                            log.warn("Job not found: {}, routing original message to DLQ", callback.jobId());
-                            dlqEmitter.send(message);
-                            return Uni.createFrom().nullItem();
-                        }
+        // Attach the span to each async stage instead of using try-with-resources,
+        // because the Scope would close immediately after return while the Uni chain
+        // continues executing asynchronously.
+        return Panache.withTransaction(() -> {
+                    Scope scope = callbackSpan.makeCurrent();
+                    return Job.<Job>findById(callback.jobId())
+                            .onItem().transformToUni(job -> {
+                                if (job == null) {
+                                    log.warn("Job not found: {}, routing original message to DLQ",
+                                            callback.jobId());
+                                    dlqEmitter.send(message);
+                                    return Uni.createFrom().nullItem();
+                                }
 
-                        // 更新作业状态
-                        job.setStatus(finalCallbackStatus);
-                        if (callback.nodeId() != null && !callback.nodeId().isBlank()) {
-                            job.setAssignedNodeId(callback.nodeId());
-                        }
-                        job.setExitCode(callback.exitCode());
-                        job.setErrorMessage(callback.errorMessage());
-                        job.setCompletedAt(callback.completedAt());
+                                // 更新作业状态
+                                job.setStatus(finalCallbackStatus);
+                                if (callback.nodeId() != null && !callback.nodeId().isBlank()) {
+                                    job.setAssignedNodeId(callback.nodeId());
+                                }
+                                job.setExitCode(callback.exitCode());
+                                job.setErrorMessage(callback.errorMessage());
+                                job.setCompletedAt(callback.completedAt());
 
-                        return Uni.createFrom().item(new JobStatusSnapshot(
-                                job.getId(),
-                                job.getName(),
-                                job.getAssignedNodeId(),
-                                job.getStatus().name(),
-                                job.getExitCode()));
-                    })).invoke(snapshot -> {
-                        if (snapshot == null) {
-                            return;
-                        }
+                                return Uni.createFrom().item(new JobStatusSnapshot(
+                                        job.getId(),
+                                        job.getName(),
+                                        job.getAssignedNodeId(),
+                                        job.getStatus().name(),
+                                        job.getExitCode()));
+                            })
+                            .onTermination().invoke(scope::close);
+                }).invoke(snapshot -> {
+                    if (snapshot == null) {
+                        return;
+                    }
 
+                    try (Scope ignored = callbackSpan.makeCurrent()) {
                         // 更新指标
                         if ("COMPLETED".equals(snapshot.status())) {
                             metricsService.recordJobCompleted();
@@ -273,13 +281,13 @@ public class JobExecutionService {
                                     .subscribe().with(v -> {
                                     }, e -> log.error("Audit log failed", e));
                         }
-                    }).onFailure().invoke(err -> {
-                        log.error("Database or business logic failure processing callback, routing to DLQ", err);
-                        dlqEmitter.send(message);
-                    }).onFailure().recoverWithNull()
-                    .replaceWithVoid()
-                    .onTermination().invoke(() -> callbackSpan.end());
-        }
+                    }
+                }).onFailure().invoke(err -> {
+                    log.error("Database or business logic failure processing callback, routing to DLQ", err);
+                    dlqEmitter.send(message);
+                }).onFailure().recoverWithNull()
+                .replaceWithVoid()
+                .onTermination().invoke(() -> callbackSpan.end());
     }
 
     Context extractTraceContext(JobStatusCallback callback) {

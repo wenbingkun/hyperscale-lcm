@@ -1,4 +1,4 @@
-import React, { useEffect, useEffectEvent, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GlassCard } from '../components/GlassCard';
 import { fetchJobs, type Job } from '../api/client';
@@ -10,16 +10,15 @@ export const JobsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const { lastEvent } = useWebSocketContext();
 
-    const refreshJobs = async () => {
+    const refreshJobsRef = useRef<() => Promise<void>>(undefined);
+    refreshJobsRef.current = async () => {
         setLoading(true);
         const data = await fetchJobs();
         setJobs(data);
         setLoading(false);
     };
 
-    const loadJobs = useEffectEvent(() => {
-        void refreshJobs();
-    });
+    const loadJobs = useCallback(() => { void refreshJobsRef.current?.(); }, []);
 
     useEffect(() => {
         void loadJobs();
@@ -29,13 +28,13 @@ export const JobsPage: React.FC = () => {
         return () => {
             clearInterval(interval);
         };
-    }, []);
+    }, [loadJobs]);
 
     useEffect(() => {
         if (lastEvent?.type === 'SCHEDULE_EVENT' || lastEvent?.type === 'JOB_STATUS') {
             void loadJobs();
         }
-    }, [lastEvent]);
+    }, [lastEvent, loadJobs]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -56,7 +55,7 @@ export const JobsPage: React.FC = () => {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => void refreshJobs()}
+                        onClick={() => void loadJobs()}
                         className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-colors"
                     >
                         <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} />

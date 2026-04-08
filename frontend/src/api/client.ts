@@ -212,6 +212,8 @@ export interface JobRequest {
     minNvlinkBandwidthGbps?: number;
     tenantId?: string;
     clusterId?: string;
+    executionType?: string;
+    executionPayload?: string;
 }
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';

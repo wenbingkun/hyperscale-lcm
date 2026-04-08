@@ -137,8 +137,15 @@ func buildSSHInvocation(request SSHRequest) (string, []string, func(), error) {
 		if _, err := exec.LookPath(sshpassBinary); err != nil {
 			return "", nil, cleanup, errors.New("ssh password auth requires sshpass to be installed")
 		}
+		// Use a temp file (-f) instead of command-line arg (-p) to avoid
+		// leaking the password via /proc/*/cmdline.
+		passFilePath, err := writeTempFile("sshpass-*", request.Password, 0o600)
+		if err != nil {
+			return "", nil, cleanup, err
+		}
+		cleanupFns = append(cleanupFns, func() { _ = os.Remove(passFilePath) })
 		commandName = sshpassBinary
-		args = append([]string{"-p", request.Password, sshBinary}, args...)
+		args = append([]string{"-f", passFilePath, sshBinary}, args...)
 	}
 
 	return commandName, args, cleanup, nil
@@ -151,13 +158,15 @@ func writeTempFile(pattern string, content string, mode os.FileMode) (string, er
 	}
 	defer tmpFile.Close()
 
-	if _, err := tmpFile.WriteString(content); err != nil {
-		_ = os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to write temp file %s: %w", tmpFile.Name(), err)
-	}
+	// Restrict permissions before writing sensitive content to eliminate the
+	// race window between file creation and chmod.
 	if err := tmpFile.Chmod(mode); err != nil {
 		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to set temp file permissions %s: %w", tmpFile.Name(), err)
+	}
+	if _, err := tmpFile.WriteString(content); err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to write temp file %s: %w", tmpFile.Name(), err)
 	}
 	return tmpFile.Name(), nil
 }
