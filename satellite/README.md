@@ -46,6 +46,11 @@ Useful optional environment variables:
 - `LCM_PXE_DHCP_BOOTFILE`
 - `LCM_PXE_DHCP_IPXE_SCRIPT_URL`
 - `LCM_PXE_IMAGE_DIR`
+- `LCM_PXE_INSTALL_REPO_URL`
+- `LCM_PXE_BOOT_KERNEL_URL`
+- `LCM_PXE_BOOT_INITRD_URL`
+- `LCM_PXE_BOOT_KERNEL_ARGS`
+- `LCM_PXE_KICKSTART_TEMPLATE`
 
 ## Validation
 
@@ -58,4 +63,5 @@ go test ./...
 - Satellite does not talk to Kafka directly; status and trace data flow back to Core over the gRPC stream and are then forwarded by Core.
 - PXE now includes a lightweight DHCP proxy that advertises `Option 66/67`, defaults to `undionly.kpxe` for legacy PXE clients, and chainloads iPXE clients to the Satellite-hosted `/ipxe` script.
 - PXE image management is exposed on the Satellite HTTP server through `GET /api/images`, `POST /api/images` (multipart field `file`), and `DELETE /api/images/{name}`. Uploaded images are stored under `LCM_PXE_IMAGE_DIR` and surfaced centrally by Core at `/api/images`.
-- The remaining PXE delivery work is node-specific boot / kickstart templates and full boot flow integration.
+- `/ipxe` now renders a full boot flow that hands off to `inst.ks=http://<satellite>/kickstart`, and `/kickstart` supports node-specific rendering from the booting host's `mac` / `hostname` parameters. `LCM_PXE_KICKSTART_TEMPLATE` can point to a custom Go template file.
+- The remaining PXE delivery work is primarily real hardware validation and installer asset tuning per environment.

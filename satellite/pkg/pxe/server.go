@@ -19,6 +19,11 @@ type ServerConfig struct {
 	TFTPRootDir       string
 	HTTPAddr          string
 	ImageDir          string
+	KickstartTemplate string
+	InstallRepoURL    string
+	InstallKernelURL  string
+	InstallInitrdURL  string
+	InstallKernelArgs string
 	DHCPProxyEnabled  bool
 	DHCPProxyAddr     string
 	BootServerHost    string
@@ -33,6 +38,10 @@ var DefaultConfig = ServerConfig{
 	TFTPRootDir:       "/var/lib/lcm/tftpboot",
 	HTTPAddr:          ":8090",
 	ImageDir:          "/var/lib/lcm/images",
+	InstallRepoURL:    "http://dl.rockylinux.org/pub/rocky/9/BaseOS/x86_64/os",
+	InstallKernelURL:  "http://dl.rockylinux.org/pub/rocky/9/BaseOS/x86_64/os/images/pxeboot/vmlinuz",
+	InstallInitrdURL:  "http://dl.rockylinux.org/pub/rocky/9/BaseOS/x86_64/os/images/pxeboot/initrd.img",
+	InstallKernelArgs: "console=tty0 console=ttyS1,115200n8",
 	DHCPProxyEnabled:  true,
 	DHCPProxyAddr:     ":4011",
 	LegacyPXEBootFile: "undionly.kpxe",
@@ -126,7 +135,7 @@ func startTFTPServer(ctx context.Context, cfg ServerConfig) error {
 	return server.ListenAndServe(cfg.TFTPAddr)
 }
 
-// startHTTPServer handles dynamic iPXE scripts and Cloud-Init templates
+// startHTTPServer handles dynamic iPXE scripts, kickstart payloads, and Cloud-Init templates.
 func startHTTPServer(ctx context.Context, cfg ServerConfig) error {
 	handler, err := newPXEHTTPHandler(cfg)
 	if err != nil {
@@ -147,34 +156,9 @@ func startHTTPServer(ctx context.Context, cfg ServerConfig) error {
 	return server.ListenAndServe()
 }
 
-// handleIpxeScript generates the `#!ipxe` boot script.
-// It tells the booting server to download the kernel and pass the cloud-init url.
+// handleIpxeScript keeps a backwards-compatible default handler for direct callers.
 func handleIpxeScript(w http.ResponseWriter, r *http.Request) {
-	mac := r.URL.Query().Get("mac")
-	if mac == "" {
-		mac = "unknown"
-	}
-
-	log.Printf("HTTP: Generating iPXE script for MAC %s", mac)
-
-	host := r.Host
-	if host == "" {
-		// Fallback to the remote address host when running behind a proxy or
-		// accessed directly by IP without a Host header.
-		host = r.RemoteAddr
-	}
-
-	// A highly simplified Ubuntu netboot iPXE example script
-	script := fmt.Sprintf(`#!ipxe
-echo "Booting Hyperscale LCM Managed Node (MAC: %s)"
-set base-url http://archive.ubuntu.com/ubuntu/dists/noble/main/installer-amd64/current/legacy-images/netboot/ubuntu-installer/amd64
-kernel ${base-url}/linux autoinstall ds=nocloud-net;s=http://%s/cloud-init/
-initrd ${base-url}/initrd.gz
-boot
-`, mac, host)
-
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(script))
+	newIpxeHandler(DefaultConfig).ServeHTTP(w, r)
 }
 
 // handleCloudInit returns the dynamically generated Cloud-Init YAML payload.

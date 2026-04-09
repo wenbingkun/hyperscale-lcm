@@ -16,6 +16,11 @@ func ConfigFromEnv(base ServerConfig) ServerConfig {
 	cfg.TFTPRootDir = stringFromEnv("LCM_PXE_TFTP_ROOT", cfg.TFTPRootDir)
 	cfg.HTTPAddr = stringFromEnv("LCM_PXE_HTTP_ADDR", cfg.HTTPAddr)
 	cfg.ImageDir = stringFromEnv("LCM_PXE_IMAGE_DIR", cfg.ImageDir)
+	cfg.KickstartTemplate = stringFromEnv("LCM_PXE_KICKSTART_TEMPLATE", cfg.KickstartTemplate)
+	cfg.InstallRepoURL = stringFromEnv("LCM_PXE_INSTALL_REPO_URL", cfg.InstallRepoURL)
+	cfg.InstallKernelURL = stringFromEnv("LCM_PXE_BOOT_KERNEL_URL", cfg.InstallKernelURL)
+	cfg.InstallInitrdURL = stringFromEnv("LCM_PXE_BOOT_INITRD_URL", cfg.InstallInitrdURL)
+	cfg.InstallKernelArgs = stringFromEnv("LCM_PXE_BOOT_KERNEL_ARGS", cfg.InstallKernelArgs)
 	cfg.DHCPProxyAddr = stringFromEnv("LCM_PXE_DHCP_PROXY_ADDR", cfg.DHCPProxyAddr)
 	cfg.BootServerHost = stringFromEnv("LCM_PXE_BOOT_SERVER_HOST", cfg.BootServerHost)
 	cfg.LegacyPXEBootFile = stringFromEnv("LCM_PXE_DHCP_BOOTFILE", cfg.LegacyPXEBootFile)
@@ -30,6 +35,18 @@ func ConfigFromEnv(base ServerConfig) ServerConfig {
 	}
 	if cfg.ImageDir == "" {
 		cfg.ImageDir = DefaultConfig.ImageDir
+	}
+	if cfg.InstallRepoURL == "" {
+		cfg.InstallRepoURL = DefaultConfig.InstallRepoURL
+	}
+	if cfg.InstallKernelURL == "" {
+		cfg.InstallKernelURL = defaultKernelURL(cfg)
+	}
+	if cfg.InstallInitrdURL == "" {
+		cfg.InstallInitrdURL = defaultInitrdURL(cfg)
+	}
+	if cfg.InstallKernelArgs == "" {
+		cfg.InstallKernelArgs = DefaultConfig.InstallKernelArgs
 	}
 	if cfg.IPXEBootScriptURL == "" {
 		cfg.IPXEBootScriptURL = defaultIPXEBootScriptURL(cfg)
@@ -64,6 +81,16 @@ func boolFromEnv(key string, fallback bool) bool {
 func defaultIPXEBootScriptURL(cfg ServerConfig) string {
 	hostPort := advertisedHTTPHostPort(cfg)
 	return fmt.Sprintf("http://%s/ipxe", hostPort)
+}
+
+func defaultKernelURL(cfg ServerConfig) string {
+	repoURL := strings.TrimRight(cfg.InstallRepoURL, "/")
+	return repoURL + "/images/pxeboot/vmlinuz"
+}
+
+func defaultInitrdURL(cfg ServerConfig) string {
+	repoURL := strings.TrimRight(cfg.InstallRepoURL, "/")
+	return repoURL + "/images/pxeboot/initrd.img"
 }
 
 func advertisedHTTPHostPort(cfg ServerConfig) string {

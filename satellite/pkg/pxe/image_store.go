@@ -137,9 +137,14 @@ func newPXEHTTPHandler(cfg ServerConfig) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	kickstartTemplate, err := loadKickstartTemplate(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ipxe", handleIpxeScript)
+	mux.HandleFunc("/ipxe", newIpxeHandler(cfg))
+	mux.HandleFunc("/kickstart", newKickstartHandler(cfg, kickstartTemplate))
 	mux.HandleFunc("/cloud-init/user-data", handleCloudInit)
 	mux.HandleFunc("/cloud-init/meta-data", handleMetaData)
 	mux.HandleFunc("/api/images", func(w http.ResponseWriter, r *http.Request) {
