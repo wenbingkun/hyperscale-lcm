@@ -191,7 +191,7 @@
 
 计划内容：
 1.  [x] **AlertManager 部署集成** — `docker-compose.prod.yml` 新增 AlertManager 容器，配置 Prometheus `alerting` 指向 AlertManager；创建 `infra/alertmanager/alertmanager.yml` 配置模板（含 email / Slack / PagerDuty receiver 占位）
-2.  [ ] **Core AlertService 增强** — 现有 `AlertService` 扩展支持通过 HTTP 调用 AlertManager `/api/v2/alerts` 推送自定义告警（如 Satellite 离线超时、Job 超时未完成），新增 `AlertServiceIntegrationTest`
+2.  [x] **Core AlertService 增强** — 现有 `AlertService` 扩展支持通过 HTTP 调用 AlertManager `/api/v2/alerts` 推送自定义告警（如 Satellite 离线超时、Job 超时未完成），新增 `AlertServiceIntegrationTest`
 3.  [ ] **Helm NetworkPolicy 模板** — 新增 `networkpolicy.yaml`：Core 仅接受 Frontend / Satellite / Prometheus 来源流量；Satellite 仅接受 Core gRPC 出站；DB / Redis / Kafka 仅接受 Core 来源
 4.  [ ] **Helm PodDisruptionBudget 模板** — Core `minAvailable: 1`，Satellite DaemonSet `maxUnavailable: 25%`
 5.  [ ] **Helm ServiceAccount & RBAC 模板** — 为 Core / Satellite 创建独立 ServiceAccount，附加最小权限 Role（ConfigMap 读取、Secret 读取）
@@ -231,7 +231,7 @@
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
-    *   [ ] AlertManager 基础部署已接入，但 Core 主动推送链路与 Helm Chart 的 NetworkPolicy / PDB / RBAC 仍待补齐。
+    *   [ ] AlertManager 基础部署与 Core 主动推送链路已接入，但 Helm Chart 的 NetworkPolicy / PDB / RBAC / AlertManager 模板仍待补齐。
     *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
     *   [ ] 端到端 Demo 脚本尚未编写。
