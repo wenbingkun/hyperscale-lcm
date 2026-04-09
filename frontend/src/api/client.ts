@@ -222,11 +222,11 @@ const TOKEN_KEY = 'lcm_auth_token';
 /**
  * 获取带 Authorization 头的通用 headers
  */
-function authHeaders(extra?: Record<string, string>): HeadersInit {
-    const headers: Record<string, string> = { ...extra };
+function authHeaders(extra?: HeadersInit): Headers {
+    const headers = new Headers(extra);
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.set('Authorization', `Bearer ${token}`);
     }
     return headers;
 }
@@ -237,7 +237,7 @@ function authHeaders(extra?: Record<string, string>): HeadersInit {
 export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
     const response = await fetch(url, {
         ...options,
-        headers: authHeaders(options?.headers as Record<string, string>),
+        headers: authHeaders(options?.headers),
     });
 
     // 401 → Token 过期，清除并重定向到登录
