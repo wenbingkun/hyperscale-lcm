@@ -196,7 +196,7 @@
 4.  [x] **Helm PodDisruptionBudget 模板** — Core `minAvailable: 1`，Satellite DaemonSet `maxUnavailable: 25%`
 5.  [x] **Helm ServiceAccount & RBAC 模板** — 为 Core / Satellite 创建独立 ServiceAccount，附加最小权限 Role（ConfigMap 读取、Secret 读取）
 6.  [x] **Helm AlertManager 模板** — Helm Chart 新增 AlertManager Deployment + Service + ConfigMap，由 `values.yaml` 中 `alertmanager.enabled` 控制
-7.  [ ] **前端覆盖率报告与组件测试** — `vitest` 接入 Istanbul coverage provider，CI 输出覆盖率摘要；为 `GlassCard`、`GradientButton`、`StatCard`、`SatelliteTable` 补充基础渲染测试
+7.  [x] **前端覆盖率报告与组件测试** — `vitest` 接入 Istanbul coverage provider，CI 输出覆盖率摘要；为 `GlassCard`、`GradientButton`、`StatCard`、`SatelliteTable` 补充基础渲染测试
 8.  **测试验证** — `helm template` 验证新模板渲染无误；`cd frontend && npm test -- --coverage` 输出覆盖率；`./scripts/check_ci_contract.sh` 通过
 
 **Sprint 16 (PXE Completion & Demo Readiness)** — 📋 待启动
@@ -221,9 +221,9 @@
 *   **子系统概况**:
     *   Core (Java/Quarkus): JaCoCo 实测覆盖率 ~47.02%，默认门槛已提升至 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，后续重点转向 6 个 Service 测试缺口。
     *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块 TFTP/HTTP 就绪，DHCP 选项注入与镜像管理尚缺。
-    *   Frontend (React): 7 个测试文件覆盖核心页面与关键状态，4 个通用组件（GlassCard、GradientButton、SatelliteTable、StatCard）未覆盖，尚无覆盖率量化报告。
+    *   Frontend (React): 11 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
 *   **关键结论**:
-    *   [x] 前端零测试覆盖风险已开始收敛。
+    *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
     *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `45%`，实测 ~47.02%。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。

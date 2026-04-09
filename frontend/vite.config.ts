@@ -52,6 +52,12 @@ export default defineConfig({
     css: true,
     clearMocks: true,
     restoreMocks: true,
+    coverage: {
+      provider: 'istanbul',
+      reporter: ['text-summary', 'html', 'json-summary'],
+      reportsDirectory: './coverage',
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**'],
+    },
     include: ['src/**/*.test.{ts,tsx}'],
   },
 })
