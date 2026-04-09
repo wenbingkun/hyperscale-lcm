@@ -18,6 +18,7 @@ type ServerConfig struct {
 	TFTPAddr          string
 	TFTPRootDir       string
 	HTTPAddr          string
+	ImageDir          string
 	DHCPProxyEnabled  bool
 	DHCPProxyAddr     string
 	BootServerHost    string
@@ -31,6 +32,7 @@ var DefaultConfig = ServerConfig{
 	TFTPAddr:          ":69",
 	TFTPRootDir:       "/var/lib/lcm/tftpboot",
 	HTTPAddr:          ":8090",
+	ImageDir:          "/var/lib/lcm/images",
 	DHCPProxyEnabled:  true,
 	DHCPProxyAddr:     ":4011",
 	LegacyPXEBootFile: "undionly.kpxe",
@@ -45,6 +47,10 @@ func StartPXEServices(ctx context.Context, cfg ServerConfig) {
 	// 1. Ensure TFTP Root directory exists
 	if err := os.MkdirAll(cfg.TFTPRootDir, 0755); err != nil {
 		log.Printf("⚠️ Failed to ensure TFTP root directory %s: %v", cfg.TFTPRootDir, err)
+		return
+	}
+	if err := os.MkdirAll(cfg.ImageDir, 0755); err != nil {
+		log.Printf("⚠️ Failed to ensure PXE image directory %s: %v", cfg.ImageDir, err)
 		return
 	}
 
@@ -122,15 +128,14 @@ func startTFTPServer(ctx context.Context, cfg ServerConfig) error {
 
 // startHTTPServer handles dynamic iPXE scripts and Cloud-Init templates
 func startHTTPServer(ctx context.Context, cfg ServerConfig) error {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/ipxe", handleIpxeScript)
-	mux.HandleFunc("/cloud-init/user-data", handleCloudInit)
-	mux.HandleFunc("/cloud-init/meta-data", handleMetaData)
+	handler, err := newPXEHTTPHandler(cfg)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr:    cfg.HTTPAddr,
-		Handler: mux,
+		Handler: handler,
 	}
 
 	go func() {

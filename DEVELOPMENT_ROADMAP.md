@@ -205,7 +205,7 @@
 
 计划内容：
 1.  [x] **PXE DHCP 选项补齐** — Satellite PXE 模块新增轻量 DHCP Proxy，支持 `Option 66/67` 注入与 iPXE chainload：传统 PXE 客户端下发 `undionly.kpxe`，iPXE 客户端自动切换到 Satellite 托管的 `/ipxe` HTTP 脚本；相关地址和引导参数已环境变量化
-2.  [ ] **PXE 镜像管理 API** — Satellite 新增 `/api/images` REST 端点，支持上传 / 列出 / 删除 OS 镜像；Core 新增 `ImageCatalogResource` 用于集中查看各 Satellite 的可用镜像
+2.  [x] **PXE 镜像管理 API** — Satellite 新增 `/api/images` REST 端点，支持上传 / 列出 / 删除 OS 镜像，并通过 `LCM_PXE_IMAGE_DIR` 管理本地镜像目录；Core 新增 `ImageCatalogResource`，可按集群聚合查看各 Satellite 的可用镜像
 3.  [ ] **PXE Boot Flow 集成** — 串联 DHCP → TFTP → iPXE → HTTP kickstart 全流程；`pxe.ServerConfig` 增加 `KickstartTemplate` 字段，支持按 Node 渲染动态 kickstart 文件
 4.  [ ] **大组件拆分重构** — 将 `CredentialProfilesPage`（862 行）拆为 `CredentialProfileList`、`CredentialProfileForm`、`CredentialProfileDetail` 三个子组件；`DiscoveryPage`（545 行）拆为 `DiscoveryList` 和 `DiscoveryApprovalPanel`
 5.  [ ] **端到端 Demo 脚本** — 编写 `scripts/demo.sh`，串联零接触发现 → 自动纳管 → Job 提交 → 调度 → SSH 执行 → 状态回调 → 前端刷新全流程，使用 `curl` + `grpcurl` + `websocat` 实现；附 `documentation/DEMO_GUIDE.md` 操作说明
@@ -217,10 +217,10 @@
 *   **整体状态**:
     *   Phase 6 质量加固进入尾声，15 个 Sprint 已完成（2026-01 ~ 2026-04）。
     *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
-    *   剩余缺口集中在 PXE 收尾、Demo 交付与真实硬件验证（Sprint 16 + Phase 6 余项）。
+    *   剩余缺口集中在 PXE Boot Flow / 节点模板收尾、Demo 交付与真实硬件验证（Sprint 16 + Phase 6 余项）。
 *   **子系统概况**:
     *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛为 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
-    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload，剩余缺口集中在镜像管理与节点特定模板。
+    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API，剩余缺口集中在节点特定模板与 Boot Flow。
     *   Frontend (React): 11 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
 *   **关键结论**:
     *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
@@ -232,7 +232,7 @@
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
     *   [x] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager / RBAC / PDB / NetworkPolicy 模板已接入。
-    *   [ ] PXE 裸金属自动化完成度约 88%，剩余缺口为镜像管理、节点特定模板与 Boot Flow 收尾。
+    *   [ ] PXE 裸金属自动化完成度约 91%，剩余缺口为节点特定模板与 Boot Flow 收尾。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
     *   [ ] 端到端 Demo 脚本尚未编写。
 

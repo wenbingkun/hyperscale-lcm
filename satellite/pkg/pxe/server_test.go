@@ -1,7 +1,9 @@
 package pxe
 
 import (
+	"bytes"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -98,5 +100,56 @@ func TestHandleMetaData(t *testing.T) {
 
 	if !strings.Contains(string(data), "instance-id") {
 		t.Errorf("expected response to contain instance-id")
+	}
+}
+
+func TestImageAPIUploadListAndDelete(t *testing.T) {
+	handler, err := newPXEHTTPHandler(ServerConfig{
+		HTTPAddr: ":8090",
+		ImageDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("expected handler to be created, got %v", err)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "ubuntu-24.04.iso")
+	if err != nil {
+		t.Fatalf("expected multipart file, got %v", err)
+	}
+	if _, err := part.Write([]byte("iso-data")); err != nil {
+		t.Fatalf("expected write to succeed, got %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("expected writer close to succeed, got %v", err)
+	}
+
+	uploadReq := httptest.NewRequest(http.MethodPost, "/api/images", &body)
+	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadResp := httptest.NewRecorder()
+	handler.ServeHTTP(uploadResp, uploadReq)
+
+	if uploadResp.Code != http.StatusCreated {
+		t.Fatalf("expected created response, got %d", uploadResp.Code)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/images", nil)
+	listResp := httptest.NewRecorder()
+	handler.ServeHTTP(listResp, listReq)
+
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("expected ok list response, got %d", listResp.Code)
+	}
+	if !strings.Contains(listResp.Body.String(), "ubuntu-24.04.iso") {
+		t.Fatalf("expected uploaded image to be listed, got %s", listResp.Body.String())
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/images/ubuntu-24.04.iso", nil)
+	deleteResp := httptest.NewRecorder()
+	handler.ServeHTTP(deleteResp, deleteReq)
+
+	if deleteResp.Code != http.StatusNoContent {
+		t.Fatalf("expected no content delete response, got %d", deleteResp.Code)
 	}
 }

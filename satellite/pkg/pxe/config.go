@@ -15,6 +15,7 @@ func ConfigFromEnv(base ServerConfig) ServerConfig {
 	cfg.TFTPAddr = stringFromEnv("LCM_PXE_TFTP_ADDR", cfg.TFTPAddr)
 	cfg.TFTPRootDir = stringFromEnv("LCM_PXE_TFTP_ROOT", cfg.TFTPRootDir)
 	cfg.HTTPAddr = stringFromEnv("LCM_PXE_HTTP_ADDR", cfg.HTTPAddr)
+	cfg.ImageDir = stringFromEnv("LCM_PXE_IMAGE_DIR", cfg.ImageDir)
 	cfg.DHCPProxyAddr = stringFromEnv("LCM_PXE_DHCP_PROXY_ADDR", cfg.DHCPProxyAddr)
 	cfg.BootServerHost = stringFromEnv("LCM_PXE_BOOT_SERVER_HOST", cfg.BootServerHost)
 	cfg.LegacyPXEBootFile = stringFromEnv("LCM_PXE_DHCP_BOOTFILE", cfg.LegacyPXEBootFile)
@@ -26,6 +27,9 @@ func ConfigFromEnv(base ServerConfig) ServerConfig {
 	}
 	if cfg.LegacyPXEBootFile == "" {
 		cfg.LegacyPXEBootFile = DefaultConfig.LegacyPXEBootFile
+	}
+	if cfg.ImageDir == "" {
+		cfg.ImageDir = DefaultConfig.ImageDir
 	}
 	if cfg.IPXEBootScriptURL == "" {
 		cfg.IPXEBootScriptURL = defaultIPXEBootScriptURL(cfg)
