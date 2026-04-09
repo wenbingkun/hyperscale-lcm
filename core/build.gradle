@@ -120,7 +120,7 @@ def hasJacocoExecutionData = {
 }
 
 def jacocoMinimumCoverage = new BigDecimal(
-    (findProperty('jacocoMinimumCoverage') ?: '0.30').toString()
+    (findProperty('jacocoMinimumCoverage') ?: '0.45').toString()
 )
 
 jacocoTestReport {
