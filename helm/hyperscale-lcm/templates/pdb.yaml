@@ -1,0 +1,33 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- if and .Values.core.enabled .Values.podDisruptionBudget.core.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.core.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- if and .Values.core.enabled .Values.podDisruptionBudget.core.enabled .Values.satellite.enabled .Values.podDisruptionBudget.satellite.enabled }}
+---
+{{- end }}
+{{- if and .Values.satellite.enabled .Values.podDisruptionBudget.satellite.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-satellite
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: satellite
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.satellite.maxUnavailable | quote }}
+  selector:
+    matchLabels:
+      {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 6 }}
+{{- end }}
+{{- end }}

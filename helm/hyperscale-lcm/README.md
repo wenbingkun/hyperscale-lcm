@@ -62,6 +62,14 @@ helm install lcm ./helm/hyperscale-lcm \
 | `redis.enabled` | 内置 Redis | `true` |
 | `kafka.enabled` | 内置 Kafka | `false` |
 
+### 高可用
+
+| 参数 | 描述 | 默认值 |
+|------|------|--------|
+| `podDisruptionBudget.enabled` | 启用 PDB 模板 | `true` |
+| `podDisruptionBudget.core.minAvailable` | Core 最少可用副本 | `1` |
+| `podDisruptionBudget.satellite.maxUnavailable` | Satellite 最大不可用比例 | `"25%"` |
+
 ## 示例
 
 ### 生产环境配置

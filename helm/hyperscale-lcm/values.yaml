@@ -168,6 +168,16 @@ monitoring:
     dashboards:
       - name: hyperscale-lcm
 
+# ============== 可用性保护 ==============
+podDisruptionBudget:
+  enabled: true
+  core:
+    enabled: true
+    minAvailable: 1
+  satellite:
+    enabled: true
+    maxUnavailable: 25%
+
 # ============== 安全配置 ==============
 security:
   # mTLS 配置
