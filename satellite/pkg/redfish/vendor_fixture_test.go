@@ -1,9 +1,10 @@
 package redfish
 
 import (
+	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,35 +68,14 @@ func TestVendorTemplateFixtures(t *testing.T) {
 				t.Fatalf("template %s not found", tc.name)
 			}
 
+			fixtures := loadVendorFixtureBundle(t, tc.name)
+			server := newFixtureTLSServer(t, fixtures, "admin", "password")
 			adapter := NewTemplateAdapter(Config{
-				Endpoint: "https://bmc.test",
+				Endpoint: server.URL,
 				Username: "admin",
 				Password: "password",
 				Insecure: true,
 			}, template)
-			fixtures := loadVendorFixtureBundle(t, tc.name)
-			adapter.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-				payload, ok := fixtures[req.URL.Path]
-				if !ok {
-					return &http.Response{
-						StatusCode: http.StatusNotFound,
-						Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
-						Header:     make(http.Header),
-						Request:    req,
-					}, nil
-				}
-
-				body, err := json.Marshal(payload)
-				if err != nil {
-					return nil, err
-				}
-				return &http.Response{
-					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(string(body))),
-					Header:     make(http.Header),
-					Request:    req,
-				}, nil
-			})
 
 			info, err := adapter.CollectStaticInfo()
 			if err != nil {
@@ -161,9 +141,40 @@ func loadVendorFixtureBundle(t *testing.T, name string) map[string]map[string]an
 
 func findTemplateByName(templates []Template, name string) (Template, bool) {
 	for _, template := range templates {
-		if strings.EqualFold(template.Name, name) {
+		if equalFold(template.Name, name) {
 			return template, true
 		}
 	}
 	return Template{}, false
+}
+
+func newFixtureTLSServer(t *testing.T, fixtures map[string]map[string]any, username string, password string) *httptest.Server {
+	t.Helper()
+
+	expectedAuthorization := "Basic " + base64.StdEncoding.EncodeToString([]byte(username+":"+password))
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Authorization") != expectedAuthorization {
+			writer.Header().Set("WWW-Authenticate", `Basic realm="redfish-fixture"`)
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		payload, ok := fixtures[request.URL.Path]
+		if !ok {
+			writer.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(writer).Encode(map[string]any{"error": "not found"})
+			return
+		}
+
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(payload); err != nil {
+			t.Fatalf("encode fixture payload: %v", err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func equalFold(left string, right string) bool {
+	return strings.EqualFold(left, right)
 }

@@ -14,7 +14,8 @@ REDFISH_ENDPOINT="${LCM_DEMO_REDFISH_ENDPOINT:-${REDISHOST}:${REDFISH_PORT}}"
 SSH_HOST="${LCM_DEMO_SSH_HOST:-127.0.0.1}"
 SSH_PORT="${LCM_DEMO_SSH_PORT:-22222}"
 SSH_USER="${LCM_DEMO_SSH_USER:-demo}"
-PROFILE_NAME="${LCM_DEMO_PROFILE_NAME:-demo-openbmc-profile}"
+REDFISH_PROFILE="${LCM_DEMO_REDFISH_PROFILE:-openbmc-baseline}"
+PROFILE_NAME="${LCM_DEMO_PROFILE_NAME:-demo-${REDFISH_PROFILE}-profile}"
 DEVICE_MAC="${LCM_DEMO_DEVICE_MAC:-52:54:00:12:34:56}"
 DISCOVERY_METHOD="${LCM_DEMO_DISCOVERY_METHOD:-REDFISH}"
 MOCK_SSH_GOMODCACHE="${LCM_DEMO_GO_MOD_CACHE:-/tmp/go-mod-cache-demo}"
@@ -128,6 +129,7 @@ start_mock_redfish() {
     --port "$REDFISH_PORT" \
     --cert "$ROOT_DIR/certs/server.pem" \
     --key "$ROOT_DIR/certs/server.key" \
+    --profile "$REDFISH_PROFILE" \
     >"$REDFISH_LOG" 2>&1 &
   record_pid "mock-redfish" "$!"
 }
@@ -320,7 +322,7 @@ create_demo_profile() {
   body="$(jq -cn \
     --arg name "$PROFILE_NAME" \
     --arg deviceType "BMC_ENABLED" \
-    --arg template "openbmc-baseline" \
+    --arg template "$REDFISH_PROFILE" \
     --arg bmcUser "literal://$DEMO_BMC_USER" \
     --arg bmcPass "literal://$DEMO_BMC_PASSWORD" \
     --arg mgdUser "literal://$DEMO_MANAGED_USER" \
@@ -335,7 +337,7 @@ create_demo_profile() {
       passwordSecretRef: $bmcPass,
       managedUsernameSecretRef: $mgdUser,
       managedPasswordSecretRef: $mgdPass,
-      description: "Local demo profile for mock OpenBMC"
+      description: ("Local demo profile for mock Redfish profile " + $template)
     }')"
   profile_id="$(api_post_json "$CORE_URL/api/credential-profiles" "$body" | jq -r '.id')"
   [[ -n "$profile_id" && "$profile_id" != "null" ]] || die "failed to create demo credential profile"
@@ -469,11 +471,13 @@ print_summary() {
   jq -n \
     --arg satelliteId "$SATELLITE_ID" \
     --arg discoveryIp "$REDFISH_ENDPOINT" \
+    --arg redfishProfile "$REDFISH_PROFILE" \
     --argjson discovery "$(printf '%s' "$device_payload" | jq --arg ip "$REDFISH_ENDPOINT" '[.[] | select(.ipAddress == $ip)][0]')" \
     --argjson job "$job_payload" \
     '{
       satelliteId: $satelliteId,
       discoveryIp: $discoveryIp,
+      redfishProfile: $redfishProfile,
       discovery: $discovery,
       job: $job,
       websocketLog: "'$WS_LOG'"
@@ -535,6 +539,7 @@ Environment overrides:
   LCM_DEMO_CLUSTER       Cluster ID used by the demo satellite
   LCM_DEMO_CORE_URL      Core REST base URL
   LCM_DEMO_GRPC_TARGET   Core gRPC target used by grpcurl and satellite
+  LCM_DEMO_REDFISH_PROFILE  Mock Redfish fixture profile (openbmc-baseline, dell-idrac, hpe-ilo, lenovo-xcc)
 EOF
 }
 

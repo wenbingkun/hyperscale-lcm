@@ -8,6 +8,7 @@
   },
   "/redfish/v1/Systems/1": {
     "@odata.id": "/redfish/v1/Systems/1",
+    "Manufacturer": "Lenovo",
     "SerialNumber": "LEN-SR650-001",
     "Model": "ThinkSystem SR650 V3",
     "PowerState": "Off"

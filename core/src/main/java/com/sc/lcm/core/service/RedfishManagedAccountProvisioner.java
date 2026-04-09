@@ -8,10 +8,14 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -22,6 +26,8 @@ import java.util.Map;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import lombok.extern.slf4j.Slf4j;
@@ -237,6 +243,18 @@ public class RedfishManagedAccountProvisioner {
     }
 
     private void writeJSON(ProvisionRequest request, String method, String path, Map<String, Object> payload) throws Exception {
+        if ("PATCH".equals(method)) {
+            // HttpURLConnection rejects PATCH on the current JDK, so we send it manually while preserving the same TLS/auth settings.
+            int status = sendPatchedJson(request, path, payload);
+            if (status == HttpURLConnection.HTTP_OK
+                    || status == HttpURLConnection.HTTP_CREATED
+                    || status == HttpURLConnection.HTTP_ACCEPTED
+                    || status == HttpURLConnection.HTTP_NO_CONTENT) {
+                return;
+            }
+            throw new ProvisionHttpException(status, method + " " + path + " returned " + status);
+        }
+
         URL url = new URL(absoluteUrl(request.endpoint(), path));
         HttpURLConnection connection = openConnection(url, request);
         connection.setRequestMethod(method);
@@ -270,6 +288,73 @@ public class RedfishManagedAccountProvisioner {
         connection.setReadTimeout(request.readTimeoutMs());
         connection.setRequestProperty("Authorization", basicAuth(request.bootstrapUsername(), request.bootstrapPassword()));
         return connection;
+    }
+
+    private int sendPatchedJson(ProvisionRequest request, String path, Map<String, Object> payload) throws Exception {
+        URL url = new URL(absoluteUrl(request.endpoint(), path));
+        byte[] body = objectMapper.writeValueAsBytes(payload);
+
+        try (Socket socket = openPatchSocket(url, request);
+                OutputStream outputStream = socket.getOutputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))) {
+            String target = url.getFile() == null || url.getFile().isBlank() ? "/" : url.getFile();
+            String hostHeader = url.getHost();
+            if (url.getPort() != -1 && url.getPort() != url.getDefaultPort()) {
+                hostHeader += ":" + url.getPort();
+            }
+
+            String headers = "PATCH " + target + " HTTP/1.1\r\n"
+                    + "Host: " + hostHeader + "\r\n"
+                    + "Authorization: " + basicAuth(request.bootstrapUsername(), request.bootstrapPassword()) + "\r\n"
+                    + "Accept: application/json\r\n"
+                    + "Content-Type: application/json\r\n"
+                    + "Content-Length: " + body.length + "\r\n"
+                    + "Connection: close\r\n\r\n";
+            outputStream.write(headers.getBytes(StandardCharsets.US_ASCII));
+            outputStream.write(body);
+            outputStream.flush();
+
+            String statusLine = reader.readLine();
+            if (statusLine == null || statusLine.isBlank()) {
+                throw new IOException("PATCH " + path + " returned an empty response");
+            }
+
+            while (true) {
+                String line = reader.readLine();
+                if (line == null || line.isEmpty()) {
+                    break;
+                }
+            }
+
+            String[] tokens = statusLine.split(" ");
+            if (tokens.length < 2) {
+                throw new IOException("PATCH " + path + " returned malformed status line: " + statusLine);
+            }
+            return Integer.parseInt(tokens[1]);
+        }
+    }
+
+    private Socket openPatchSocket(URL url, ProvisionRequest request) throws Exception {
+        String protocol = url.getProtocol();
+        int port = url.getPort() != -1 ? url.getPort() : url.getDefaultPort();
+        if ("https".equalsIgnoreCase(protocol)) {
+            SSLSocketFactory socketFactory = request.insecure()
+                    ? insecureSslContext().getSocketFactory()
+                    : (SSLSocketFactory) SSLSocketFactory.getDefault();
+            SSLSocket socket = (SSLSocket) socketFactory.createSocket();
+            socket.connect(new InetSocketAddress(url.getHost(), port), request.connectTimeoutMs());
+            socket.setSoTimeout(request.readTimeoutMs());
+            socket.startHandshake();
+            if (!request.insecure() && !HttpsURLConnection.getDefaultHostnameVerifier().verify(url.getHost(), socket.getSession())) {
+                throw new javax.net.ssl.SSLHandshakeException("Hostname verification failed for " + url.getHost());
+            }
+            return socket;
+        }
+
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(url.getHost(), port), request.connectTimeoutMs());
+        socket.setSoTimeout(request.readTimeoutMs());
+        return socket;
     }
 
     private String resolveRoleId(CredentialProfile profile) {

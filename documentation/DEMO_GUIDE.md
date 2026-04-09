@@ -56,12 +56,13 @@
 
 默认会为每次运行生成新的 `demo-lab-<timestamp>` 集群名，避免复用旧的 Satellite / discovery 数据；如需固定集群名，可显式设置 `LCM_DEMO_CLUSTER`。
 mock SSH 服务默认监听 `127.0.0.1:22222`，也可通过 `LCM_DEMO_SSH_PORT` 覆盖。
+mock Redfish 默认使用 `openbmc-baseline` fixture；如需切到其他厂商 smoke，可设置 `LCM_DEMO_REDFISH_PROFILE=dell-idrac|hpe-ilo|lenovo-xcc`。
 
 ## What The Demo Proves
 
 - Core 与 Satellite 的本地 gRPC 注册链路可用
 - `grpcurl` 注入的 discovery 事件会进入发现池并触发 BMC claim 规划
-- Redfish claim 与托管账号下发可在本地 mock 环境完成
+- Redfish claim 与托管账号下发可在共享 vendor fixture 驱动的本地 mock 环境完成
 - Job 调度、Satellite SSH 执行和状态回调闭环可用
 - Dashboard WebSocket 会收到 `DISCOVERY_EVENT`、`HEARTBEAT_UPDATE`、`JOB_STATUS`
 

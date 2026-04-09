@@ -5,6 +5,16 @@ import json
 import ssl
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+
+SUPPORTED_PROFILES = (
+    "openbmc-baseline",
+    "dell-idrac",
+    "hpe-ilo",
+    "lenovo-xcc",
+)
+FIXTURE_DIR = Path(__file__).resolve().parents[2] / "satellite" / "pkg" / "redfish" / "testdata" / "vendor-fixtures"
 
 
 def parse_args():
@@ -15,13 +25,21 @@ def parse_args():
     parser.add_argument("--key", required=True)
     parser.add_argument("--bootstrap-user", default="admin")
     parser.add_argument("--bootstrap-password", default="admin123")
+    parser.add_argument("--profile", choices=SUPPORTED_PROFILES, default="openbmc-baseline")
     return parser.parse_args()
+
+
+def load_fixture_bundle(profile):
+    path = FIXTURE_DIR / f"{profile}.json"
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def make_handler(state, bootstrap_user, bootstrap_password):
     expected_auth = "Basic " + base64.b64encode(
         f"{bootstrap_user}:{bootstrap_password}".encode("utf-8")
     ).decode("ascii")
+    fixtures = state["fixtures"]
 
     class RedfishHandler(BaseHTTPRequestHandler):
         server_version = "HyperscaleLCMDemo/1.0"
@@ -30,22 +48,6 @@ def make_handler(state, bootstrap_user, bootstrap_password):
             if not self._authorized():
                 return
 
-            if self.path == "/redfish/v1/Systems":
-                return self._json(
-                    {
-                        "Members": [
-                            {"@odata.id": "/redfish/v1/Systems/System.Embedded.1"}
-                        ]
-                    }
-                )
-            if self.path == "/redfish/v1/Systems/System.Embedded.1":
-                return self._json(
-                    {
-                        "Id": "System.Embedded.1",
-                        "Manufacturer": "OpenBMC",
-                        "Model": "DemoBMC-9000",
-                    }
-                )
             if self.path == "/redfish/v1/AccountService":
                 return self._json(
                     {
@@ -77,6 +79,10 @@ def make_handler(state, bootstrap_user, bootstrap_password):
                         {"error": "account not found"}, status=HTTPStatus.NOT_FOUND
                     )
                 return self._json(account)
+
+            payload = fixtures.get(self.path)
+            if payload is not None:
+                return self._json(payload)
 
             return self._json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -151,6 +157,7 @@ def make_handler(state, bootstrap_user, bootstrap_password):
 def main():
     args = parse_args()
     state = {
+        "fixtures": load_fixture_bundle(args.profile),
         "accounts": [
             {
                 "Id": "1",
@@ -168,7 +175,7 @@ def main():
     context.load_cert_chain(certfile=args.cert, keyfile=args.key)
     server.socket = context.wrap_socket(server.socket, server_side=True)
 
-    print(f"mock redfish server listening on https://{args.bind}:{args.port}")
+    print(f"mock redfish server listening on https://{args.bind}:{args.port} profile={args.profile}")
     server.serve_forever()
 
 

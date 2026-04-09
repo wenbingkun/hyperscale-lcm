@@ -8,7 +8,9 @@
   },
   "/redfish/v1/Systems/1": {
     "@odata.id": "/redfish/v1/Systems/1",
+    "Manufacturer": "HPE",
     "SerialNumber": "HPE-380-001",
+    "Model": "ProLiant DL380 Gen11",
     "PowerState": "On",
     "Oem": {
       "Hpe": {

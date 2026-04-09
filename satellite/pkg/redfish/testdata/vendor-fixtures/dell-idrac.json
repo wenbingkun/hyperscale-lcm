@@ -8,6 +8,7 @@
   },
   "/redfish/v1/Systems/System.Embedded.1": {
     "@odata.id": "/redfish/v1/Systems/System.Embedded.1",
+    "Manufacturer": "Dell Inc.",
     "SerialNumber": "DELL-760-001",
     "Model": "PowerEdge R760",
     "PowerState": "On"

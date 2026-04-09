@@ -8,6 +8,7 @@
   },
   "/redfish/v1/Systems/system": {
     "@odata.id": "/redfish/v1/Systems/system",
+    "Manufacturer": "OpenBMC",
     "SerialNumber": "OBMC-001",
     "Model": "OpenBMC Reference Board",
     "PowerState": "On"
