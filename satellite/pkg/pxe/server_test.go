@@ -36,15 +36,24 @@ func TestHandleIpxeScript(t *testing.T) {
 }
 
 func TestHandleIpxeScriptMissingMac(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/ipxe", nil) // missing mac parameter
+	req := httptest.NewRequest(http.MethodGet, "/ipxe", nil)
 	w := httptest.NewRecorder()
 
 	handleIpxeScript(w, req)
 	res := w.Result()
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected status BadRequest; got %v", res.Status)
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expected status OK; got %v", res.Status)
+	}
+
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("expected error to be nil got %v", err)
+	}
+
+	if !strings.Contains(string(data), "unknown") {
+		t.Errorf("expected script to fall back to unknown MAC")
 	}
 }
 

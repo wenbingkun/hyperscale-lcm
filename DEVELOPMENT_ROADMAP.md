@@ -199,18 +199,18 @@
 7.  [x] **前端覆盖率报告与组件测试** — `vitest` 接入 Istanbul coverage provider，CI 输出覆盖率摘要；为 `GlassCard`、`GradientButton`、`StatCard`、`SatelliteTable` 补充基础渲染测试
 8.  **测试验证** — `helm template` 验证新模板渲染无误；`cd frontend && npm test -- --coverage` 输出覆盖率；`./scripts/check_ci_contract.sh` 通过
 
-**Sprint 16 (PXE Completion & Demo Readiness)** — 📋 待启动
+**Sprint 16 (PXE Completion & Demo Readiness)** — 🚧 进行中
 
 目标：收敛 Phase 6 剩余功能，交付端到端 Demo 脚本。
 
 计划内容：
-1.  [ ] **PXE DHCP 选项补齐** — Satellite PXE 模块新增 DHCP Proxy 或 Option 66/67 注入能力，使用 `github.com/insomniacslk/dhcp` 库实现轻量 DHCP relay，支持 iPXE chainload 流程
+1.  [x] **PXE DHCP 选项补齐** — Satellite PXE 模块新增轻量 DHCP Proxy，支持 `Option 66/67` 注入与 iPXE chainload：传统 PXE 客户端下发 `undionly.kpxe`，iPXE 客户端自动切换到 Satellite 托管的 `/ipxe` HTTP 脚本；相关地址和引导参数已环境变量化
 2.  [ ] **PXE 镜像管理 API** — Satellite 新增 `/api/images` REST 端点，支持上传 / 列出 / 删除 OS 镜像；Core 新增 `ImageCatalogResource` 用于集中查看各 Satellite 的可用镜像
 3.  [ ] **PXE Boot Flow 集成** — 串联 DHCP → TFTP → iPXE → HTTP kickstart 全流程；`pxe.ServerConfig` 增加 `KickstartTemplate` 字段，支持按 Node 渲染动态 kickstart 文件
 4.  [ ] **大组件拆分重构** — 将 `CredentialProfilesPage`（862 行）拆为 `CredentialProfileList`、`CredentialProfileForm`、`CredentialProfileDetail` 三个子组件；`DiscoveryPage`（545 行）拆为 `DiscoveryList` 和 `DiscoveryApprovalPanel`
 5.  [ ] **端到端 Demo 脚本** — 编写 `scripts/demo.sh`，串联零接触发现 → 自动纳管 → Job 提交 → 调度 → SSH 执行 → 状态回调 → 前端刷新全流程，使用 `curl` + `grpcurl` + `websocat` 实现；附 `documentation/DEMO_GUIDE.md` 操作说明
 6.  [ ] **JaCoCo 基线上调至 50%** — 借助 Sprint 14-15 累积的测试增量，将 `jacocoMinimumCoverage` 从 `0.45` 上调至 `0.50`
-7.  **测试验证** — `cd satellite && go test ./pkg/pxe/... -count=1` 通过；Demo 脚本在 `docker-compose up` 环境下端到端执行通过；`./scripts/check_ci_contract.sh` 通过
+7.  **测试验证** — `cd satellite && go test ./pkg/pxe/... -count=1` 通过；`cd satellite && go test ./... -count=1` 通过；Demo 脚本在 `docker-compose up` 环境下端到端执行通过；`./scripts/check_ci_contract.sh` 通过
 
 ## 🔍 项目评估 (Project Assessment)
 
@@ -220,7 +220,7 @@
     *   剩余缺口集中在 PXE 收尾、Demo 交付与真实硬件验证（Sprint 16 + Phase 6 余项）。
 *   **子系统概况**:
     *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛为 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
-    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块 TFTP/HTTP 就绪，DHCP 选项注入与镜像管理尚缺。
+    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload，剩余缺口集中在镜像管理与节点特定模板。
     *   Frontend (React): 11 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
 *   **关键结论**:
     *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
@@ -232,7 +232,7 @@
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
     *   [x] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager / RBAC / PDB / NetworkPolicy 模板已接入。
-    *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
+    *   [ ] PXE 裸金属自动化完成度约 88%，剩余缺口为镜像管理、节点特定模板与 Boot Flow 收尾。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
     *   [ ] 端到端 Demo 脚本尚未编写。
 

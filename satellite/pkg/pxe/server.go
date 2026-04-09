@@ -15,21 +15,31 @@ import (
 
 // ServerConfig holds the configuration for both TFTP and HTTP servers
 type ServerConfig struct {
-	TFTPAddr    string
-	TFTPRootDir string
-	HTTPAddr    string
+	TFTPAddr          string
+	TFTPRootDir       string
+	HTTPAddr          string
+	DHCPProxyEnabled  bool
+	DHCPProxyAddr     string
+	BootServerHost    string
+	LegacyPXEBootFile string
+	IPXEBootScriptURL string
 }
 
 // DefaultConfig provides sensible defaults.
 // HTTPAddr uses :8090 to avoid conflicting with the satellite's own :8080 port.
 var DefaultConfig = ServerConfig{
-	TFTPAddr:    ":69",
-	TFTPRootDir: "/var/lib/lcm/tftpboot",
-	HTTPAddr:    ":8090",
+	TFTPAddr:          ":69",
+	TFTPRootDir:       "/var/lib/lcm/tftpboot",
+	HTTPAddr:          ":8090",
+	DHCPProxyEnabled:  true,
+	DHCPProxyAddr:     ":4011",
+	LegacyPXEBootFile: "undionly.kpxe",
 }
 
 // StartPXEServices initializes and blocks to run both the TFTP and HTTP servers concurrently.
 func StartPXEServices(ctx context.Context, cfg ServerConfig) {
+	cfg = ConfigFromEnv(cfg)
+
 	log.Println("🚀 Starting PXE Provisioning Services...")
 
 	// 1. Ensure TFTP Root directory exists
@@ -38,7 +48,11 @@ func StartPXEServices(ctx context.Context, cfg ServerConfig) {
 		return
 	}
 
-	errChan := make(chan error, 2)
+	serviceCount := 2
+	if cfg.DHCPProxyEnabled {
+		serviceCount++
+	}
+	errChan := make(chan error, serviceCount)
 
 	// 2. Start TFTP Server in background
 	go func() {
@@ -50,13 +64,21 @@ func StartPXEServices(ctx context.Context, cfg ServerConfig) {
 		errChan <- startHTTPServer(ctx, cfg)
 	}()
 
-	// Wait for context cancellation or fatal server error
-	select {
-	case <-ctx.Done():
-		log.Println("🛑 Shutting down PXE Provisioning Services...")
-	case err := <-errChan:
-		if err != nil {
-			log.Printf("❌ PXE Service failed: %v", err)
+	if cfg.DHCPProxyEnabled {
+		go func() {
+			errChan <- startDHCPProxyServer(ctx, cfg)
+		}()
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("🛑 Shutting down PXE Provisioning Services...")
+			return
+		case err := <-errChan:
+			if err != nil {
+				log.Printf("❌ PXE Service failed: %v", err)
+			}
 		}
 	}
 }
@@ -125,8 +147,7 @@ func startHTTPServer(ctx context.Context, cfg ServerConfig) error {
 func handleIpxeScript(w http.ResponseWriter, r *http.Request) {
 	mac := r.URL.Query().Get("mac")
 	if mac == "" {
-		http.Error(w, "Missing 'mac' parameter", http.StatusBadRequest)
-		return
+		mac = "unknown"
 	}
 
 	log.Printf("HTTP: Generating iPXE script for MAC %s", mac)

@@ -37,6 +37,14 @@ Useful optional environment variables:
 - `LCM_BMC_PASSWORD`
 - `LCM_REDFISH_TEMPLATE_DIR`
 - `LCM_REDFISH_TEMPLATE_NAME`
+- `LCM_PXE_TFTP_ADDR`
+- `LCM_PXE_TFTP_ROOT`
+- `LCM_PXE_HTTP_ADDR`
+- `LCM_PXE_DHCP_PROXY_ENABLED`
+- `LCM_PXE_DHCP_PROXY_ADDR`
+- `LCM_PXE_BOOT_SERVER_HOST`
+- `LCM_PXE_DHCP_BOOTFILE`
+- `LCM_PXE_DHCP_IPXE_SCRIPT_URL`
 
 ## Validation
 
@@ -47,4 +55,5 @@ go test ./...
 ## Notes
 
 - Satellite does not talk to Kafka directly; status and trace data flow back to Core over the gRPC stream and are then forwarded by Core.
-- PXE support is available, but the full DHCP option `66/67` and image-management closure is still a remaining delivery task.
+- PXE now includes a lightweight DHCP proxy that advertises `Option 66/67`, defaults to `undionly.kpxe` for legacy PXE clients, and chainloads iPXE clients to the Satellite-hosted `/ipxe` script.
+- The remaining PXE delivery work is image management and node-specific boot / kickstart templates.
