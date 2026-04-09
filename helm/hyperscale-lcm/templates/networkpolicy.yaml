@@ -1,0 +1,129 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- if .Values.core.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "hyperscale-lcm.frontend.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.core.service.httpPort }}
+          protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.core.service.grpcPort }}
+          protocol: TCP
+    {{- if .Values.networkPolicy.core.prometheus.enabled }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.core.prometheus.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.core.prometheus.podSelector | nindent 12 }}
+      ports:
+        - port: {{ .Values.core.service.httpPort }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.core.ingressController.enabled }}
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.core.ingressController.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.core.ingressController.podSelector | nindent 12 }}
+      ports:
+        - port: {{ .Values.core.service.httpPort }}
+          protocol: TCP
+    {{- end }}
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: primary
+      ports:
+        - port: 5432
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.redis.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: redis
+              app.kubernetes.io/component: master
+      ports:
+        - port: 6379
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.kafka.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/name: kafka
+      ports:
+        - port: 9092
+          protocol: TCP
+    {{- end }}
+    {{- if and .Values.monitoring.enabled .Values.monitoring.alertmanager.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "hyperscale-lcm.alertmanager.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.monitoring.alertmanager.service.port }}
+          protocol: TCP
+    {{- end }}
+{{- end }}
+{{- if and .Values.core.enabled .Values.satellite.enabled .Values.networkPolicy.satellite.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-satellite
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: satellite
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: {{ .Values.core.service.grpcPort }}
+          protocol: TCP
+{{- end }}
+{{- end }}

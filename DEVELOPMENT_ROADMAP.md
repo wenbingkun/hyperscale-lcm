@@ -185,14 +185,14 @@
 6.  [x] **JaCoCo 基线上调** — `jacocoMinimumCoverage` 从 `0.30` 上调至 `0.45`，与当前实测覆盖率对齐，防止回退；当前 Core 指令覆盖率实测约 `47.02%`
 7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && ./gradlew check --no-daemon` 通过（含新基线验证）
 
-**Sprint 15 (AlertManager & K8s Operational Hardening)** — 🚧 进行中
+**Sprint 15 (AlertManager & K8s Operational Hardening)** — ✅ 已完成
 
 目标：补齐运维告警通道，强化 Helm Chart 生产可用性。
 
 计划内容：
 1.  [x] **AlertManager 部署集成** — `docker-compose.prod.yml` 新增 AlertManager 容器，配置 Prometheus `alerting` 指向 AlertManager；创建 `infra/alertmanager/alertmanager.yml` 配置模板（含 email / Slack / PagerDuty receiver 占位）
 2.  [x] **Core AlertService 增强** — 现有 `AlertService` 扩展支持通过 HTTP 调用 AlertManager `/api/v2/alerts` 推送自定义告警（如 Satellite 离线超时、Job 超时未完成），新增 `AlertServiceIntegrationTest`
-3.  [ ] **Helm NetworkPolicy 模板** — 新增 `networkpolicy.yaml`：Core 仅接受 Frontend / Satellite / Prometheus 来源流量；Satellite 仅接受 Core gRPC 出站；DB / Redis / Kafka 仅接受 Core 来源
+3.  [x] **Helm NetworkPolicy 模板** — 新增 `networkpolicy.yaml`：Core 仅接受 Frontend / Satellite / Prometheus / Ingress Controller 来源流量；Satellite 仅放行 Core gRPC 与 DNS 出站；DB / Redis / Kafka 借助依赖 chart 策略仅接受 Core client 标签来源
 4.  [x] **Helm PodDisruptionBudget 模板** — Core `minAvailable: 1`，Satellite DaemonSet `maxUnavailable: 25%`
 5.  [x] **Helm ServiceAccount & RBAC 模板** — 为 Core / Satellite 创建独立 ServiceAccount，附加最小权限 Role（ConfigMap 读取、Secret 读取）
 6.  [x] **Helm AlertManager 模板** — Helm Chart 新增 AlertManager Deployment + Service + ConfigMap，由 `values.yaml` 中 `alertmanager.enabled` 控制
@@ -231,7 +231,7 @@
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
-    *   [ ] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager 模板已接入，但 Helm Chart 的 NetworkPolicy 仍待补齐。
+    *   [x] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager / RBAC / PDB / NetworkPolicy 模板已接入。
     *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
     *   [ ] 端到端 Demo 脚本尚未编写。

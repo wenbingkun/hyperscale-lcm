@@ -136,6 +136,10 @@ postgresql:
     password: lcm123
     database: lcm
   primary:
+    networkPolicy:
+      enabled: true
+      allowExternal: false
+      allowExternalEgress: true
     persistence:
       size: 20Gi
 
@@ -144,12 +148,19 @@ redis:
   auth:
     enabled: true
     password: redis123
+  networkPolicy:
+    enabled: true
+    allowExternal: false
+    allowExternalEgress: true
   master:
     persistence:
       size: 5Gi
 
 kafka:
   enabled: false
+  networkPolicy:
+    enabled: true
+    allowExternal: false
   # 如需启用 Kafka
   # listeners:
   #   client:
@@ -185,6 +196,28 @@ monitoring:
       limits:
         cpu: 500m
         memory: 256Mi
+
+# ============== 网络隔离 ==============
+networkPolicy:
+  enabled: true
+  core:
+    ingressController:
+      enabled: true
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/component: controller
+    prometheus:
+      enabled: true
+      namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+  satellite:
+    enabled: true
 
 # ============== 可用性保护 ==============
 podDisruptionBudget:

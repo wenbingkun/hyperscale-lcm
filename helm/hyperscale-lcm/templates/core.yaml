@@ -17,6 +17,11 @@ spec:
     metadata:
       labels:
         {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 8 }}
+        {{ .Release.Name }}-postgresql-client: "true"
+        {{ .Release.Name }}-redis-client: "true"
+        {{- if .Values.kafka.enabled }}
+        {{ .Release.Name }}-kafka-client: "true"
+        {{- end }}
     spec:
       {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
       serviceAccountName: {{ include "hyperscale-lcm.core.serviceAccountName" . }}

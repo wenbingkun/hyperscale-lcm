@@ -86,6 +86,16 @@ helm install lcm ./helm/hyperscale-lcm \
 | `monitoring.alertmanager.image.tag` | AlertManager 镜像版本 | `v0.28.1` |
 | `monitoring.alertmanager.service.port` | AlertManager 服务端口 | `9093` |
 
+### 网络策略
+
+| 参数 | 描述 | 默认值 |
+|------|------|--------|
+| `networkPolicy.enabled` | 启用 Core / Satellite 网络策略 | `true` |
+| `networkPolicy.core.ingressController.enabled` | 允许 Ingress Controller 访问 Core HTTP 端口 | `true` |
+| `networkPolicy.core.prometheus.enabled` | 允许 Prometheus 抓取 Core metrics | `true` |
+
+说明：`satellite` 当前使用 `hostNetwork: true`，不同 CNI 对 hostNetwork Pod 的 NetworkPolicy 支持存在差异；模板已限制其期望的 egress 方向，但实际效果需结合集群插件验证。
+
 ## 示例
 
 ### 生产环境配置
