@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
 	// OTel instrumentation
@@ -78,34 +80,11 @@ func main() {
 	log.Printf("📁 Using certificate directory: %s", certDir)
 
 	// Load mTLS credentials
-	cert, err := tls.LoadX509KeyPair(
-		filepath.Join(certDir, "client.pem"),
-		filepath.Join(certDir, "client.key"),
-	)
-	if err != nil {
-		log.Fatalf("failed to load client certs: %v", err)
-	}
-
-	// 使用 os.ReadFile 替代废弃的 ioutil.ReadFile
-	caCert, err := os.ReadFile(filepath.Join(certDir, "ca.pem"))
-	if err != nil {
-		log.Fatalf("failed to read CA cert: %v", err)
-	}
-
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		log.Fatalf("failed to parse CA certificate from %s", filepath.Join(certDir, "ca.pem"))
-	}
-
-	creds := credentials.NewTLS(&tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-		ServerName:   "localhost", // Must match SAN in server cert
-	})
+	transportCreds := resolveTransportCredentials(certDir)
 
 	// Connect to Core via gRPC with mTLS, KeepAlive, and OpenTelemetry
 	conn, err := grpc.Dial(address,
-		grpc.WithTransportCredentials(creds),
+		grpc.WithTransportCredentials(transportCreds),
 		grpc.WithKeepaliveParams(kaParams),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
@@ -237,4 +216,48 @@ func main() {
 	} else {
 		log.Fatalf("❌ Registration Failed: %s", r.GetMessage())
 	}
+}
+
+func resolveTransportCredentials(certDir string) credentials.TransportCredentials {
+	if usePlaintextGRPC() {
+		log.Println("⚠️ LCM_GRPC_PLAINTEXT=true, using insecure gRPC transport for local/demo workflows")
+		return insecure.NewCredentials()
+	}
+
+	cert, err := tls.LoadX509KeyPair(
+		filepath.Join(certDir, "client.pem"),
+		filepath.Join(certDir, "client.key"),
+	)
+	if err != nil {
+		log.Fatalf("failed to load client certs: %v", err)
+	}
+
+	caCert, err := os.ReadFile(filepath.Join(certDir, "ca.pem"))
+	if err != nil {
+		log.Fatalf("failed to read CA cert: %v", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatalf("failed to parse CA certificate from %s", filepath.Join(certDir, "ca.pem"))
+	}
+
+	return credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+		ServerName:   "localhost", // Must match SAN in server cert
+	})
+}
+
+func usePlaintextGRPC() bool {
+	value := os.Getenv("LCM_GRPC_PLAINTEXT")
+	if value == "" {
+		return false
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+	return parsed
 }

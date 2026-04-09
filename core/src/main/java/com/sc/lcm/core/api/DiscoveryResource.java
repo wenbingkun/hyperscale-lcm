@@ -9,16 +9,20 @@ import com.sc.lcm.core.service.DeviceClaimPlanner;
 import com.sc.lcm.core.service.RedfishClaimExecutor;
 import com.sc.lcm.core.service.RedfishManagedAccountProvisioner;
 import io.quarkus.hibernate.reactive.panache.Panache;
+import io.smallrye.common.annotation.NonBlocking;
 import io.smallrye.mutiny.Uni;
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
+import io.vertx.mutiny.core.Vertx;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * 设备发现 REST API
@@ -31,6 +35,9 @@ import java.util.List;
 @RolesAllowed({ "ADMIN", "OPERATOR" })
 @Slf4j
 public class DiscoveryResource {
+
+    @Inject
+    Vertx vertx;
 
     @jakarta.inject.Inject
     DeviceClaimPlanner deviceClaimPlanner;
@@ -190,6 +197,7 @@ public class DiscoveryResource {
     @POST
     @Path("/{id}/claim")
     @RolesAllowed("ADMIN")
+    @NonBlocking
     public Uni<Response> executeClaim(@PathParam("id") String id) {
         // 第一阶段：在 session 上下文中读取设备与凭据档案（不持有 DB 连接）
         return Panache.withSession(() ->
@@ -223,61 +231,68 @@ public class DiscoveryResource {
                                                     if (!result.success()) {
                                                         return Uni.createFrom().item(new ClaimWorkflowResult(result, null));
                                                     }
-                                                    return redfishManagedAccountProvisioner.provision(device, profile)
+                                                return redfishManagedAccountProvisioner.provision(device, profile)
                                                             .map(provisionResult -> new ClaimWorkflowResult(result, provisionResult));
                                                 })
                                                 // 第三阶段：将探测结果写回 DB（新事务，重新加载托管实体）
-                                                .onItem().transformToUni(workflowResult -> Panache.withTransaction(() ->
-                                                        DiscoveredDevice.<DiscoveredDevice>findById(id)
-                                                                .map(attachedDevice -> {
-                                                                    if (attachedDevice == null) {
-                                                                        return Response.status(Response.Status.NOT_FOUND)
-                                                                                .entity(new ErrorResponse("Device not found"))
-                                                                                .build();
-                                                                    }
-
-                                                                    attachedDevice.setLastAuthAttemptAt(LocalDateTime.now(clock));
-                                                                    attachedDevice.setClaimMessage(composeClaimMessage(workflowResult));
-
-                                                                    if (workflowResult.claimResult().success()) {
-                                                                        attachedDevice.setAuthStatus(AuthStatus.AUTHENTICATED);
-                                                                        attachedDevice.setClaimStatus(ClaimStatus.CLAIMED);
-                                                                        if ((attachedDevice.getManufacturerHint() == null || attachedDevice.getManufacturerHint().isBlank())
-                                                                                && workflowResult.claimResult().manufacturer() != null
-                                                                                && !workflowResult.claimResult().manufacturer().isBlank()) {
-                                                                            attachedDevice.setManufacturerHint(workflowResult.claimResult().manufacturer());
-                                                                        }
-                                                                        if ((attachedDevice.getModelHint() == null || attachedDevice.getModelHint().isBlank())
-                                                                                && workflowResult.claimResult().model() != null
-                                                                                && !workflowResult.claimResult().model().isBlank()) {
-                                                                            attachedDevice.setModelHint(workflowResult.claimResult().model());
-                                                                        }
-                                                                        if (workflowResult.claimResult().recommendedTemplate() != null
-                                                                                && !workflowResult.claimResult().recommendedTemplate().isBlank()) {
-                                                                            attachedDevice.setRecommendedRedfishTemplate(workflowResult.claimResult().recommendedTemplate());
-                                                                        }
-                                                                        if (workflowResult.provisionResult() != null && workflowResult.provisionResult().enabled()) {
-                                                                            if (workflowResult.provisionResult().success()) {
-                                                                                log.info("🔐 Managed BMC account ready for {}", attachedDevice.getIpAddress());
-                                                                            } else {
-                                                                                log.warn("⚠️ Managed BMC account provisioning incomplete for {}: {}",
-                                                                                        attachedDevice.getIpAddress(),
-                                                                                        workflowResult.provisionResult().message());
+                                                .onItem().transformToUni(workflowResult -> runOnEventLoop(() ->
+                                                        Panache.withTransaction(() ->
+                                                                DiscoveredDevice.<DiscoveredDevice>findById(id)
+                                                                        .map(attachedDevice -> {
+                                                                            if (attachedDevice == null) {
+                                                                                return Response.status(Response.Status.NOT_FOUND)
+                                                                                        .entity(new ErrorResponse("Device not found"))
+                                                                                        .build();
                                                                             }
-                                                                        }
-                                                                        log.info("✅ Redfish claim validated for {}", attachedDevice.getIpAddress());
-                                                                    } else {
-                                                                        attachedDevice.setAuthStatus(AuthStatus.AUTH_FAILED);
-                                                                        attachedDevice.setClaimStatus(ClaimStatus.DISCOVERED);
-                                                                        log.warn("❌ Redfish claim failed for {}: {}",
-                                                                                attachedDevice.getIpAddress(),
-                                                                                workflowResult.claimResult().message());
-                                                                    }
 
-                                                                    return Response.ok(attachedDevice).build();
-                                                                })));
+                                                                            attachedDevice.setLastAuthAttemptAt(LocalDateTime.now(clock));
+                                                                            attachedDevice.setClaimMessage(composeClaimMessage(workflowResult));
+
+                                                                            if (workflowResult.claimResult().success()) {
+                                                                                attachedDevice.setAuthStatus(AuthStatus.AUTHENTICATED);
+                                                                                attachedDevice.setClaimStatus(ClaimStatus.CLAIMED);
+                                                                                if ((attachedDevice.getManufacturerHint() == null || attachedDevice.getManufacturerHint().isBlank())
+                                                                                        && workflowResult.claimResult().manufacturer() != null
+                                                                                        && !workflowResult.claimResult().manufacturer().isBlank()) {
+                                                                                    attachedDevice.setManufacturerHint(workflowResult.claimResult().manufacturer());
+                                                                                }
+                                                                                if ((attachedDevice.getModelHint() == null || attachedDevice.getModelHint().isBlank())
+                                                                                        && workflowResult.claimResult().model() != null
+                                                                                        && !workflowResult.claimResult().model().isBlank()) {
+                                                                                    attachedDevice.setModelHint(workflowResult.claimResult().model());
+                                                                                }
+                                                                                if (workflowResult.claimResult().recommendedTemplate() != null
+                                                                                        && !workflowResult.claimResult().recommendedTemplate().isBlank()) {
+                                                                                    attachedDevice.setRecommendedRedfishTemplate(workflowResult.claimResult().recommendedTemplate());
+                                                                                }
+                                                                                if (workflowResult.provisionResult() != null && workflowResult.provisionResult().enabled()) {
+                                                                                    if (workflowResult.provisionResult().success()) {
+                                                                                        log.info("🔐 Managed BMC account ready for {}", attachedDevice.getIpAddress());
+                                                                                    } else {
+                                                                                        log.warn("⚠️ Managed BMC account provisioning incomplete for {}: {}",
+                                                                                                attachedDevice.getIpAddress(),
+                                                                                                workflowResult.provisionResult().message());
+                                                                                    }
+                                                                                }
+                                                                                log.info("✅ Redfish claim validated for {}", attachedDevice.getIpAddress());
+                                                                            } else {
+                                                                                attachedDevice.setAuthStatus(AuthStatus.AUTH_FAILED);
+                                                                                attachedDevice.setClaimStatus(ClaimStatus.DISCOVERED);
+                                                                                log.warn("❌ Redfish claim failed for {}: {}",
+                                                                                        attachedDevice.getIpAddress(),
+                                                                                        workflowResult.claimResult().message());
+                                                                            }
+
+                                                                            return Response.ok(attachedDevice).build();
+                                                                        }))));
                                     });
                         }));
+    }
+
+    private <T> Uni<T> runOnEventLoop(Supplier<Uni<T>> supplier) {
+        return Uni.createFrom().emitter(emitter ->
+                vertx.runOnContext(() ->
+                        supplier.get().subscribe().with(emitter::complete, emitter::fail)));
     }
 
     private static String composeClaimMessage(ClaimWorkflowResult workflowResult) {

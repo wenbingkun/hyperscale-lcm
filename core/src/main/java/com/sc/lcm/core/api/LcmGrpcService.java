@@ -159,6 +159,7 @@ public class LcmGrpcService implements LcmService {
                     if (existing != null) {
                         existing.setLastProbedAt(LocalDateTime.now());
                         existing.setMacAddress(request.getMacAddress());
+                        applyDiscoveryHints(existing, request);
                         log.debug("Updated existing device: {}", request.getDiscoveredIp());
                         return deviceClaimPlanner.plan(existing);
                     } else {
@@ -167,6 +168,7 @@ public class LcmGrpcService implements LcmService {
                         device.setMacAddress(request.getMacAddress());
                         device.setDiscoveryMethod(mapDiscoveryMethod(request.getDiscoveryMethod()));
                         device.setDiscoveredAt(LocalDateTime.now());
+                        applyDiscoveryHints(device, request);
                         log.info("New device discovered and persisted: {}", request.getDiscoveredIp());
                         return deviceClaimPlanner.plan(device)
                                 .onItem().transformToUni(planned -> planned.persist().replaceWith(planned));
@@ -183,6 +185,35 @@ public class LcmGrpcService implements LcmService {
                             .setMessage("Persistence failed: " + error.getMessage())
                             .build();
                 });
+    }
+
+    static boolean isBmcDiscoveryCandidate(DiscoveryRequest request) {
+        if (request == null) {
+            return false;
+        }
+
+        String discoveryMethod = request.getDiscoveryMethod();
+        if (discoveryMethod != null && !discoveryMethod.isBlank()) {
+            String upper = discoveryMethod.trim().toUpperCase();
+            if (upper.contains("REDFISH") || upper.contains("BMC") || upper.contains("IPMI")) {
+                return true;
+            }
+        }
+
+        String discoveredIp = request.getDiscoveredIp();
+        return discoveredIp != null
+                && (discoveredIp.startsWith("https://") || discoveredIp.startsWith("http://"));
+    }
+
+    static void applyDiscoveryHints(DiscoveredDevice device, DiscoveryRequest request) {
+        if (device == null || !isBmcDiscoveryCandidate(request)) {
+            return;
+        }
+
+        device.setInferredType("BMC_ENABLED");
+        if (device.getBmcAddress() == null || device.getBmcAddress().isBlank()) {
+            device.setBmcAddress(request.getDiscoveredIp());
+        }
     }
 
     /**

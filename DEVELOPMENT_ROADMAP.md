@@ -208,19 +208,19 @@
 2.  [x] **PXE 镜像管理 API** — Satellite 新增 `/api/images` REST 端点，支持上传 / 列出 / 删除 OS 镜像，并通过 `LCM_PXE_IMAGE_DIR` 管理本地镜像目录；Core 新增 `ImageCatalogResource`，可按集群聚合查看各 Satellite 的可用镜像
 3.  [x] **PXE Boot Flow 集成** — 已串联 DHCP → TFTP → iPXE → HTTP kickstart 全流程；`pxe.ServerConfig` 新增 `KickstartTemplate` / `InstallRepoURL` / `InstallKernelURL` / `InstallInitrdURL` / `InstallKernelArgs` 配置项，`/kickstart` 可按 Node 的 `mac` / `hostname` 动态渲染安装模板
 4.  [x] **大组件拆分重构** — `CredentialProfilesPage` 已拆分为 `CredentialProfileList`、`CredentialProfileForm`、`CredentialProfileDetail`，页面本体收敛至 `319` 行；`DiscoveryPage` 已拆分为 `DiscoveryList` 和 `DiscoveryApprovalPanel`，页面本体收敛至 `378` 行
-5.  [ ] **端到端 Demo 脚本** — 编写 `scripts/demo.sh`，串联零接触发现 → 自动纳管 → Job 提交 → 调度 → SSH 执行 → 状态回调 → 前端刷新全流程，使用 `curl` + `grpcurl` + `websocat` 实现；附 `documentation/DEMO_GUIDE.md` 操作说明
+5.  [x] **端到端 Demo 脚本** — 已编写 `scripts/demo.sh`，串联零接触发现 → 自动纳管 → Job 提交 → 调度 → SSH 执行 → 状态回调 → 前端刷新全流程；通过 `curl` + `grpcurl` + `websocat` 驱动 Demo，并附 `documentation/DEMO_GUIDE.md` 操作说明。为支持本地闭环，补充了 mock Redfish HTTPS 服务、mock SSH 服务、Satellite `LCM_GRPC_PLAINTEXT` demo 开关，以及 discovery/claim 侧回归测试
 6.  [ ] **JaCoCo 基线上调至 50%** — 借助 Sprint 14-15 累积的测试增量，将 `jacocoMinimumCoverage` 从 `0.45` 上调至 `0.50`
-7.  **测试验证** — `cd satellite && go test ./pkg/pxe/... -count=1` 通过；`cd satellite && go test ./... -count=1` 通过；Demo 脚本在 `docker-compose up` 环境下端到端执行通过；`./scripts/check_ci_contract.sh` 通过
+7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；`bash -n scripts/demo.sh` 通过；`python3 -m py_compile scripts/demo/mock_redfish_server.py` 通过；`cd scripts/demo && env GOTOOLCHAIN=local GOMODCACHE=/tmp/go-mod-cache-demo GOCACHE=/tmp/go-build-cache-demo go test ./...` 通过；`cd satellite && go test ./... -count=1` 通过；`cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew test --tests com.sc.lcm.core.api.DiscoveryResourceTest --tests com.sc.lcm.core.api.LcmGrpcServiceTest --no-daemon` 通过；`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过；`./scripts/demo.sh run` 在 `docker-compose up` 环境下端到端执行通过
 
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
-    *   Phase 6 质量加固进入尾声，15 个 Sprint 已完成（2026-01 ~ 2026-04）。
+    *   Phase 6 质量加固进入收尾阶段，Sprint 16 仅剩覆盖率门槛与真实硬件验收待收口。
     *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
-    *   剩余缺口集中在 Demo 交付、覆盖率门槛收尾与真实硬件验证（Sprint 16 + Phase 6 余项）。
+    *   本地 Demo 闭环已交付，剩余缺口集中在 JaCoCo 门槛收尾与真实硬件验证（Sprint 16 + Phase 6 余项）。
 *   **子系统概况**:
     *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛为 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
-    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API / 动态 kickstart boot flow，剩余缺口主要为真实环境验收与安装资产调优。
+    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API / 动态 kickstart boot flow；新增 Demo 模式下的 mock Redfish / mock SSH / plaintext gRPC 本地联调能力，剩余缺口主要为真实环境验收与安装资产调优。
     *   Frontend (React): 12 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`CredentialProfilesPage` / `DiscoveryPage` 已完成大组件拆分，`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
 *   **关键结论**:
     *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
@@ -233,8 +233,9 @@
     *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
     *   [x] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager / RBAC / PDB / NetworkPolicy 模板已接入。
     *   [x] PXE 裸金属自动化已具备软件层闭环：DHCP → TFTP → iPXE → HTTP kickstart 可联调，剩余主要为真实硬件验收与环境级参数调优。
+    *   [x] `scripts/demo.sh` 已完成端到端 Demo 编排，本地可验证 discovery → claim → schedule → SSH execute → WebSocket 刷新全链路。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
-    *   [ ] 端到端 Demo 脚本尚未编写。
+    *   [ ] JaCoCo 基线 `50%` 门槛尚未上调。
 
 ---
 
