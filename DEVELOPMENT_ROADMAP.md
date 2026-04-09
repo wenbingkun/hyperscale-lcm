@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-04-09
+> 最后更新: 2026-04-09 (Sprint 14-16 审计验证后更新)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -53,7 +53,7 @@
 *   **Execution**:
     *   [x] Docker 容器执行 + Kafka 状态回调。
     *   [x] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发 (Optional — 已完成)。
-    *   [ ] (高级) 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
+    *   [x] (高级) 集成 PXE/iPXE，实现裸金属 OS 自动化重装（Sprint 16 完成）。
 *   **Frontend**:
     *   [x] React Dashboard 大屏（7 页面 + 5 组件 + WebSocket）。
     *   [x] 前端登录流程 + Token 管理。
@@ -79,23 +79,27 @@
     *   [x] Prometheus 指标采集 + 告警规则。
     *   [x] Grafana 监控仪表盘（集群概览、Job 指标、JVM 内存、HTTP 请求）。
 
-## 📅 阶段六：质量加固与落地推进 (Quality Hardening & Delivery Excellence) 🚧 进行中
-**目标**: 收敛 MVP 后续的质量、可观测性与落地缺口，推动项目从“功能可用”进入“可持续演进”。
+## 📅 阶段六：质量加固与落地推进 (Quality Hardening & Delivery Excellence) ✅ 已完成
+**目标**: 收敛 MVP 后续的质量、可观测性与落地缺口，推动项目从”功能可用”进入”可持续演进”。
 *   **质量**:
     *   [x] 前端测试补全 — 为 Dashboard、Job 管理、设备发现建立 `Vitest + React Testing Library` 回归测试，并补充 AuthContext / JobSubmissionForm 基础用例。
-    *   [x] 测试覆盖率量化 — 为 Core JaCoCo 设定 `30%` 指令覆盖率基线并在 `check` 中卡控；当前实测指令覆盖率为 `42.88%`。
+    *   [x] 测试覆盖率量化 — Core JaCoCo 基线从 `30%` → `50%`；当前实测指令覆盖率为 `58.08%`。前端 Istanbul Statements `65.23%` / Lines `65.24%`。
     *   [x] 集成测试增强 — 补齐 Satellite 注册 → Core 调度 → Kafka 回调 → 前端刷新等跨服务场景，并修复调度后 Job 状态未从 `PENDING` 推进到 `SCHEDULED` 的一致性缺口。
 *   **调度与执行**:
     *   [x] 分区并行调度（按 Zone 分片）。
     *   [x] 集成 Ansible 或 SSH 库，实现对被选定机器的命令下发。
-    *   [ ] 集成 PXE/iPXE，实现裸金属 OS 自动化重装。
+    *   [x] 集成 PXE/iPXE，实现裸金属 OS 自动化重装（DHCP Proxy + TFTP + iPXE + HTTP kickstart + 镜像管理 API）。
 *   **可观测性与运维**:
     *   [x] OpenTelemetry 全链路串联 — 补全 Satellite → Kafka → Core 的 trace propagation。
-    *   [ ] AlertManager 集成（邮件 / Slack / PagerDuty 通知）。
-    *   [ ] 真实硬件验证 — 使用真实 Redfish / BMC 环境验证采集链路。
+    *   [x] AlertManager 集成 — Core 主动推送告警至 AlertManager，Helm Chart 含 AlertManager 模板，docker-compose.prod 含 AlertManager 容器。
+    *   [ ] 真实硬件验证 — 使用真实 Redfish / BMC 环境验证采集链路（需要真实硬件环境）。
+*   **安全加固**:
+    *   [x] Grafana 默认凭据参数化、WebSocket JWT 认证、REST API 按角色速率限制。
+    *   [x] Helm Chart 补齐 NetworkPolicy / PDB / ServiceAccount & RBAC。
 *   **展示与落地**:
     *   [x] 调度结果拓扑图可视化（GPU / NVLink / IB Fabric 分配展示）。
-    *   [ ] 编写完整 Demo 脚本（零接触发现 → 自动纳管 → 调度 → 执行）。
+    *   [x] 编写完整 Demo 脚本（零接触发现 → 自动纳管 → 调度 → 执行）。
+    *   [x] 大组件拆分重构（CredentialProfilesPage / DiscoveryPage）。
 
 ---
 
@@ -215,33 +219,49 @@
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
-    *   Phase 6 工程项已全部收口，16 个 Sprint 已完成（2026-01 ~ 2026-04）。
+    *   Phase 6 工程项已全部收口，16 个 Sprint 已完成（2026-01 ~ 2026-04，136 commits）。
     *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
-    *   当前剩余缺口主要集中在真实硬件 Redfish / BMC 验证，不再是软件实现缺口。
+    *   剩余缺口主要集中在真实硬件 Redfish / BMC 验证，以及代码审查中发现的若干待修问题。
 *   **子系统概况**:
-    *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛已上调至 `50%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
-    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API / 动态 kickstart boot flow；新增 Demo 模式下的 mock Redfish / mock SSH / plaintext gRPC 本地联调能力，剩余缺口主要为真实环境验收与安装资产调优。
-    *   Frontend (React): 12 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`CredentialProfilesPage` / `DiscoveryPage` 已完成大组件拆分，`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
+    *   Core (Java/Quarkus): JaCoCo 实测覆盖率 `58.08%`，默认门槛 `50%`；Sprint 14 已补齐 4 个 Resource 集成测试和 6 个高价值 Service 测试。
+    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API / 动态 kickstart boot flow。
+    *   Frontend (React): 12 个测试文件 / 21 个用例通过；Istanbul 覆盖率 Statements `65.23%` / Lines `65.24%`；`CredentialProfilesPage` / `DiscoveryPage` 已完成大组件拆分。
+*   **测试验证结果** (2026-04-09 本地验证):
+    *   [x] `./scripts/check_ci_contract.sh` — 通过
+    *   [x] `cd core && ./gradlew check --no-daemon` — BUILD SUCCESSFUL，JaCoCo 指令覆盖率 `58.08%`（门槛 50%）
+    *   [x] `cd satellite && go test ./... -count=1` — 全部通过
+    *   [x] `cd frontend && npm test` — 12 个测试文件 / 21 个用例通过
+    *   [x] `cd frontend && npm run build` — 构建成功
+    *   [⚠] `cd frontend && npm run lint` — 2 个 pre-existing error（`JobsPage.tsx` / `TopologyPage.tsx` 中 `react-hooks/refs` 规则，非 Sprint 14-16 引入），3 个 coverage 目录 warning
+*   **代码审查修复** (Sprint 14-16 审计，2026-04-09 已全部修复):
+    *   [x] **[HIGH] Satellite NetworkPolicy Ingress 规则** — `networkpolicy.yaml` 已补充 Core → Satellite gRPC 入站 Ingress 规则。
+    *   [x] **[HIGH] PDB Satellite quote 修复** — `pdb.yaml` 移除 `maxUnavailable` 上多余的 `| quote`。
+    *   [x] **[MEDIUM] 匿名用户速率限制** — `RestApiRateLimitFilter` 现在对未认证请求也按 `USER` 角色执行速率限制。
+    *   [x] **[MEDIUM] RBAC 模板条件去重** — `rbac.yaml` 移除冗余的 `.Values.serviceAccount.create` 条件。
+    *   [x] **[LOW] AlertManager securityContext** — 容器已配置 `runAsNonRoot: true` / `runAsUser: 65534` / `capabilities.drop: ALL`。
+    *   [x] **[LOW] Demo 脚本凭据环境变量化** — `scripts/demo.sh` 凭据提取为 `LCM_DEMO_*` 环境变量，默认值仅用于本地演示。
+    *   [x] **[LOW] AlertManager 配置警告** — `alertmanager.yml` 顶部新增部署前必须替换占位值的醒目警告。
 *   **关键结论**:
     *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
-    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `50%`，实测约 `56.52%`。
+    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `50%`，实测 `58.08%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
     *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
-    *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
+    *   [x] 安全加固已落地：Grafana 凭据参数化、WebSocket JWT 鉴权、REST API 速率限制。
     *   [x] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager / RBAC / PDB / NetworkPolicy 模板已接入。
-    *   [x] PXE 裸金属自动化已具备软件层闭环：DHCP → TFTP → iPXE → HTTP kickstart 可联调，剩余主要为真实硬件验收与环境级参数调优。
-    *   [x] `scripts/demo.sh` 已完成端到端 Demo 编排，本地可验证 discovery → claim → schedule → SSH execute → WebSocket 刷新全链路。
+    *   [x] PXE 裸金属自动化已具备软件层闭环：DHCP → TFTP → iPXE → HTTP kickstart 可联调。
+    *   [x] `scripts/demo.sh` 已完成端到端 Demo 编排。
+    *   [x] JaCoCo 基线已上调至 `50%`，实测 `58.08%`。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
-    *   [x] JaCoCo 基线已上调至 `50%`，与当前实测覆盖率保持安全余量。
+    *   [x] 代码审查发现的 2 HIGH / 2 MEDIUM / 3 LOW 问题已全部修复。
 
 ---
 
 ## 📈 项目历程回顾 (Project History)
 
-> 基于 git 提交历史整理，共 119 commits，2026-01-16 ~ 2026-04-09。
+> 基于 git 提交历史整理，共 119 commits（main 分支），2026-01-16 ~ 2026-04-09。
 
 ### 2026-01 — 项目启动与基础框架搭建
 
@@ -268,17 +288,21 @@
 *   **Sprint 12** — 拓扑分配可视化，Zone / Rack / NVLink / IB Fabric 渲染
 *   **Sprint 13** — OTel trace propagation 补全，Satellite → Kafka → Core 链路续接
 *   **代码审查修复** (04-08) — 安全、运行时与追踪问题修复，项目文档整合刷新
+*   **Sprint 14** — 安全加固：Grafana 凭据参数化、WebSocket JWT 鉴权、REST API 速率限制；Core Service/Resource 测试补齐；JaCoCo 基线 → 45%
+*   **Sprint 15** — AlertManager 部署集成、Helm NetworkPolicy / PDB / ServiceAccount / RBAC 模板、前端覆盖率报告与组件测试
+*   **Sprint 16** — PXE 全链路闭环（DHCP Proxy → TFTP → iPXE → kickstart + 镜像管理）、大组件拆分、端到端 Demo 脚本、JaCoCo 基线 → 50%
 
 ### 关键数据
 
 | 指标 | 数值 |
 |------|------|
-| 总提交数 | 119 |
+| 总提交数 (main) | 119 |
 | 开发周期 | 约 12 周（2026-01-16 ~ 2026-04-09） |
 | 已完成 Sprint | 16 |
 | Flyway 迁移版本 | V1.0.0 ~ V2.6.0（16 个脚本） |
-| Core 测试类 | 39 个（Service 27 + API Resource 12） |
-| Satellite 测试文件 | 15 个 |
-| Frontend 测试文件 | 12 个 |
+| Core 测试类 | 32 个（Service 20 + API Resource 12） |
+| Satellite 测试文件 | 11 个 |
+| Frontend 测试文件 | 12 个 / 21 个用例 |
 | CI 工作流 Job | 6 个（contract-guard / backend / frontend / satellite / load-test / docker-build） |
-| JaCoCo 指令覆盖率 | ~56.52%（基线门槛 50%） |
+| Core JaCoCo 指令覆盖率 | 58.08%（基线门槛 50%） |
+| Frontend Istanbul Statements | 65.23%（Lines 65.24%） |

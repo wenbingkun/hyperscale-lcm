@@ -25,7 +25,7 @@ metadata:
     {{- include "hyperscale-lcm.labels" . | nindent 4 }}
     app.kubernetes.io/component: satellite
 spec:
-  maxUnavailable: {{ .Values.podDisruptionBudget.satellite.maxUnavailable | quote }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.satellite.maxUnavailable }}
   selector:
     matchLabels:
       {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 6 }}

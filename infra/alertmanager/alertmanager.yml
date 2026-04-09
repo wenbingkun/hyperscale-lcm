@@ -1,3 +1,10 @@
+# ============================================================================
+# IMPORTANT: This is a TEMPLATE configuration. Before deploying to production,
+# you MUST replace ALL placeholder values (CHANGE_ME, REPLACE_ME, example.com)
+# with real credentials. Deploying with placeholders will cause silent alert
+# delivery failures.
+# ============================================================================
+
 global:
   resolve_timeout: 5m
 

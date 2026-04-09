@@ -22,6 +22,14 @@ MOCK_SSH_GOCACHE="${LCM_DEMO_GO_BUILD_CACHE:-/tmp/go-build-cache-demo}"
 SATELLITE_CONTAINER_NAME="${LCM_DEMO_SATELLITE_CONTAINER_NAME:-hyperscale-lcm-demo-satellite}"
 HOST_GO_MOD_CACHE="${LCM_DEMO_HOST_GO_MOD_CACHE:-$HOME/go/pkg/mod}"
 
+# Demo credentials — override via environment variables for non-local environments
+DEMO_ADMIN_USER="${LCM_DEMO_ADMIN_USER:-admin}"
+DEMO_ADMIN_PASSWORD="${LCM_DEMO_ADMIN_PASSWORD:-admin123}"
+DEMO_BMC_USER="${LCM_DEMO_BMC_USER:-admin}"
+DEMO_BMC_PASSWORD="${LCM_DEMO_BMC_PASSWORD:-admin123}"
+DEMO_MANAGED_USER="${LCM_DEMO_MANAGED_USER:-lcm-demo}"
+DEMO_MANAGED_PASSWORD="${LCM_DEMO_MANAGED_PASSWORD:-lcm-demo-pass}"
+
 CORE_LOG="$RUNTIME_DIR/core.log"
 SATELLITE_LOG="$RUNTIME_DIR/satellite.log"
 REDFISH_LOG="$RUNTIME_DIR/mock-redfish.log"
@@ -225,7 +233,7 @@ wait_for_http() {
 
 wait_for_redfish() {
   local deadline=$((SECONDS + 30))
-  until curl -sk --max-time 2 -u admin:admin123 "https://${REDFISH_ENDPOINT}/redfish/v1/Systems" >/dev/null 2>&1; do
+  until curl -sk --max-time 2 -u "${DEMO_BMC_USER}:${DEMO_BMC_PASSWORD}" "https://${REDFISH_ENDPOINT}/redfish/v1/Systems" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
       die "Timed out waiting for mock Redfish server"
     fi
@@ -246,7 +254,7 @@ wait_for_ssh() {
 authenticate() {
   AUTH_TOKEN="$(
     curl -fsS -H 'Content-Type: application/json' \
-      -d '{"username":"admin","password":"admin123","tenantId":"default"}' \
+      -d "{\"username\":\"${DEMO_ADMIN_USER}\",\"password\":\"${DEMO_ADMIN_PASSWORD}\",\"tenantId\":\"default\"}" \
       "$CORE_URL/api/auth/login" | jq -r '.token'
   )"
   [[ -n "$AUTH_TOKEN" && "$AUTH_TOKEN" != "null" ]] || die "failed to obtain JWT token"
@@ -313,16 +321,20 @@ create_demo_profile() {
     --arg name "$PROFILE_NAME" \
     --arg deviceType "BMC_ENABLED" \
     --arg template "openbmc-baseline" \
+    --arg bmcUser "literal://$DEMO_BMC_USER" \
+    --arg bmcPass "literal://$DEMO_BMC_PASSWORD" \
+    --arg mgdUser "literal://$DEMO_MANAGED_USER" \
+    --arg mgdPass "literal://$DEMO_MANAGED_PASSWORD" \
     '{
       name: $name,
       deviceType: $deviceType,
       redfishTemplate: $template,
       autoClaim: true,
       managedAccountEnabled: true,
-      usernameSecretRef: "literal://admin",
-      passwordSecretRef: "literal://admin123",
-      managedUsernameSecretRef: "literal://lcm-demo",
-      managedPasswordSecretRef: "literal://lcm-demo-pass",
+      usernameSecretRef: $bmcUser,
+      passwordSecretRef: $bmcPass,
+      managedUsernameSecretRef: $mgdUser,
+      managedPasswordSecretRef: $mgdPass,
       description: "Local demo profile for mock OpenBMC"
     }')"
   profile_id="$(api_post_json "$CORE_URL/api/credential-profiles" "$body" | jq -r '.id')"
@@ -394,7 +406,7 @@ approve_and_claim_device() {
 
 verify_managed_account() {
   local accounts
-  accounts="$(curl -sk -u admin:admin123 "https://${REDFISH_ENDPOINT}/redfish/v1/AccountService/Accounts")"
+  accounts="$(curl -sk -u "${DEMO_BMC_USER}:${DEMO_BMC_PASSWORD}" "https://${REDFISH_ENDPOINT}/redfish/v1/AccountService/Accounts")"
   printf '%s' "$accounts" | jq -e '.Members | length >= 2' >/dev/null || die "managed account was not provisioned"
 }
 

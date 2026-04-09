@@ -12,7 +12,7 @@ metadata:
   {{- end }}
 automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
 {{- end }}
-{{- if and .Values.serviceAccount.create .Values.core.enabled .Values.serviceAccount.create .Values.satellite.enabled }}
+{{- if and .Values.serviceAccount.create .Values.core.enabled .Values.satellite.enabled }}
 ---
 {{- end }}
 {{- if and .Values.serviceAccount.create .Values.satellite.enabled }}

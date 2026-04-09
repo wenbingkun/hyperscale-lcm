@@ -56,6 +56,14 @@ spec:
             - name: http
               containerPort: 9093
               protocol: TCP
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: config
               mountPath: /etc/alertmanager

@@ -33,12 +33,15 @@ public class RestApiRateLimitFilter {
             return Optional.empty();
         }
 
+        String role;
+        String principalName;
         if (identity == null || identity.isAnonymous() || identity.getPrincipal() == null) {
-            return Optional.empty();
+            role = "USER";
+            principalName = "anonymous";
+        } else {
+            role = resolveRole(identity);
+            principalName = identity.getPrincipal().getName();
         }
-
-        String role = resolveRole(identity);
-        String principalName = identity.getPrincipal().getName();
 
         try {
             rateLimiter.enforce(principalName, role);
