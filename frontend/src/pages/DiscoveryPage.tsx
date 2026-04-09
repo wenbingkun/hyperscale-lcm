@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { GlassCard } from '../components/GlassCard';
-import { Wifi, Check, X, RefreshCw, Monitor, Play, Square, Search, Shield, KeyRound } from 'lucide-react';
+import { Play, RefreshCw, Search, Square } from 'lucide-react';
 import {
     apiFetch,
     API_BASE,
@@ -12,6 +11,8 @@ import {
     refreshDiscoveryClaimPlan,
     rejectDiscoveredDevice,
 } from '../api/client';
+import { GlassCard } from '../components/GlassCard';
+import { DiscoveryList } from '../components/discovery/DiscoveryList';
 
 interface ScanJob {
     id: string;
@@ -106,7 +107,7 @@ export const DiscoveryPage: React.FC = () => {
         void loadOverview();
 
         const interval = setInterval(() => {
-            checkRunningScan();
+            void checkRunningScan();
             if (runningScanRef.current) {
                 void Promise.all([loadDevices(), loadPendingCount()]);
             }
@@ -116,7 +117,9 @@ export const DiscoveryPage: React.FC = () => {
     }, [checkRunningScan, loadDevices, loadOverview, loadPendingCount]);
 
     const startScan = async () => {
-        if (!scanTarget) return;
+        if (!scanTarget) {
+            return;
+        }
 
         try {
             const response = await apiFetch(`${API_BASE}/api/scan`, {
@@ -138,7 +141,9 @@ export const DiscoveryPage: React.FC = () => {
     };
 
     const cancelScan = async () => {
-        if (!runningScan) return;
+        if (!runningScan) {
+            return;
+        }
 
         try {
             await apiFetch(`${API_BASE}/api/scan/${runningScan.id}/cancel`, {
@@ -209,9 +214,13 @@ export const DiscoveryPage: React.FC = () => {
     };
 
     const formatDate = (value?: string) => {
-        if (!value) return '—';
+        if (!value) {
+            return '—';
+        }
         const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
         return date.toLocaleString();
     };
 
@@ -220,29 +229,29 @@ export const DiscoveryPage: React.FC = () => {
             <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Device Discovery</h2>
-                    <p className="text-gray-400 mt-1">Scan networks, classify BMCs, and plan first-claim onboarding</p>
+                    <p className="mt-1 text-gray-400">Scan networks, classify BMCs, and plan first-claim onboarding</p>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                    <div className="px-4 py-2 rounded-lg bg-yellow-500/20 border border-yellow-500/30 text-yellow-400">
+                    <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/20 px-4 py-2 text-yellow-400">
                         <span className="font-bold">{pendingCount}</span> pending
                     </div>
-                    <div className="px-4 py-2 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300">
+                    <div className="rounded-lg border border-blue-500/30 bg-blue-500/15 px-4 py-2 text-blue-300">
                         <span className="font-bold">{readyToClaimCount}</span> ready to claim
                     </div>
-                    <div className="px-4 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/15 px-4 py-2 text-amber-300">
                         <span className="font-bold">{authPendingCount}</span> auth pending
                     </div>
                     <button
                         onClick={() => setShowScanModal(true)}
-                        disabled={!!runningScan}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                        disabled={Boolean(runningScan)}
+                        className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/20 px-4 py-2 text-purple-400 transition-colors hover:bg-purple-500/30 disabled:opacity-50"
                     >
                         <Search size={18} />
                         Scan Network
                     </button>
                     <button
-                        onClick={loadOverview}
-                        className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-colors"
+                        onClick={() => void loadOverview()}
+                        className="rounded-lg border border-white/10 bg-white/5 p-2 text-white transition-colors hover:bg-white/10"
                         title="Refresh"
                     >
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -251,9 +260,9 @@ export const DiscoveryPage: React.FC = () => {
             </header>
 
             {loadError && (
-                <div className="px-4 py-3 rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-sm">
+                <div className="rounded-lg border border-red-500/30 bg-red-500/15 px-4 py-3 text-sm text-red-400">
                     {loadError}
-                    <button onClick={loadOverview} className="ml-3 underline hover:no-underline">Retry</button>
+                    <button onClick={() => void loadOverview()} className="ml-3 underline hover:no-underline">Retry</button>
                 </div>
             )}
 
@@ -261,11 +270,11 @@ export const DiscoveryPage: React.FC = () => {
                 <GlassCard className="!p-4 border-l-4 border-l-purple-500">
                     <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                            <div className="p-2 rounded-lg bg-purple-500/20">
-                                <Search size={20} className="text-purple-400 animate-pulse" />
+                            <div className="rounded-lg bg-purple-500/20 p-2">
+                                <Search size={20} className="animate-pulse text-purple-400" />
                             </div>
                             <div>
-                                <p className="text-white font-medium">Scanning: {runningScan.target}</p>
+                                <p className="font-medium text-white">Scanning: {runningScan.target}</p>
                                 <p className="text-sm text-gray-400">
                                     {runningScan.scannedCount} / {runningScan.totalIps} IPs • {runningScan.discoveredCount} discovered
                                 </p>
@@ -273,17 +282,17 @@ export const DiscoveryPage: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="w-48">
-                                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div className="h-2 overflow-hidden rounded-full bg-white/10">
                                     <div
                                         className="h-full bg-purple-500 transition-all"
                                         style={{ width: `${runningScan.progressPercent}%` }}
                                     />
                                 </div>
-                                <p className="text-xs text-center text-gray-400 mt-1">{runningScan.progressPercent}%</p>
+                                <p className="mt-1 text-center text-xs text-gray-400">{runningScan.progressPercent}%</p>
                             </div>
                             <button
-                                onClick={cancelScan}
-                                className="p-2 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                                onClick={() => void cancelScan()}
+                                className="rounded bg-red-500/20 p-2 text-red-400 hover:bg-red-500/30"
                                 title="Cancel scan"
                             >
                                 <Square size={16} />
@@ -294,46 +303,46 @@ export const DiscoveryPage: React.FC = () => {
             )}
 
             {showScanModal && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
                     <GlassCard className="w-full max-w-lg">
-                        <h3 className="text-lg font-semibold text-white mb-4">Start Network Scan</h3>
+                        <h3 className="mb-4 text-lg font-semibold text-white">Start Network Scan</h3>
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm text-gray-400 mb-2">Target (CIDR or IP Range)</label>
+                                <label className="mb-2 block text-sm text-gray-400">Target (CIDR or IP Range)</label>
                                 <input
                                     type="text"
                                     value={scanTarget}
-                                    onChange={(e) => setScanTarget(e.target.value)}
+                                    onChange={(event) => setScanTarget(event.target.value)}
                                     placeholder="e.g., 192.168.1.0/24 or 10.0.0.1-10.0.0.100"
-                                    className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm text-gray-400 mb-2">Ports to Scan</label>
+                                <label className="mb-2 block text-sm text-gray-400">Ports to Scan</label>
                                 <input
                                     type="text"
                                     value={scanPorts}
-                                    onChange={(e) => setScanPorts(e.target.value)}
+                                    onChange={(event) => setScanPorts(event.target.value)}
                                     placeholder="22,443,8080,9000,623"
-                                    className="w-full px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">SSH (22), Redfish HTTPS (443), HTTP (8080), gRPC (9000), IPMI (623)</p>
+                                <p className="mt-1 text-xs text-gray-500">SSH (22), Redfish HTTPS (443), HTTP (8080), gRPC (9000), IPMI (623)</p>
                             </div>
                         </div>
 
-                        <div className="flex gap-3 mt-6">
+                        <div className="mt-6 flex gap-3">
                             <button
                                 onClick={() => setShowScanModal(false)}
-                                className="flex-1 px-4 py-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10"
+                                className="flex-1 rounded-lg bg-white/5 px-4 py-2 text-gray-400 hover:bg-white/10"
                             >
                                 Cancel
                             </button>
                             <button
-                                onClick={startScan}
+                                onClick={() => void startScan()}
                                 disabled={!scanTarget}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-500 text-white hover:bg-purple-600 disabled:opacity-50"
+                                className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-purple-500 px-4 py-2 text-white hover:bg-purple-600 disabled:opacity-50"
                             >
                                 <Play size={18} />
                                 Start Scan
@@ -343,203 +352,27 @@ export const DiscoveryPage: React.FC = () => {
                 </div>
             )}
 
-            <GlassCard className="min-h-[400px]">
-                <div className="flex flex-col gap-3 border-b border-white/5 pb-4 mb-4 lg:flex-row lg:items-center">
-                    <div className="relative flex-1">
-                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search by IP, host, vendor, model, profile, template"
-                            className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
-                        />
-                    </div>
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-                    >
-                        <option value="ALL">All status</option>
-                        <option value="PENDING">Pending</option>
-                        <option value="APPROVED">Approved</option>
-                        <option value="REJECTED">Rejected</option>
-                        <option value="MANAGED">Managed</option>
-                    </select>
-                    <select
-                        value={authFilter}
-                        onChange={(e) => setAuthFilter(e.target.value)}
-                        className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-                    >
-                        <option value="ALL">All auth</option>
-                        <option value="PENDING">Pending</option>
-                        <option value="PROFILE_MATCHED">Profile matched</option>
-                        <option value="AUTH_PENDING">Auth pending</option>
-                        <option value="AUTH_FAILED">Auth failed</option>
-                        <option value="AUTHENTICATED">Authenticated</option>
-                    </select>
-                    <select
-                        value={claimFilter}
-                        onChange={(e) => setClaimFilter(e.target.value)}
-                        className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
-                    >
-                        <option value="ALL">All claim</option>
-                        <option value="DISCOVERED">Discovered</option>
-                        <option value="READY_TO_CLAIM">Ready to claim</option>
-                        <option value="CLAIMING">Claiming</option>
-                        <option value="CLAIMED">Claimed</option>
-                        <option value="MANAGED">Managed</option>
-                    </select>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="text-sm text-gray-500 border-b border-white/5">
-                                <th className="py-4 px-4 font-medium">Discovery</th>
-                                <th className="py-4 px-4 font-medium">Endpoint</th>
-                                <th className="py-4 px-4 font-medium">Classification</th>
-                                <th className="py-4 px-4 font-medium">Claim Plan</th>
-                                <th className="py-4 px-4 font-medium">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredDevices.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="py-12 text-center text-gray-500">
-                                        <Wifi size={48} className="mx-auto mb-4 opacity-30" />
-                                        {devices.length === 0 ? 'No devices discovered yet' : 'No devices match the current filters'}
-                                        <p className="text-sm mt-2">
-                                            {devices.length === 0 ? 'Start a network scan to discover devices' : 'Adjust the filters or search query'}
-                                        </p>
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredDevices.map((device) => (
-                                    <tr key={device.id} className="border-b border-white/5 hover:bg-white/5 transition-colors align-top">
-                                        <td className="py-4 px-4 min-w-[220px]">
-                                            <div className="space-y-2">
-                                                <div className="flex flex-wrap gap-2">
-                                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(device.status)}`}>
-                                                        {device.status}
-                                                    </span>
-                                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getAuthColor(device.authStatus)}`}>
-                                                        {device.authStatus || 'PENDING'}
-                                                    </span>
-                                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getClaimColor(device.claimStatus)}`}>
-                                                        {device.claimStatus || 'DISCOVERED'}
-                                                    </span>
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                    <div>{device.discoveryMethod}</div>
-                                                    <div>{formatDate(device.discoveredAt)}</div>
-                                                    {device.lastProbedAt && <div>Last probe: {formatDate(device.lastProbedAt)}</div>}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-4 min-w-[240px]">
-                                            <div className="space-y-1">
-                                                <div className="font-mono text-cyan-300">{device.ipAddress}</div>
-                                                <div className="text-white">{device.hostname || '—'}</div>
-                                                {device.bmcAddress && (
-                                                    <div className="text-xs text-cyan-500 font-mono">BMC: {device.bmcAddress}</div>
-                                                )}
-                                                {device.macAddress && (
-                                                    <div className="text-xs text-gray-500 font-mono">{device.macAddress}</div>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-4 min-w-[260px]">
-                                            <div className="space-y-2">
-                                                <div className="flex items-center gap-2 text-gray-300">
-                                                    <Monitor size={14} />
-                                                    <span>{device.inferredType || 'UNKNOWN'}</span>
-                                                </div>
-                                                <div className="text-sm text-gray-400">
-                                                    {device.manufacturerHint && <div>Vendor: {device.manufacturerHint}</div>}
-                                                    {device.modelHint && <div>Model: {device.modelHint}</div>}
-                                                    {device.openPorts && <div className="text-xs text-gray-500">Ports: {device.openPorts}</div>}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-4 min-w-[320px]">
-                                            <div className="space-y-2">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    {device.credentialProfileName ? (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-emerald-500/10 text-emerald-300">
-                                                            <KeyRound size={12} />
-                                                            {device.credentialProfileName}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-white/5 text-gray-400">
-                                                            <KeyRound size={12} />
-                                                            No profile matched
-                                                        </span>
-                                                    )}
-                                                    {device.recommendedRedfishTemplate && (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-300">
-                                                            <Shield size={12} />
-                                                            {device.recommendedRedfishTemplate}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-sm text-gray-300">{device.claimMessage || 'No claim plan generated yet.'}</p>
-                                                <div className="text-xs text-gray-500">
-                                                    {device.credentialSource && <div>Source: {device.credentialSource}</div>}
-                                                    {device.lastAuthAttemptAt && <div>Last auth attempt: {formatDate(device.lastAuthAttemptAt)}</div>}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-4 px-4 min-w-[180px]">
-                                            <div className="flex flex-wrap gap-2">
-                                                <button
-                                                    onClick={() => void refreshClaimPlan(device.id)}
-                                                    disabled={busyAction === `replan:${device.id}`}
-                                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 disabled:opacity-50"
-                                                    title="Recalculate claim plan"
-                                                >
-                                                    <RefreshCw size={14} className={busyAction === `replan:${device.id}` ? 'animate-spin' : ''} />
-                                                    Replan
-                                                </button>
-                                                {device.claimStatus === 'READY_TO_CLAIM' && (
-                                                    <button
-                                                        onClick={() => void executeClaim(device.id)}
-                                                        disabled={busyAction === `claim:${device.id}`}
-                                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-50"
-                                                        title="Execute first Redfish claim"
-                                                    >
-                                                        <Shield size={14} />
-                                                        {busyAction === `claim:${device.id}` ? 'Claiming...' : 'Claim'}
-                                                    </button>
-                                                )}
-                                                {device.status === 'PENDING' && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => void approveDevice(device.id)}
-                                                            disabled={busyAction === `approve:${device.id}`}
-                                                            className="p-2 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-50"
-                                                            title="Approve"
-                                                        >
-                                                            <Check size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => void rejectDevice(device.id)}
-                                                            disabled={busyAction === `reject:${device.id}`}
-                                                            className="p-2 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
-                                                            title="Reject"
-                                                        >
-                                                            <X size={16} />
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </GlassCard>
+            <DiscoveryList
+                devices={devices}
+                filteredDevices={filteredDevices}
+                searchQuery={searchQuery}
+                statusFilter={statusFilter}
+                authFilter={authFilter}
+                claimFilter={claimFilter}
+                busyAction={busyAction}
+                formatDate={formatDate}
+                getStatusColor={getStatusColor}
+                getAuthColor={getAuthColor}
+                getClaimColor={getClaimColor}
+                onSearchQueryChange={setSearchQuery}
+                onStatusFilterChange={setStatusFilter}
+                onAuthFilterChange={setAuthFilter}
+                onClaimFilterChange={setClaimFilter}
+                onRefreshClaimPlan={(id) => void refreshClaimPlan(id)}
+                onExecuteClaim={(id) => void executeClaim(id)}
+                onApproveDevice={(id) => void approveDevice(id)}
+                onRejectDevice={(id) => void rejectDevice(id)}
+            />
         </div>
     );
 };
