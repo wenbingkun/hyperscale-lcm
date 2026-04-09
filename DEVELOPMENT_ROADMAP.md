@@ -172,7 +172,7 @@
 4.  ✅ **E2E 断言增强** — `E2EIntegrationTest` 现在显式上报 `traceparent`，并校验 `jobs.status` 主题中的状态消息仍包含原始 traceContext
 5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.JobStatusForwarderTest --tests com.sc.lcm.core.service.JobExecutionServiceTraceContextTest --tests com.sc.lcm.core.E2EIntegrationTest --no-daemon` 通过；并补跑 `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon`
 
-**Sprint 14 (Security Hardening & Coverage Surge)** — 🚧 进行中
+**Sprint 14 (Security Hardening & Coverage Surge)** — ✅ 已完成
 
 目标：收敛安全风险，大幅提升 Core 测试覆盖率。
 
@@ -180,10 +180,10 @@
 1.  [x] **Grafana 默认凭据修复** — `docker-compose.yml` 中 Grafana `GF_SECURITY_ADMIN_PASSWORD` 从硬编码 `admin` 改为 `${GRAFANA_PASSWORD:-admin}`，与生产配置保持一致；补充 `.env.example` 文档说明
 2.  [x] **WebSocket 认证补齐** — `DashboardWebSocket` 的 `@OnOpen` 添加 JWT Token 验证（从 query param 或 Sec-WebSocket-Protocol 解析），未认证连接立即关闭；新增 `DashboardWebSocketAuthTest` 回归测试
 3.  [x] **API 速率限制** — 为 REST 端点添加基于请求过滤器的滑动窗口速率限制，按角色分级（USER: 60 req/min, OPERATOR: 120, ADMIN: 300）；在 `application.properties` 参数化阈值
-4.  [ ] **Core Service 测试补齐（高价值批次）** — 为以下 6 个未覆盖 Service 建立单元测试：`AuditService`, `JobExecutionService`, `LifecycleService`, `MetricsService`, `QuotaService`, `SatelliteRegistrationService`，利用 Mockito + Panache mock 模式
+4.  [x] **Core Service 测试补齐（高价值批次）** — 新增 `AuditServiceTest`、`JobExecutionServiceTest`、`LifecycleServiceTest`、`MetricsServiceTest`、`QuotaServiceTest`、`SatelliteRegistrationServiceTest`，覆盖审计落库、Kafka 分发容错、生命周期状态、Micrometer 指标、租户配额聚合与注册审批流程
 5.  [x] **Core API Resource 测试补齐** — 为以下 4 个未覆盖 Resource 建立集成测试：`AllocationResource`, `DiscoveryResource`, `TenantResource`, `NetworkScanResource`，复用现有 `@QuarkusTest + DevServices` 模式
 6.  [x] **JaCoCo 基线上调** — `jacocoMinimumCoverage` 从 `0.30` 上调至 `0.45`，与当前实测覆盖率对齐，防止回退；当前 Core 指令覆盖率实测约 `47.02%`
-7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && ./gradlew check --no-daemon` 通过（含新基线验证）
+7.  [x] **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.AuditServiceTest --tests com.sc.lcm.core.service.JobExecutionServiceTest --tests com.sc.lcm.core.service.LifecycleServiceTest --tests com.sc.lcm.core.service.MetricsServiceTest --tests com.sc.lcm.core.service.QuotaServiceTest --tests com.sc.lcm.core.service.SatelliteRegistrationServiceTest --no-daemon` 通过；`./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过，当前 Core 指令覆盖率实测约 `56.52%`
 
 **Sprint 15 (AlertManager & K8s Operational Hardening)** — ✅ 已完成
 
@@ -215,16 +215,16 @@
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
-    *   Phase 6 质量加固进入尾声，13 个 Sprint 已完成（2026-01 ~ 2026-04，119 commits）。
+    *   Phase 6 质量加固进入尾声，15 个 Sprint 已完成（2026-01 ~ 2026-04）。
     *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
-    *   剩余缺口集中在安全加固、运维告警、PXE 收尾和 Demo 交付（Sprint 14-16 规划）。
+    *   剩余缺口集中在 PXE 收尾、Demo 交付与真实硬件验证（Sprint 16 + Phase 6 余项）。
 *   **子系统概况**:
-    *   Core (Java/Quarkus): JaCoCo 实测覆盖率 ~47.02%，默认门槛已提升至 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，后续重点转向 6 个 Service 测试缺口。
+    *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛为 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
     *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块 TFTP/HTTP 就绪，DHCP 选项注入与镜像管理尚缺。
     *   Frontend (React): 11 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
 *   **关键结论**:
     *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
-    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `45%`，实测 ~47.02%。
+    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `45%`，实测约 `56.52%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
     *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
@@ -272,12 +272,12 @@
 
 | 指标 | 数值 |
 |------|------|
-| 总提交数 | 119 |
-| 开发周期 | 约 12 周（2026-01-16 ~ 2026-04-08） |
-| 已完成 Sprint | 13 |
+| 总提交数 | 113 |
+| 开发周期 | 约 12 周（2026-01-16 ~ 2026-04-09） |
+| 已完成 Sprint | 15 |
 | Flyway 迁移版本 | V1.0.0 ~ V2.6.0（16 个脚本） |
-| Core 测试类 | 26 个（Service 20 + API Resource 6） |
+| Core 测试类 | 39 个（Service 27 + API Resource 12） |
 | Satellite 测试文件 | 11 个 |
-| Frontend 测试文件 | 7 个 |
+| Frontend 测试文件 | 11 个 |
 | CI 工作流 Job | 6 个（contract-guard / backend / frontend / satellite / load-test / docker-build） |
-| JaCoCo 指令覆盖率 | ~47.02%（基线门槛 45%） |
+| JaCoCo 指令覆盖率 | ~56.52%（基线门槛 45%） |
