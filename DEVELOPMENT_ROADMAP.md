@@ -181,7 +181,7 @@
 2.  [x] **WebSocket 认证补齐** — `DashboardWebSocket` 的 `@OnOpen` 添加 JWT Token 验证（从 query param 或 Sec-WebSocket-Protocol 解析），未认证连接立即关闭；新增 `DashboardWebSocketAuthTest` 回归测试
 3.  [ ] **API 速率限制** — 为 REST 端点添加基于 Bucket4j 或 Quarkus Rate Limiter 的速率限制，按角色分级（USER: 60 req/min, OPERATOR: 120, ADMIN: 300）；在 `application.properties` 参数化阈值
 4.  [ ] **Core Service 测试补齐（高价值批次）** — 为以下 6 个未覆盖 Service 建立单元测试：`AuditService`, `JobExecutionService`, `LifecycleService`, `MetricsService`, `QuotaService`, `SatelliteRegistrationService`，利用 Mockito + Panache mock 模式
-5.  [ ] **Core API Resource 测试补齐** — 为以下 4 个未覆盖 Resource 建立集成测试：`AllocationResource`, `DiscoveryResource`, `TenantResource`, `NetworkScanResource`，复用现有 `@QuarkusTest + DevServices` 模式
+5.  [x] **Core API Resource 测试补齐** — 为以下 4 个未覆盖 Resource 建立集成测试：`AllocationResource`, `DiscoveryResource`, `TenantResource`, `NetworkScanResource`，复用现有 `@QuarkusTest + DevServices` 模式
 6.  [x] **JaCoCo 基线上调** — `jacocoMinimumCoverage` 从 `0.30` 上调至 `0.45`，与当前实测覆盖率对齐，防止回退；当前 Core 指令覆盖率实测约 `47.02%`
 7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && ./gradlew check --no-daemon` 通过（含新基线验证）
 
@@ -219,7 +219,7 @@
     *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
     *   剩余缺口集中在安全加固、运维告警、PXE 收尾和 Demo 交付（Sprint 14-16 规划）。
 *   **子系统概况**:
-    *   Core (Java/Quarkus): JaCoCo 实测覆盖率 ~47.02%，默认门槛已提升至 `45%`；20 个 Service 中 14 个已有测试，12 个 API Resource 中 6 个已有测试。仍有 6 个 Service 和 4 个 Resource 零测试覆盖。
+    *   Core (Java/Quarkus): JaCoCo 实测覆盖率 ~47.02%，默认门槛已提升至 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，后续重点转向 6 个 Service 测试缺口。
     *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块 TFTP/HTTP 就绪，DHCP 选项注入与镜像管理尚缺。
     *   Frontend (React): 7 个测试文件覆盖核心页面与关键状态，4 个通用组件（GlassCard、GradientButton、SatelliteTable、StatCard）未覆盖，尚无覆盖率量化报告。
 *   **关键结论**:
@@ -229,6 +229,7 @@
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
     *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
+    *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [ ] 安全缺口待收敛：API 无速率限制；Grafana 默认凭据与 WebSocket 鉴权已收敛。
     *   [ ] AlertManager 告警通道未搭建，Helm Chart 缺少 NetworkPolicy / PDB / RBAC。
     *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
