@@ -199,7 +199,7 @@
 7.  [x] **前端覆盖率报告与组件测试** — `vitest` 接入 Istanbul coverage provider，CI 输出覆盖率摘要；为 `GlassCard`、`GradientButton`、`StatCard`、`SatelliteTable` 补充基础渲染测试
 8.  **测试验证** — `helm template` 验证新模板渲染无误；`cd frontend && npm test -- --coverage` 输出覆盖率；`./scripts/check_ci_contract.sh` 通过
 
-**Sprint 16 (PXE Completion & Demo Readiness)** — 🚧 进行中
+**Sprint 16 (PXE Completion & Demo Readiness)** — ✅ 已完成
 
 目标：收敛 Phase 6 剩余功能，交付端到端 Demo 脚本。
 
@@ -209,22 +209,22 @@
 3.  [x] **PXE Boot Flow 集成** — 已串联 DHCP → TFTP → iPXE → HTTP kickstart 全流程；`pxe.ServerConfig` 新增 `KickstartTemplate` / `InstallRepoURL` / `InstallKernelURL` / `InstallInitrdURL` / `InstallKernelArgs` 配置项，`/kickstart` 可按 Node 的 `mac` / `hostname` 动态渲染安装模板
 4.  [x] **大组件拆分重构** — `CredentialProfilesPage` 已拆分为 `CredentialProfileList`、`CredentialProfileForm`、`CredentialProfileDetail`，页面本体收敛至 `319` 行；`DiscoveryPage` 已拆分为 `DiscoveryList` 和 `DiscoveryApprovalPanel`，页面本体收敛至 `378` 行
 5.  [x] **端到端 Demo 脚本** — 已编写 `scripts/demo.sh`，串联零接触发现 → 自动纳管 → Job 提交 → 调度 → SSH 执行 → 状态回调 → 前端刷新全流程；通过 `curl` + `grpcurl` + `websocat` 驱动 Demo，并附 `documentation/DEMO_GUIDE.md` 操作说明。为支持本地闭环，补充了 mock Redfish HTTPS 服务、mock SSH 服务、Satellite `LCM_GRPC_PLAINTEXT` demo 开关，以及 discovery/claim 侧回归测试
-6.  [ ] **JaCoCo 基线上调至 50%** — 借助 Sprint 14-15 累积的测试增量，将 `jacocoMinimumCoverage` 从 `0.45` 上调至 `0.50`
-7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；`bash -n scripts/demo.sh` 通过；`python3 -m py_compile scripts/demo/mock_redfish_server.py` 通过；`cd scripts/demo && env GOTOOLCHAIN=local GOMODCACHE=/tmp/go-mod-cache-demo GOCACHE=/tmp/go-build-cache-demo go test ./...` 通过；`cd satellite && go test ./... -count=1` 通过；`cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew test --tests com.sc.lcm.core.api.DiscoveryResourceTest --tests com.sc.lcm.core.api.LcmGrpcServiceTest --no-daemon` 通过；`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过；`./scripts/demo.sh run` 在 `docker-compose up` 环境下端到端执行通过
+6.  [x] **JaCoCo 基线上调至 50%** — 已将 `core/build.gradle` 默认 `jacocoMinimumCoverage` 从 `0.45` 上调至 `0.50`，与当前 Core 指令覆盖率实测约 `56.52%` 对齐，进一步收紧 CI 回退阈值
+7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；`bash -n scripts/demo.sh` 通过；`python3 -m py_compile scripts/demo/mock_redfish_server.py` 通过；`cd scripts/demo && env GOTOOLCHAIN=local GOMODCACHE=/tmp/go-mod-cache-demo GOCACHE=/tmp/go-build-cache-demo go test ./...` 通过；`cd satellite && go test ./... -count=1` 通过；`cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew test --tests com.sc.lcm.core.api.DiscoveryResourceTest --tests com.sc.lcm.core.api.LcmGrpcServiceTest --no-daemon` 通过；`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过；`./scripts/demo.sh run` 在 `docker-compose up` 环境下端到端执行通过；本轮在 `50%` 新门槛下再次执行 `./scripts/check_ci_contract.sh` 与 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 均通过
 
 ## 🔍 项目评估 (Project Assessment)
 
 *   **整体状态**:
-    *   Phase 6 质量加固进入收尾阶段，Sprint 16 仅剩覆盖率门槛与真实硬件验收待收口。
+    *   Phase 6 工程项已全部收口，16 个 Sprint 已完成（2026-01 ~ 2026-04）。
     *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
-    *   本地 Demo 闭环已交付，剩余缺口集中在 JaCoCo 门槛收尾与真实硬件验证（Sprint 16 + Phase 6 余项）。
+    *   当前剩余缺口主要集中在真实硬件 Redfish / BMC 验证，不再是软件实现缺口。
 *   **子系统概况**:
-    *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛为 `45%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
+    *   Core (Java/Quarkus): JaCoCo 实测覆盖率约 `56.52%`，默认门槛已上调至 `50%`；Sprint 14 已补齐 `AllocationResource`、`DiscoveryResource`、`TenantResource`、`NetworkScanResource` 集成测试，以及 6 个高价值 Service 测试缺口。
     *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块现已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API / 动态 kickstart boot flow；新增 Demo 模式下的 mock Redfish / mock SSH / plaintext gRPC 本地联调能力，剩余缺口主要为真实环境验收与安装资产调优。
     *   Frontend (React): 12 个测试文件覆盖核心页面、认证上下文与 4 个通用组件；`CredentialProfilesPage` / `DiscoveryPage` 已完成大组件拆分，`vitest --coverage` 已输出 Istanbul 摘要，当前 Statements `71.57%` / Lines `72.47%`。
 *   **关键结论**:
     *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
-    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `45%`，实测约 `56.52%`。
+    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `50%`，实测约 `56.52%`。
     *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
     *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
@@ -235,13 +235,13 @@
     *   [x] PXE 裸金属自动化已具备软件层闭环：DHCP → TFTP → iPXE → HTTP kickstart 可联调，剩余主要为真实硬件验收与环境级参数调优。
     *   [x] `scripts/demo.sh` 已完成端到端 Demo 编排，本地可验证 discovery → claim → schedule → SSH execute → WebSocket 刷新全链路。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
-    *   [ ] JaCoCo 基线 `50%` 门槛尚未上调。
+    *   [x] JaCoCo 基线已上调至 `50%`，与当前实测覆盖率保持安全余量。
 
 ---
 
 ## 📈 项目历程回顾 (Project History)
 
-> 基于 git 提交历史整理，共 119 commits，2026-01-16 ~ 2026-04-08。
+> 基于 git 提交历史整理，共 119 commits，2026-01-16 ~ 2026-04-09。
 
 ### 2026-01 — 项目启动与基础框架搭建
 
@@ -273,12 +273,12 @@
 
 | 指标 | 数值 |
 |------|------|
-| 总提交数 | 113 |
+| 总提交数 | 119 |
 | 开发周期 | 约 12 周（2026-01-16 ~ 2026-04-09） |
-| 已完成 Sprint | 15 |
+| 已完成 Sprint | 16 |
 | Flyway 迁移版本 | V1.0.0 ~ V2.6.0（16 个脚本） |
 | Core 测试类 | 39 个（Service 27 + API Resource 12） |
-| Satellite 测试文件 | 11 个 |
-| Frontend 测试文件 | 11 个 |
+| Satellite 测试文件 | 15 个 |
+| Frontend 测试文件 | 12 个 |
 | CI 工作流 Job | 6 个（contract-guard / backend / frontend / satellite / load-test / docker-build） |
-| JaCoCo 指令覆盖率 | ~56.52%（基线门槛 45%） |
+| JaCoCo 指令覆盖率 | ~56.52%（基线门槛 50%） |
