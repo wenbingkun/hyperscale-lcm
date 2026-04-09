@@ -34,6 +34,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+AlertManager selector labels
+*/}}
+{{- define "hyperscale-lcm.alertmanager.selectorLabels" -}}
+app.kubernetes.io/name: {{ .Chart.Name }}-alertmanager
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
 Create image pull secrets
 */}}
 {{- define "hyperscale-lcm.imagePullSecrets" -}}

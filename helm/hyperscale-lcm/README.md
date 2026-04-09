@@ -78,6 +78,14 @@ helm install lcm ./helm/hyperscale-lcm \
 | `serviceAccount.automountServiceAccountToken` | 是否自动挂载 ServiceAccount Token | `false` |
 | `rbac.create` | 创建最小权限 Role / RoleBinding | `true` |
 
+### 告警
+
+| 参数 | 描述 | 默认值 |
+|------|------|--------|
+| `monitoring.alertmanager.enabled` | 启用 AlertManager Deployment / Service / ConfigMap | `true` |
+| `monitoring.alertmanager.image.tag` | AlertManager 镜像版本 | `v0.28.1` |
+| `monitoring.alertmanager.service.port` | AlertManager 服务端口 | `9093` |
+
 ## 示例
 
 ### 生产环境配置

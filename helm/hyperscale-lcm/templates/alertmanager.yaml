@@ -1,0 +1,73 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.alertmanager.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-alertmanager
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+data:
+  alertmanager.yml: |
+    {{- .Files.Get "files/alertmanager.yml" | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-alertmanager
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  type: {{ .Values.monitoring.alertmanager.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.monitoring.alertmanager.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "hyperscale-lcm.alertmanager.selectorLabels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-alertmanager
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alertmanager
+spec:
+  replicas: {{ .Values.monitoring.alertmanager.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hyperscale-lcm.alertmanager.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hyperscale-lcm.alertmanager.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: alertmanager
+          image: {{ include "hyperscale-lcm.image" (dict "image" .Values.monitoring.alertmanager.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.monitoring.alertmanager.image.pullPolicy }}
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+          ports:
+            - name: http
+              containerPort: 9093
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: data
+              mountPath: /alertmanager
+          resources:
+            {{- toYaml .Values.monitoring.alertmanager.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-alertmanager
+        - name: data
+          emptyDir: {}
+{{- end }}
