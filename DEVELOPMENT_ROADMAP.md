@@ -185,12 +185,12 @@
 6.  [x] **JaCoCo 基线上调** — `jacocoMinimumCoverage` 从 `0.30` 上调至 `0.45`，与当前实测覆盖率对齐，防止回退；当前 Core 指令覆盖率实测约 `47.02%`
 7.  **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && ./gradlew check --no-daemon` 通过（含新基线验证）
 
-**Sprint 15 (AlertManager & K8s Operational Hardening)** — 📋 待启动
+**Sprint 15 (AlertManager & K8s Operational Hardening)** — 🚧 进行中
 
 目标：补齐运维告警通道，强化 Helm Chart 生产可用性。
 
 计划内容：
-1.  [ ] **AlertManager 部署集成** — `docker-compose.prod.yml` 新增 AlertManager 容器，配置 Prometheus `alerting` 指向 AlertManager；创建 `infra/alertmanager/alertmanager.yml` 配置模板（含 email / Slack / PagerDuty receiver 占位）
+1.  [x] **AlertManager 部署集成** — `docker-compose.prod.yml` 新增 AlertManager 容器，配置 Prometheus `alerting` 指向 AlertManager；创建 `infra/alertmanager/alertmanager.yml` 配置模板（含 email / Slack / PagerDuty receiver 占位）
 2.  [ ] **Core AlertService 增强** — 现有 `AlertService` 扩展支持通过 HTTP 调用 AlertManager `/api/v2/alerts` 推送自定义告警（如 Satellite 离线超时、Job 超时未完成），新增 `AlertServiceIntegrationTest`
 3.  [ ] **Helm NetworkPolicy 模板** — 新增 `networkpolicy.yaml`：Core 仅接受 Frontend / Satellite / Prometheus 来源流量；Satellite 仅接受 Core gRPC 出站；DB / Redis / Kafka 仅接受 Core 来源
 4.  [ ] **Helm PodDisruptionBudget 模板** — Core `minAvailable: 1`，Satellite DaemonSet `maxUnavailable: 25%`
@@ -231,7 +231,7 @@
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [ ] 安全缺口待收敛：API 无速率限制；Grafana 默认凭据与 WebSocket 鉴权已收敛。
-    *   [ ] AlertManager 告警通道未搭建，Helm Chart 缺少 NetworkPolicy / PDB / RBAC。
+    *   [ ] AlertManager 基础部署已接入，但 Core 主动推送链路与 Helm Chart 的 NetworkPolicy / PDB / RBAC 仍待补齐。
     *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
     *   [ ] 端到端 Demo 脚本尚未编写。
