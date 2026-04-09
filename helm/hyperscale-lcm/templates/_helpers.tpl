@@ -58,3 +58,17 @@ Usage: {{ include "hyperscale-lcm.image" (dict "image" .Values.core.image "globa
 {{ .image.repository }}:{{ .image.tag }}
 {{- end -}}
 {{- end }}
+
+{{/*
+Core service account name
+*/}}
+{{- define "hyperscale-lcm.core.serviceAccountName" -}}
+{{- default (printf "%s-core" .Release.Name) .Values.serviceAccount.core.name -}}
+{{- end }}
+
+{{/*
+Satellite service account name
+*/}}
+{{- define "hyperscale-lcm.satellite.serviceAccountName" -}}
+{{- default (printf "%s-satellite" .Release.Name) .Values.serviceAccount.satellite.name -}}
+{{- end }}

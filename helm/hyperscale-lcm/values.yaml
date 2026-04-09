@@ -178,6 +178,24 @@ podDisruptionBudget:
     enabled: true
     maxUnavailable: 25%
 
+# ============== 身份与权限 ==============
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+  core:
+    name: ""
+    annotations: {}
+  satellite:
+    name: ""
+    annotations: {}
+
+rbac:
+  create: true
+  core:
+    enabled: true
+  satellite:
+    enabled: true
+
 # ============== 安全配置 ==============
 security:
   # mTLS 配置

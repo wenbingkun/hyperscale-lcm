@@ -70,6 +70,14 @@ helm install lcm ./helm/hyperscale-lcm \
 | `podDisruptionBudget.core.minAvailable` | Core 最少可用副本 | `1` |
 | `podDisruptionBudget.satellite.maxUnavailable` | Satellite 最大不可用比例 | `"25%"` |
 
+### 身份与权限
+
+| 参数 | 描述 | 默认值 |
+|------|------|--------|
+| `serviceAccount.create` | 为 Core / Satellite 创建独立 ServiceAccount | `true` |
+| `serviceAccount.automountServiceAccountToken` | 是否自动挂载 ServiceAccount Token | `false` |
+| `rbac.create` | 创建最小权限 Role / RoleBinding | `true` |
+
 ## 示例
 
 ### 生产环境配置

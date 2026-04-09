@@ -1,0 +1,91 @@
+{{- if and .Values.serviceAccount.create .Values.core.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "hyperscale-lcm.core.serviceAccountName" . }}
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+  {{- with .Values.serviceAccount.core.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+{{- end }}
+{{- if and .Values.serviceAccount.create .Values.core.enabled .Values.serviceAccount.create .Values.satellite.enabled }}
+---
+{{- end }}
+{{- if and .Values.serviceAccount.create .Values.satellite.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "hyperscale-lcm.satellite.serviceAccountName" . }}
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: satellite
+  {{- with .Values.serviceAccount.satellite.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+{{- end }}
+{{- if and .Values.rbac.create .Values.core.enabled .Values.rbac.core.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-core
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hyperscale-lcm.core.serviceAccountName" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-core
+{{- end }}
+{{- if and .Values.rbac.create .Values.core.enabled .Values.rbac.core.enabled .Values.satellite.enabled .Values.rbac.satellite.enabled }}
+---
+{{- end }}
+{{- if and .Values.rbac.create .Values.satellite.enabled .Values.rbac.satellite.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-satellite
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: satellite
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-satellite
+  labels:
+    {{- include "hyperscale-lcm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: satellite
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hyperscale-lcm.satellite.serviceAccountName" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-satellite
+{{- end }}

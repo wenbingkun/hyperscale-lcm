@@ -194,7 +194,7 @@
 2.  [x] **Core AlertService 增强** — 现有 `AlertService` 扩展支持通过 HTTP 调用 AlertManager `/api/v2/alerts` 推送自定义告警（如 Satellite 离线超时、Job 超时未完成），新增 `AlertServiceIntegrationTest`
 3.  [ ] **Helm NetworkPolicy 模板** — 新增 `networkpolicy.yaml`：Core 仅接受 Frontend / Satellite / Prometheus 来源流量；Satellite 仅接受 Core gRPC 出站；DB / Redis / Kafka 仅接受 Core 来源
 4.  [x] **Helm PodDisruptionBudget 模板** — Core `minAvailable: 1`，Satellite DaemonSet `maxUnavailable: 25%`
-5.  [ ] **Helm ServiceAccount & RBAC 模板** — 为 Core / Satellite 创建独立 ServiceAccount，附加最小权限 Role（ConfigMap 读取、Secret 读取）
+5.  [x] **Helm ServiceAccount & RBAC 模板** — 为 Core / Satellite 创建独立 ServiceAccount，附加最小权限 Role（ConfigMap 读取、Secret 读取）
 6.  [ ] **Helm AlertManager 模板** — Helm Chart 新增 AlertManager Deployment + Service + ConfigMap，由 `values.yaml` 中 `alertmanager.enabled` 控制
 7.  [ ] **前端覆盖率报告与组件测试** — `vitest` 接入 Istanbul coverage provider，CI 输出覆盖率摘要；为 `GlassCard`、`GradientButton`、`StatCard`、`SatelliteTable` 补充基础渲染测试
 8.  **测试验证** — `helm template` 验证新模板渲染无误；`cd frontend && npm test -- --coverage` 输出覆盖率；`./scripts/check_ci_contract.sh` 通过
@@ -231,7 +231,7 @@
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
     *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
     *   [x] 安全缺口阶段性收敛：Grafana 默认凭据、WebSocket 鉴权、REST API 速率限制已落地。
-    *   [ ] AlertManager 基础部署与 Core 主动推送链路已接入，但 Helm Chart 的 NetworkPolicy / RBAC / AlertManager 模板仍待补齐。
+    *   [ ] AlertManager 基础部署与 Core 主动推送链路已接入，但 Helm Chart 的 NetworkPolicy / AlertManager 模板仍待补齐。
     *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
     *   [ ] 端到端 Demo 脚本尚未编写。

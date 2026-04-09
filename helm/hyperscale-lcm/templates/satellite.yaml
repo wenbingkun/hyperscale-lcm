@@ -16,6 +16,8 @@ spec:
         {{- include "hyperscale-lcm.satellite.selectorLabels" . | nindent 8 }}
     spec:
       {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "hyperscale-lcm.satellite.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.satellite.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

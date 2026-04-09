@@ -19,6 +19,8 @@ spec:
         {{- include "hyperscale-lcm.core.selectorLabels" . | nindent 8 }}
     spec:
       {{- include "hyperscale-lcm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "hyperscale-lcm.core.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       containers:
         - name: core
           image: {{ include "hyperscale-lcm.image" (dict "image" .Values.core.image "global" .Values.global) }}
