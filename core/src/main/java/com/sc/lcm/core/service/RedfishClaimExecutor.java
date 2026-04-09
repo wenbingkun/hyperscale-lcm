@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -157,14 +158,20 @@ public class RedfishClaimExecutor {
         connection.setRequestProperty("Accept", "application/json");
         connection.setRequestProperty("Authorization", basicAuth(request.username(), request.password()));
 
-        int status = connection.getResponseCode();
-        if (status >= HttpURLConnection.HTTP_BAD_REQUEST) {
-            throw new ProbeHttpException(status, "GET " + path + " returned " + status);
-        }
+        try {
+            int status = connection.getResponseCode();
+            if (status >= HttpURLConnection.HTTP_BAD_REQUEST) {
+                log.warn("Redfish GET {} returned HTTP {}", url, status);
+                throw new ProbeHttpException(status, "GET " + path + " returned " + status);
+            }
 
-        try (InputStream stream = connection.getInputStream()) {
-            return objectMapper.readValue(stream, new TypeReference<Map<String, Object>>() {
-            });
+            try (InputStream stream = connection.getInputStream()) {
+                return objectMapper.readValue(stream, new TypeReference<Map<String, Object>>() {
+                });
+            }
+        } catch (IOException e) {
+            log.warn("Redfish GET {} failed: {}", url, e.getMessage());
+            throw e;
         }
     }
 
@@ -182,14 +189,43 @@ public class RedfishClaimExecutor {
         return candidate.replaceAll("/+$", "");
     }
 
-    private static String absoluteUrl(String endpoint, String path) {
-        if (path.startsWith("http://") || path.startsWith("https://")) {
-            return path;
+    static String absoluteUrl(String endpoint, String path) {
+        URI endpointUri = URI.create(endpoint).normalize();
+        URI pathUri = URI.create(path).normalize();
+
+        if (pathUri.isAbsolute()) {
+            if (!isSameOrigin(endpointUri, pathUri)) {
+                throw new IllegalArgumentException("Redfish path host does not match endpoint.");
+            }
+            return pathUri.toString();
         }
-        if (path.startsWith("/")) {
-            return endpoint + path;
+
+        URI baseUri = endpointUri;
+        if (!path.startsWith("/")) {
+            baseUri = URI.create(endpointUri.toString() + "/");
         }
-        return endpoint + "/" + path;
+
+        return baseUri.resolve(pathUri).normalize().toString();
+    }
+
+    private static boolean isSameOrigin(URI endpointUri, URI targetUri) {
+        return endpointUri.getScheme().equalsIgnoreCase(targetUri.getScheme())
+                && endpointUri.getHost().equalsIgnoreCase(targetUri.getHost())
+                && effectivePort(endpointUri) == effectivePort(targetUri);
+    }
+
+    private static int effectivePort(URI uri) {
+        int port = uri.getPort();
+        if (port != -1) {
+            return port;
+        }
+        if ("https".equalsIgnoreCase(uri.getScheme())) {
+            return 443;
+        }
+        if ("http".equalsIgnoreCase(uri.getScheme())) {
+            return 80;
+        }
+        return -1;
     }
 
     private static String basicAuth(String username, String password) {
