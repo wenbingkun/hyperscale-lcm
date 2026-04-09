@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useWebSocket, type WebSocketMessage } from '../hooks/useWebSocket';
+import { useAuth } from './AuthContext';
 
 interface Alert {
     id: string;
@@ -20,6 +21,7 @@ interface WebSocketContextValue {
 const WebSocketContext = createContext<WebSocketContextValue | null>(null);
 
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { token } = useAuth();
     const [onlineNodes, setOnlineNodes] = useState(0);
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [lastEvent, setLastEvent] = useState<WebSocketMessage | null>(null);
@@ -58,6 +60,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const { isConnected } = useWebSocket({
         url: wsUrl,
+        protocols: token ? ['bearer', token] : undefined,
         onMessage: handleMessage,
         onConnect: () => console.log('Dashboard WebSocket connected'),
         onDisconnect: () => console.log('Dashboard WebSocket disconnected'),

@@ -178,7 +178,7 @@
 
 计划内容：
 1.  [x] **Grafana 默认凭据修复** — `docker-compose.yml` 中 Grafana `GF_SECURITY_ADMIN_PASSWORD` 从硬编码 `admin` 改为 `${GRAFANA_PASSWORD:-admin}`，与生产配置保持一致；补充 `.env.example` 文档说明
-2.  [ ] **WebSocket 认证补齐** — `DashboardWebSocket` 的 `@OnOpen` 添加 JWT Token 验证（从 query param 或 Sec-WebSocket-Protocol 解析），未认证连接立即关闭；新增 `DashboardWebSocketAuthTest` 回归测试
+2.  [x] **WebSocket 认证补齐** — `DashboardWebSocket` 的 `@OnOpen` 添加 JWT Token 验证（从 query param 或 Sec-WebSocket-Protocol 解析），未认证连接立即关闭；新增 `DashboardWebSocketAuthTest` 回归测试
 3.  [ ] **API 速率限制** — 为 REST 端点添加基于 Bucket4j 或 Quarkus Rate Limiter 的速率限制，按角色分级（USER: 60 req/min, OPERATOR: 120, ADMIN: 300）；在 `application.properties` 参数化阈值
 4.  [ ] **Core Service 测试补齐（高价值批次）** — 为以下 6 个未覆盖 Service 建立单元测试：`AuditService`, `JobExecutionService`, `LifecycleService`, `MetricsService`, `QuotaService`, `SatelliteRegistrationService`，利用 Mockito + Panache mock 模式
 5.  [ ] **Core API Resource 测试补齐** — 为以下 4 个未覆盖 Resource 建立集成测试：`AllocationResource`, `DiscoveryResource`, `TenantResource`, `NetworkScanResource`，复用现有 `@QuarkusTest + DevServices` 模式
@@ -229,7 +229,7 @@
     *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
     *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
     *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
-    *   [ ] 安全缺口待收敛：Grafana 默认凭据、WebSocket 无认证、API 无速率限制。
+    *   [ ] 安全缺口待收敛：API 无速率限制；Grafana 默认凭据与 WebSocket 鉴权已收敛。
     *   [ ] AlertManager 告警通道未搭建，Helm Chart 缺少 NetworkPolicy / PDB / RBAC。
     *   [ ] PXE 裸金属自动化完成度约 80%，缺 DHCP 66/67 与镜像管理。
     *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。

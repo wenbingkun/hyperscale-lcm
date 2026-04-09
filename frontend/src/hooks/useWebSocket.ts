@@ -19,6 +19,7 @@ export interface WebSocketMessage {
 
 export interface UseWebSocketOptions {
     url: string;
+    protocols?: string | string[];
     onMessage?: (message: WebSocketMessage) => void;
     onConnect?: () => void;
     onDisconnect?: () => void;
@@ -37,6 +38,7 @@ export interface UseWebSocketReturn {
 export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
     const {
         url,
+        protocols,
         onMessage,
         onConnect,
         onDisconnect,
@@ -78,7 +80,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
             }
 
             try {
-                wsRef.current = new WebSocket(url);
+                wsRef.current = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
 
                 wsRef.current.onopen = () => {
                     console.log('🌐 WebSocket connected');
@@ -117,7 +119,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
                 console.error('Failed to create WebSocket:', error);
             }
         };
-    }, [url]);
+    }, [protocols, url]);
 
     const disconnect = useCallback(() => {
         if (reconnectTimeoutRef.current) {
