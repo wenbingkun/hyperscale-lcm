@@ -141,6 +141,39 @@ class RedfishClaimExecutorTest {
         }
     }
 
+    @Test
+    @DisplayName("absoluteUrl 应允许同 host 的绝对 URL")
+    void shouldAllowAbsoluteUrlWithSameHost() {
+        String endpoint = "https://bmc.example.com";
+        String path = "https://bmc.example.com/redfish/v1/Systems/system";
+
+        String url = RedfishClaimExecutor.absoluteUrl(endpoint, path);
+
+        assertEquals(path, url);
+    }
+
+    @Test
+    @DisplayName("absoluteUrl 应拒绝不同 host 的绝对 URL")
+    void shouldRejectAbsoluteUrlWithDifferentHost() {
+        String endpoint = "https://bmc.example.com";
+        String path = "https://evil.example.com/redfish/v1/Systems/system";
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> RedfishClaimExecutor.absoluteUrl(endpoint, path));
+
+        assertTrue(exception.getMessage().contains("does not match endpoint"));
+    }
+
+    @Test
+    @DisplayName("absoluteUrl 应允许标准相对路径")
+    void shouldResolveStandardRelativePath() {
+        String endpoint = "https://bmc.example.com";
+
+        String url = RedfishClaimExecutor.absoluteUrl(endpoint, "/redfish/v1/Systems");
+
+        assertEquals("https://bmc.example.com/redfish/v1/Systems", url);
+    }
+
     private static RedfishClaimExecutor newExecutor() {
         SecretRefResolver secretRefResolver = new SecretRefResolver();
         secretRefResolver.secretManagerClient = new VaultSecretClient();
