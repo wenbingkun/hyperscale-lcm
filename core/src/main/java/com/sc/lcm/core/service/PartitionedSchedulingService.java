@@ -80,10 +80,14 @@ public class PartitionedSchedulingService {
                             .map(entry -> solveForZone(entry.getKey(), entry.getValue(), detachedJob))
                             .collect(Collectors.toList());
 
-                    // Use Uni.createFrom().completionStage to avoid blocking the event loop
+                    // Use Uni.createFrom().completionStage to avoid blocking the event loop.
+                    // thenApplyAsync(..., zoneExecutor) guarantees selectBestSolution — which
+                    // performs blocking persistence via VertxContextSupport.subscribeAndAwait —
+                    // never runs on the subscribing thread (which may be a Vert.x event loop
+                    // when zone futures complete synchronously, e.g. with mocked solvers).
                     return Uni.createFrom().completionStage(
                             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                                    .thenApply(v -> selectBestSolution(futures, detachedJob)));
+                                    .thenApplyAsync(v -> selectBestSolution(futures, detachedJob), zoneExecutor));
                 });
     }
 
