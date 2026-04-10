@@ -10,6 +10,10 @@ env:
   JAVA_VERSION: '21'
   GO_VERSION: '1.24.0'
   NODE_VERSION: '20'
+  # Opt every JavaScript-based action into the Node 24 runtime ahead of the
+  # 2026-06-02 forced cutover. See:
+  # https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   ci-contract-guard:

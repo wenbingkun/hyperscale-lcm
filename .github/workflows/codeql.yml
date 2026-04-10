@@ -9,6 +9,12 @@ on:
   schedule:
     - cron: '30 1 * * 0' # Weekly scan on Sunday
 
+env:
+  # Opt every JavaScript-based action into the Node 24 runtime ahead of the
+  # 2026-06-02 forced cutover. See:
+  # https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   analyze:
     name: Analyze
