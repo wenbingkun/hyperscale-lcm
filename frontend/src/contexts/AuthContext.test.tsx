@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { AuthProvider, useAuth } from './AuthContext';
+import { AuthProvider, parseJwt, useAuth } from './AuthContext';
 
 function createJwt(overrides: Record<string, unknown> = {}) {
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
@@ -136,5 +136,38 @@ describe('AuthProvider', () => {
         expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
         expect(localStorage.getItem('lcm_auth_token')).toBeNull();
         expect(localStorage.getItem('lcm_auth_user')).toBeNull();
+    });
+});
+
+describe('parseJwt', () => {
+    function createBase64UrlToken(payload: string): string {
+        const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, '');
+        const payloadEncoded = btoa(payload)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, '');
+
+        return `${header}.${payloadEncoded}.signature`;
+    }
+
+    it('parses a valid payload without base64 padding', () => {
+        const token = createBase64UrlToken(JSON.stringify({
+            sub: 'user-1',
+            exp: Math.floor(Date.now() / 1000) + 600,
+        }));
+
+        expect(parseJwt(token)).toMatchObject({ sub: 'user-1' });
+    });
+
+    it('returns null when token has insufficient segments', () => {
+        expect(parseJwt('invalid.token')).toBeNull();
+    });
+
+    it('returns null for non-JSON payload', () => {
+        const token = createBase64UrlToken('not-json');
+        expect(parseJwt(token)).toBeNull();
     });
 });
