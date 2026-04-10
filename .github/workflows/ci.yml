@@ -270,6 +270,9 @@ jobs:
           GRPC_KEY_PATH: ../certs/server-pkcs8.key
           GRPC_TRUSTSTORE_PATH: ../certs/truststore.jks
           LCM_DISCOVERY_REQUIRE_APPROVAL: false
+          # No OTel collector in CI; disable SDK so the exporter does not
+          # spam "Connection refused: localhost:4317" into Core Load Test logs.
+          QUARKUS_OTEL_SDK_DISABLED: "true"
         run: |
           java -jar build/quarkus-app/quarkus-run.jar &
           timeout 60 bash -c 'until curl -sf http://localhost:8080/health/ready; do sleep 2; done'
