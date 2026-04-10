@@ -43,6 +43,7 @@ jobs:
       with:
         java-version: '21'
         distribution: 'temurin'
+        cache: 'gradle'
 
     - name: Set up Go
       if: matrix.language == 'go'
@@ -50,9 +51,36 @@ jobs:
       with:
         go-version: '1.24.0'
 
-    # Autobuild attempts to build any compiled languages (C/C++, C#, Go, or Java).
-    # If this step fails, then you should remove it and run the build manually
+    - name: Grant execute permission for gradlew
+      if: matrix.language == 'java'
+      run: chmod +x core/gradlew
+
+    # Java is built explicitly (instead of via codeql-action/autobuild) so we
+    # can benefit from the Gradle dependency cache provided by setup-java and
+    # retry on transient Maven Central errors (e.g. 403/5xx). A single 4xx
+    # used to red the entire workflow — see #13.
+    - name: Build Java for CodeQL
+      if: matrix.language == 'java'
+      working-directory: core
+      run: |
+        set -euo pipefail
+        attempts=3
+        for i in $(seq 1 $attempts); do
+          if ./gradlew --no-daemon assemble -x test --console=plain; then
+            exit 0
+          fi
+          if [ "$i" -lt "$attempts" ]; then
+            echo "::warning::Gradle build attempt $i failed, retrying in 15s..."
+            sleep 15
+          fi
+        done
+        echo "::error::Gradle build failed after $attempts attempts"
+        exit 1
+
+    # Autobuild handles Go and JavaScript fine; only Java needed the
+    # explicit + cached + retried path above.
     - name: Autobuild
+      if: matrix.language != 'java'
       uses: github/codeql-action/autobuild@v3
 
     - name: Perform CodeQL Analysis
