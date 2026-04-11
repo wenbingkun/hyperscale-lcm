@@ -88,6 +88,10 @@ htmlcov/
 # 个人 TODO / 草稿 / AI agent 实验记录；详见 .local/README.md
 .local/
 
+# Claude Code 本机权限白名单（个人偏好，不共享）
+.claude/settings.json
+.claude/settings.local.json
+
 # ============ Temporary ============
 tmp/
 temp/
