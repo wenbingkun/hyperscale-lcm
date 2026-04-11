@@ -2,6 +2,8 @@
 
 Hyperscale LCM is a distributed lifecycle management platform for GPU and bare-metal clusters. The current mainline already covers discovery, claim planning, topology-aware scheduling, multi-mode job execution, real-time UI refresh, and baseline observability for large-scale cluster operations.
 
+The authoritative rolling status snapshot lives in `documentation/PROJECT_STATUS.md`. Historical phase planning and delivery chronology live in `DEVELOPMENT_ROADMAP.md`.
+
 ## Current Status
 
 | Layer | Stack | Current Role |
@@ -23,8 +25,9 @@ Hyperscale LCM is a distributed lifecycle management platform for GPU and bare-m
 
 - AlertManager external notification channels
 - Real hardware Redfish / BMC acceptance validation
-- PXE / iPXE provisioning closure for full bare-metal reinstall automation
-- Demo script and broader Playwright browser-level regression coverage
+- Phase 7 Redfish/BMC management hardening (`session` capability expansion, BMC management API, power actions)
+- PXE / iPXE production hardening and real-environment validation
+- Broader demo smoke coverage and Playwright browser-level regression coverage
 
 ## Architecture
 
@@ -108,7 +111,7 @@ For Core validation, follow the environment-specific commands in `documentation/
 | Document | Purpose |
 |----------|---------|
 | `DEVELOPMENT_ROADMAP.md` | Roadmap, phase history, sprint log |
-| `documentation/PROJECT_STATUS.md` | Rolling current-state snapshot: capability matrix, gaps, next-step priorities |
+| `documentation/PROJECT_STATUS.md` | Rolling current-state snapshot and next-step priorities |
 | `documentation/ENTERPRISE_LCM_ARCHITECTURE.md` | Layered architecture and communication topology |
 | `documentation/RESOURCE_SCHEDULING_DESIGN.md` | Scheduling engine design (Timefold, zone partitioning, GPU topology) |
 | `documentation/CI_CONTRACT.md` | CI/test source of truth |

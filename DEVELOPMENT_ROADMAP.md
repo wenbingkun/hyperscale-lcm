@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-04-09 (Sprint 14-16 审计验证后更新)
+> 最后更新: 2026-04-11 (文档职责收敛与 Phase 7 计划对齐)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -104,161 +104,36 @@
 
 ---
 
-## 🎯 当前状态 (Current Status)
+## 📅 阶段七：Redfish/BMC 协议深化与硬件准入 🟡 进行中
+**目标**: 在现有 claim / managed-account / 仿真验收基础上，把 Redfish/BMC 从“可验证”推进到“可管理、可准入、可运维”。
+*   **协议与认证深化**:
+    *   [ ] 统一 `session-aware` Redfish 传输层与能力探测策略。
+    *   [ ] 明确 `SESSION_PREFERRED` 默认策略，并支持设备级覆盖。
+*   **BMC 管理平面**:
+    *   [ ] 新增 `/api/bmc/devices/{id}/...` 管理接口，保留旧 discovery 入口兼容一阶段。
+    *   [ ] 引入受控 `power-actions`、审计日志和指标采集。
+*   **采集与验收扩展**:
+    *   [ ] Satellite 补齐 `session-aware` 只读采集能力。
+    *   [ ] 扩展真实硬件准入矩阵，覆盖 OpenBMC 与至少一种商业 BMC。
+*   **参考文档**:
+    *   [x] 详细方案见 `documentation/REDFISH_BMC_PHASE7_PLAN.md`。
 
-**Sprint 6 (Audit Fix & Monitoring)** — ✅ 已完成
+---
 
-完成内容：
-1.  ✅ **Grafana 监控栈** — 添加 Grafana 服务、预配置仪表盘、Prometheus 告警规则
-2.  ✅ **E2E 测试修复** — 启用 Quarkus DevServices (Testcontainers) 支持自包含测试
-3.  ✅ **CI 覆盖率** — CI 流水线集成 JaCoCo 覆盖率验证 (`gradlew check`)
-4.  ✅ **Prometheus 生产配置** — 分离 dev/prod 配置，修复容器间服务发现
-5.  ✅ **Helm 监控模板** — ServiceMonitor、PrometheusRule、Grafana Dashboard ConfigMap
+## 🎯 当前聚焦 (Current Focus)
 
-**Sprint 7 (Frontend Quality Hardening)** — ✅ 已完成
+本路线图现在只保留“阶段目标、阶段完成情况、项目历程”三类信息，滚动现状不再在此重复维护。
 
-完成内容：
-1.  ✅ **前端测试基础设施** — 接入 `Vitest + React Testing Library + jsdom`
-2.  ✅ **核心页面测试补齐** — 覆盖 Dashboard、Job 管理、设备发现
-3.  ✅ **关键前端状态测试** — 补充 AuthContext、JobSubmissionForm 回归用例
-4.  ✅ **前端质量清理** — 修复 `DiscoveryPage` 的 `react-hooks/exhaustive-deps` 告警
-5.  ✅ **测试验证** — `cd frontend && npm test`（5 个测试文件 / 10 个用例通过）与 `cd frontend && npm run lint` 通过
+*   **滚动现状快照**: 统一见 `documentation/PROJECT_STATUS.md`
+*   **文档入口导航**: 统一见 `README.md`
+*   **Redfish/BMC 当前专项计划**: 统一见 `documentation/REDFISH_BMC_PHASE7_PLAN.md`
 
-**Sprint 8 (Coverage Baseline Enforcement)** — ✅ 已完成
-
-完成内容：
-1.  ✅ **JaCoCo 基线接线修复** — 修复 `core/build.gradle` 中覆盖率任务对执行数据文件的定位，避免 `jacocoTestReport` / `jacocoTestCoverageVerification` 被跳过
-2.  ✅ **覆盖率门槛参数化** — 增加 `jacocoMinimumCoverage` 属性，默认基线为 `30%`
-3.  ✅ **覆盖率量化** — 当前 Core 指令覆盖率实测为 `42.88%`
-4.  ✅ **测试验证** — `./scripts/check_ci_contract.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
-
-**Sprint 9 (Cross-Service Integration Hardening)** — ✅ 已完成
-
-完成内容：
-1.  ✅ **调度状态持久化补强** — 在非分区 / 分区调度找到目标节点后先将 Job 持久化为 `SCHEDULED`，补齐 `assignedNodeId` 与 `scheduledAt`
-2.  ✅ **回调链路广播增强** — Job 状态回调除保留既有调度事件外，新增 `JOB_STATUS` WebSocket 广播，前端可按作业状态变化即时刷新
-3.  ✅ **前端实时刷新补齐** — Job 列表页与详情页统一监听 `SCHEDULE_EVENT` / `JOB_STATUS`，新增详情页实时刷新测试
-4.  ✅ **E2E 场景增强** — `E2EIntegrationTest` 现在校验 Satellite 注册 → Job 调度落库 → Kafka 状态回调 → Job 完成状态持久化的完整链路，并按 `jobId` 精确匹配 `jobs.status` 主题消息
-5.  ✅ **测试验证** — `./scripts/check_ci_contract.sh` 通过；`cd frontend && npm test`（6 个测试文件 / 12 个用例通过）、`cd frontend && npm run lint`、`cd frontend && npm run build` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
-
-**Sprint 10 (Zone Partition Scheduling Regression Guard)** — ✅ 已完成
-
-完成内容：
-1.  ✅ **求解器封装抽象** — 新增 `LcmSolverFacade`，统一承接 `SchedulingService` / `PartitionedSchedulingService` 对 Timefold `SolverManager` 的访问，便于在 Quarkus 集成测试中稳定注入替身
-2.  ✅ **Zone 分片调度回归测试** — 新增 `PartitionedSchedulingServiceTest`，覆盖“跨 Zone 选择最优解”与“所有 Zone 均不可分配时保持 `PENDING`”两类关键路径
-3.  ✅ **状态持久化校验** — 回归测试显式验证分区调度命中节点后会落库 `SCHEDULED`、写入 `assignedNodeId` / `scheduledAt`，避免仅靠日志判断
-4.  ✅ **文档状态对齐** — 同步勾选阶段三与阶段六中的“按 Zone 分片”条目，消除路线图与实现状态不一致的问题
-5.  ✅ **测试验证** — `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、`cd core && ./gradlew test --tests com.sc.lcm.core.service.PartitionedSchedulingServiceTest --no-daemon` 与按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
-
-**Sprint 11 (Command Dispatch Execution Modes)** — ✅ 已完成
-
-完成内容：
-1.  ✅ **作业执行策略建模** — `Job` 新增 `executionType` / `executionPayload`，支持 Docker、Shell、Ansible、SSH 四种下发模式，并通过 Flyway 迁移补齐持久化字段
-2.  ✅ **Core 分发链路补强** — `JobResource` 支持接收执行模式，`SchedulingService` / `PartitionedSchedulingService` 保留执行元数据，`JobDispatcher` 按作业配置分发 `EXEC_DOCKER` / `EXEC_SHELL` / `EXEC_ANSIBLE` / `EXEC_SSH`
-3.  ✅ **Satellite SSH 执行器** — 新增 `RunSSH`，通过本地 OpenSSH 客户端执行远程命令，支持私钥认证、可选 `sshpass` 密码认证以及 `known_hosts` / 非严格校验策略
-4.  ✅ **回归测试补齐** — `JobDispatcherTest` 覆盖多执行模式映射；`E2EIntegrationTest` 新增 Shell 作业分发链路验证；`satellite/pkg/executor/ssh_test.go` 覆盖 SSH 执行成功、失败与参数校验
-5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.JobDispatcherTest --tests com.sc.lcm.core.E2EIntegrationTest --no-daemon` 通过；`docker run --rm -e GOPROXY=off -e GOMODCACHE=/go/pkg/mod -v /home/wenbk/go/pkg/mod:/go/pkg/mod -v /home/wenbk/projects/work/hyperscale-lcm:/workspace -w /workspace/satellite golang:1.24.7 go test ./... -count=1` 通过；并补跑 `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过
-
-**Sprint 12 (Topology Visualization Delivery)** — ✅ 已完成
-
-完成内容：
-1.  ✅ **拓扑元数据出参补齐** — `/api/nodes` 现在返回 `gpuTopology`、`nvlinkBandwidthGbps`、`ibFabricId`，前端可直接按 GPU / NVLink / IB Fabric 维度渲染物理布局
-2.  ✅ **Topology 页面重构** — 原先基于固定 8 GPU 假设的示意图改为按 Zone / Rack 分组、按真实 `gpuCount` 和作业 `requiredGpuCount` 着色的分配视图，并新增活动作业图例与 IB Fabric 总览
-3.  ✅ **实时刷新补齐** — Topology 页面现已监听 `SCHEDULE_EVENT` / `JOB_STATUS` / `NODE_STATUS` / `HEARTBEAT_UPDATE`，在调度和状态变更时即时刷新布局
-4.  ✅ **回归测试补齐** — 新增 `NodeResourceTest` 校验拓扑字段映射，新增 `TopologyPage.test.tsx` 覆盖 Zone / Rack / NVLink / IB Fabric 展示、Idle 过滤与 WebSocket 刷新
-5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.api.NodeResourceTest --no-daemon` 通过；`cd frontend && npm test -- src/pages/TopologyPage.test.tsx` 通过；并补跑 `cd frontend && npm test`、`cd frontend && npm run lint`、`cd frontend && npm run build`、`./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon`
-
-**Sprint 13 (Trace Propagation Hardening)** — ✅ 已完成
-
-完成内容：
-1.  ✅ **状态回调 trace 载荷补齐** — `JobStatusCallback` 新增 `traceContext` 字段，Satellite 回传的 `trace_context` 不再在 Kafka `jobs.status` 这一跳丢失
-2.  ✅ **Core 消费端上下文恢复** — `JobExecutionService` 在处理状态回调时会从 `traceContext` 提取父上下文，并创建 `job-status-callback` consumer span，补齐 Satellite → Kafka → Core 的 trace 续接
-3.  ✅ **Kafka 透传回归测试** — 新增 `JobStatusForwarderTest` 验证 Kafka payload 会保留 traceContext，新添 `JobExecutionServiceTraceContextTest` 验证 Core 能恢复 remote parent trace
-4.  ✅ **E2E 断言增强** — `E2EIntegrationTest` 现在显式上报 `traceparent`，并校验 `jobs.status` 主题中的状态消息仍包含原始 traceContext
-5.  ✅ **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.JobStatusForwarderTest --tests com.sc.lcm.core.service.JobExecutionServiceTraceContextTest --tests com.sc.lcm.core.E2EIntegrationTest --no-daemon` 通过；并补跑 `./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh`、按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon`
-
-**Sprint 14 (Security Hardening & Coverage Surge)** — ✅ 已完成
-
-目标：收敛安全风险，大幅提升 Core 测试覆盖率。
-
-计划内容：
-1.  [x] **Grafana 默认凭据修复** — `docker-compose.yml` 中 Grafana `GF_SECURITY_ADMIN_PASSWORD` 从硬编码 `admin` 改为 `${GRAFANA_PASSWORD:-admin}`，与生产配置保持一致；补充 `.env.example` 文档说明
-2.  [x] **WebSocket 认证补齐** — `DashboardWebSocket` 的 `@OnOpen` 添加 JWT Token 验证（从 query param 或 Sec-WebSocket-Protocol 解析），未认证连接立即关闭；新增 `DashboardWebSocketAuthTest` 回归测试
-3.  [x] **API 速率限制** — 为 REST 端点添加基于请求过滤器的滑动窗口速率限制，按角色分级（USER: 60 req/min, OPERATOR: 120, ADMIN: 300）；在 `application.properties` 参数化阈值
-4.  [x] **Core Service 测试补齐（高价值批次）** — 新增 `AuditServiceTest`、`JobExecutionServiceTest`、`LifecycleServiceTest`、`MetricsServiceTest`、`QuotaServiceTest`、`SatelliteRegistrationServiceTest`，覆盖审计落库、Kafka 分发容错、生命周期状态、Micrometer 指标、租户配额聚合与注册审批流程
-5.  [x] **Core API Resource 测试补齐** — 为以下 4 个未覆盖 Resource 建立集成测试：`AllocationResource`, `DiscoveryResource`, `TenantResource`, `NetworkScanResource`，复用现有 `@QuarkusTest + DevServices` 模式
-6.  [x] **JaCoCo 基线上调** — `jacocoMinimumCoverage` 从 `0.30` 上调至 `0.45`，与当前实测覆盖率对齐，防止回退；当前 Core 指令覆盖率实测约 `47.02%`
-7.  [x] **测试验证** — `cd core && ./gradlew test --tests com.sc.lcm.core.service.AuditServiceTest --tests com.sc.lcm.core.service.JobExecutionServiceTest --tests com.sc.lcm.core.service.LifecycleServiceTest --tests com.sc.lcm.core.service.MetricsServiceTest --tests com.sc.lcm.core.service.QuotaServiceTest --tests com.sc.lcm.core.service.SatelliteRegistrationServiceTest --no-daemon` 通过；`./scripts/check_ci_contract.sh`、`chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh` 通过；按 compose 对齐环境执行 `cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db QUARKUS_DATASOURCE_USERNAME=lcm_user QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 通过，当前 Core 指令覆盖率实测约 `56.52%`
-
-**Sprint 15 (AlertManager & K8s Operational Hardening)** — ✅ 已完成
-
-目标：补齐运维告警通道，强化 Helm Chart 生产可用性。
-
-计划内容：
-1.  [x] **AlertManager 部署集成** — `docker-compose.prod.yml` 新增 AlertManager 容器，配置 Prometheus `alerting` 指向 AlertManager；创建 `infra/alertmanager/alertmanager.yml` 配置模板（含 email / Slack / PagerDuty receiver 占位）
-2.  [x] **Core AlertService 增强** — 现有 `AlertService` 扩展支持通过 HTTP 调用 AlertManager `/api/v2/alerts` 推送自定义告警（如 Satellite 离线超时、Job 超时未完成），新增 `AlertServiceIntegrationTest`
-3.  [x] **Helm NetworkPolicy 模板** — 新增 `networkpolicy.yaml`：Core 仅接受 Frontend / Satellite / Prometheus / Ingress Controller 来源流量；Satellite 仅放行 Core gRPC 与 DNS 出站；DB / Redis / Kafka 借助依赖 chart 策略仅接受 Core client 标签来源
-4.  [x] **Helm PodDisruptionBudget 模板** — Core `minAvailable: 1`，Satellite DaemonSet `maxUnavailable: 25%`
-5.  [x] **Helm ServiceAccount & RBAC 模板** — 为 Core / Satellite 创建独立 ServiceAccount，附加最小权限 Role（ConfigMap 读取、Secret 读取）
-6.  [x] **Helm AlertManager 模板** — Helm Chart 新增 AlertManager Deployment + Service + ConfigMap，由 `values.yaml` 中 `alertmanager.enabled` 控制
-7.  [x] **前端覆盖率报告与组件测试** — `vitest` 接入 Istanbul coverage provider，CI 输出覆盖率摘要；为 `GlassCard`、`GradientButton`、`StatCard`、`SatelliteTable` 补充基础渲染测试
-8.  **测试验证** — `helm template` 验证新模板渲染无误；`cd frontend && npm test -- --coverage` 输出覆盖率；`./scripts/check_ci_contract.sh` 通过
-
-**Sprint 16 (PXE Completion & Demo Readiness)** — ✅ 已完成
-
-目标：收敛 Phase 6 剩余功能，交付端到端 Demo 脚本。
-
-计划内容：
-1.  [x] **PXE DHCP 选项补齐** — Satellite PXE 模块新增轻量 DHCP Proxy，支持 `Option 66/67` 注入与 iPXE chainload：传统 PXE 客户端下发 `undionly.kpxe`，iPXE 客户端自动切换到 Satellite 托管的 `/ipxe` HTTP 脚本；相关地址和引导参数已环境变量化
-2.  [x] **PXE 镜像管理 API** — Satellite 新增 `/api/images` REST 端点，支持上传 / 列出 / 删除 OS 镜像，并通过 `LCM_PXE_IMAGE_DIR` 管理本地镜像目录；Core 新增 `ImageCatalogResource`，可按集群聚合查看各 Satellite 的可用镜像
-3.  [x] **PXE Boot Flow 集成** — 已串联 DHCP → TFTP → iPXE → HTTP kickstart 全流程；`pxe.ServerConfig` 新增 `KickstartTemplate` / `InstallRepoURL` / `InstallKernelURL` / `InstallInitrdURL` / `InstallKernelArgs` 配置项，`/kickstart` 可按 Node 的 `mac` / `hostname` 动态渲染安装模板
-4.  [x] **大组件拆分重构** — `CredentialProfilesPage` 已拆分为 `CredentialProfileList`、`CredentialProfileForm`、`CredentialProfileDetail`，页面本体收敛至 `319` 行；`DiscoveryPage` 已拆分为 `DiscoveryList` 和 `DiscoveryApprovalPanel`，页面本体收敛至 `378` 行
-5.  [x] **端到端 Demo 脚本** — 已编写 `scripts/demo.sh`，串联零接触发现 → 自动纳管 → Job 提交 → 调度 → SSH 执行 → 状态回调 → 前端刷新全流程；通过 `curl` + `grpcurl` + `websocat` 驱动 Demo，并附 `documentation/DEMO_GUIDE.md` 操作说明。为支持本地闭环，补充了 mock Redfish HTTPS 服务、mock SSH 服务、Satellite `LCM_GRPC_PLAINTEXT` demo 开关，以及 discovery/claim 侧回归测试；当前 mock Redfish 已切换为共享 vendor fixture 驱动，并支持 `LCM_DEMO_REDFISH_PROFILE` 选择 OpenBMC / iDRAC / iLO / XCC smoke。
-6.  [x] **模拟 BMC 验收矩阵** — Core claim / managed-account 测试已切到真实 HTTPS mock，覆盖自签名 TLS、401、404、超时、POST 创建与 PATCH 收敛；Satellite vendor fixture 回归已改为真实 HTTPS 拉取，统一复用 `satellite/pkg/redfish/testdata/vendor-fixtures`。
-7.  [x] **JaCoCo 基线上调至 50%** — 已将 `core/build.gradle` 默认 `jacocoMinimumCoverage` 从 `0.45` 上调至 `0.50`，与当前 Core 指令覆盖率实测约 `56.52%` 对齐，进一步收紧 CI 回退阈值
-8.  **测试验证** — `./scripts/check_ci_contract.sh`、`bash -n scripts/demo.sh`、`python3 -m py_compile scripts/demo/mock_redfish_server.py`、`cd satellite && go test ./... -count=1` 通过；`cd core && env QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm QUARKUS_DATASOURCE_USERNAME=lcm QUARKUS_DATASOURCE_PASSWORD=lcm_password QUARKUS_REDIS_HOSTS=redis://localhost:6379 KAFKA_BOOTSTRAP_SERVERS=localhost:9092 ./gradlew check --no-daemon` 按 CI 契约执行；`./scripts/demo.sh run` 默认 `openbmc-baseline` 与 `LCM_DEMO_REDFISH_PROFILE=dell-idrac ./scripts/demo.sh run` 均可用于本地 smoke。
-
-## 🔍 项目评估 (Project Assessment)
-
-*   **整体状态**:
-    *   Phase 6 工程项已全部收口，16 个 Sprint 已完成（2026-01 ~ 2026-04，136 commits）。
-    *   跨服务链路（注册 → 调度 → Kafka → 前端）和 OTel trace propagation 已具备回归保障。
-    *   共享 vendor fixture + HTTPS mock 的模拟 BMC 验收已落地；剩余缺口主要收敛到真实硬件 Redfish / BMC 验证，以及代码审查中发现的若干待修问题。
-*   **子系统概况**:
-    *   Core (Java/Quarkus): JaCoCo 实测覆盖率 `58.08%`，默认门槛 `50%`；Sprint 14 已补齐 4 个 Resource 集成测试和 6 个高价值 Service 测试。
-    *   Satellite (Go): discovery / redfish / pxe / executor 等路径已有基础测试。PXE 模块已具备 TFTP / HTTP / DHCP option `66/67` / iPXE chainload / 镜像管理 API / 动态 kickstart boot flow。
-    *   Frontend (React): 12 个测试文件 / 21 个用例通过；Istanbul 覆盖率 Statements `65.23%` / Lines `65.24%`；`CredentialProfilesPage` / `DiscoveryPage` 已完成大组件拆分。
-*   **测试验证结果** (2026-04-09 本地验证):
-    *   [x] `./scripts/check_ci_contract.sh` — 通过
-    *   [x] `cd core && ./gradlew check --no-daemon` — BUILD SUCCESSFUL，JaCoCo 指令覆盖率 `58.08%`（门槛 50%）
-    *   [x] `cd satellite && go test ./... -count=1` — 全部通过
-    *   [x] `cd frontend && npm test` — 12 个测试文件 / 21 个用例通过
-    *   [x] `cd frontend && npm run build` — 构建成功
-    *   [⚠] `cd frontend && npm run lint` — 2 个 pre-existing error（`JobsPage.tsx` / `TopologyPage.tsx` 中 `react-hooks/refs` 规则，非 Sprint 14-16 引入），3 个 coverage 目录 warning
-*   **代码审查修复** (Sprint 14-16 审计，2026-04-09 已全部修复):
-    *   [x] **[HIGH] Satellite NetworkPolicy Ingress 规则** — `networkpolicy.yaml` 已补充 Core → Satellite gRPC 入站 Ingress 规则。
-    *   [x] **[HIGH] PDB Satellite quote 修复** — `pdb.yaml` 移除 `maxUnavailable` 上多余的 `| quote`。
-    *   [x] **[MEDIUM] 匿名用户速率限制** — `RestApiRateLimitFilter` 现在对未认证请求也按 `USER` 角色执行速率限制。
-    *   [x] **[MEDIUM] RBAC 模板条件去重** — `rbac.yaml` 移除冗余的 `.Values.serviceAccount.create` 条件。
-    *   [x] **[LOW] AlertManager securityContext** — 容器已配置 `runAsNonRoot: true` / `runAsUser: 65534` / `capabilities.drop: ALL`。
-    *   [x] **[LOW] Demo 脚本凭据环境变量化** — `scripts/demo.sh` 凭据提取为 `LCM_DEMO_*` 环境变量，默认值仅用于本地演示。
-    *   [x] **[LOW] AlertManager 配置警告** — `alertmanager.yml` 顶部新增部署前必须替换占位值的醒目警告。
-*   **关键结论**:
-    *   [x] 前端测试覆盖已从页面级扩展到通用组件，并具备 Istanbul 覆盖率摘要输出。
-    *   [x] Core 覆盖率基线与 CI 门禁已落地，当前默认基线为 `50%`，实测 `58.08%`。
-    *   [x] Satellite 注册 → 调度 → Kafka 回调 → 前端刷新的跨服务链路已建立回归保障。
-    *   [x] 调度结果拓扑可视化（GPU / NVLink / IB Fabric）已落地，并具备前后端回归测试。
-    *   [x] Satellite → Kafka → Core 的 OTel trace propagation 已具备显式透传与回归测试。
-    *   [x] 多执行模式（Docker / Shell / Ansible / SSH）已落地，具备回归测试。
-    *   [x] `Allocation` / `Discovery` / `Tenant` / `NetworkScan` 资源层已具备集成测试回归。
-    *   [x] 安全加固已落地：Grafana 凭据参数化、WebSocket JWT 鉴权、REST API 速率限制。
-    *   [x] AlertManager 基础部署、Core 主动推送链路与 Helm AlertManager / RBAC / PDB / NetworkPolicy 模板已接入。
-    *   [x] PXE 裸金属自动化已具备软件层闭环：DHCP → TFTP → iPXE → HTTP kickstart 可联调。
-    *   [x] `scripts/demo.sh` 已完成端到端 Demo 编排。
-    *   [x] 模拟 BMC 验收矩阵已落地：OpenBMC / iDRAC / iLO / XCC 共用 vendor fixture，Core 与 Satellite 均通过真实 HTTPS mock 回归。
-    *   [x] JaCoCo 基线已上调至 `50%`，实测 `58.08%`。
-    *   [ ] 真实硬件 Redfish / BMC 验证仍待补齐（需要真实硬件环境）。
-    *   [x] 代码审查发现的 2 HIGH / 2 MEDIUM / 3 LOW 问题已全部修复。
+当前仍在推进或待完成的高优先级事项：
+*   [ ] Phase 7 Redfish/BMC 管理面与 `power-actions`
+*   [ ] 真实硬件 Redfish / BMC 验收扩面
+*   [ ] AlertManager 外部通知通道
+*   [ ] PXE / iPXE 生产硬化与真实环境验证
+*   [ ] Demo smoke 扩展与 Playwright 浏览器级回归
 
 ---
 
