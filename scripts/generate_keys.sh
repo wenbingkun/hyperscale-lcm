@@ -14,16 +14,20 @@ openssl req -new -x509 -days 365 -key ca.key -out ca.pem -subj "/CN=LCM CA"
 # Server
 openssl genpkey -algorithm RSA -out server.key -pkeyopt rsa_keygen_bits:2048
 openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in server.key -out server-pkcs8.key
+cat > server-ext.cnf <<'EOF'
+subjectAltName = DNS:localhost, DNS:core, IP:127.0.0.1, IP:0:0:0:0:0:0:0:1
+extendedKeyUsage = serverAuth
+EOF
 openssl req -new -key server.key -out server.csr -subj "/CN=localhost"
-openssl x509 -req -days 365 -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out server.pem
+openssl x509 -req -days 365 -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out server.pem -extfile server-ext.cnf
 
 # Client
 openssl genpkey -algorithm RSA -out client.key -pkeyopt rsa_keygen_bits:2048
 openssl req -new -key client.key -out client.csr -subj "/CN=satellite"
 openssl x509 -req -days 365 -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out client.pem
 
-# Cleanup CSR and Srl
-rm -f *.csr *.srl
+# Cleanup CSR, Srl, and extension config
+rm -f *.csr *.srl server-ext.cnf
 
 # Generate truststore.jks for gRPC (explicit JKS format; JDK 17+ defaults to PKCS12)
 rm -f truststore.jks
