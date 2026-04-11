@@ -107,13 +107,16 @@ For Core validation, follow the environment-specific commands in `documentation/
 
 | Document | Purpose |
 |----------|---------|
-| `DEVELOPMENT_ROADMAP.md` | Roadmap, completion checklist, sprint log |
-| `documentation/PROJECT_ANALYSIS_AND_NEXT_STEPS.md` | Current-state analysis and next-step priorities |
-| `documentation/TASK_COMPLETION_AUDIT.md` | Completion audit and weighted progress view |
+| `DEVELOPMENT_ROADMAP.md` | Roadmap, phase history, sprint log |
+| `documentation/PROJECT_STATUS.md` | Rolling current-state snapshot: capability matrix, gaps, next-step priorities |
+| `documentation/ENTERPRISE_LCM_ARCHITECTURE.md` | Layered architecture and communication topology |
+| `documentation/RESOURCE_SCHEDULING_DESIGN.md` | Scheduling engine design (Timefold, zone partitioning, GPU topology) |
 | `documentation/CI_CONTRACT.md` | CI/test source of truth |
 | `documentation/CI_FAILURE_PATTERNS.md` | CI troubleshooting patterns |
 | `documentation/REDFISH_BMC_PHASE7_PLAN.md` | Phase 7 Redfish/BMC hardening plan |
 | `documentation/hardware-acceptance/` | Real hardware Redfish/BMC acceptance matrix |
+| `documentation/DEMO_GUIDE.md` | Demo script and prerequisites |
+| `PROJECT_STANDARDS.md` | Coding style, DDD layout, API conventions |
 
 ## Repository Layout
 

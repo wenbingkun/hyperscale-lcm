@@ -84,6 +84,10 @@ coverage/
 *.lcov
 htmlcov/
 
+# ============ Local-only workspace ============
+# 个人 TODO / 草稿 / AI agent 实验记录；详见 .local/README.md
+.local/
+
 # ============ Temporary ============
 tmp/
 temp/

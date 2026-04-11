@@ -1,0 +1,27 @@
+# CODEOWNERS for hyperscale-lcm
+#
+# 规则按顺序匹配，最后一条匹配生效。
+# 格式：<pattern> <@owner> [@owner2 ...]
+# 文档：https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# 默认所有者
+*                                   @wenbingkun
+
+# CI/CD 与工作流（高风险，改动需触发 CI Contract 验证矩阵）
+/.github/                           @wenbingkun
+/scripts/                           @wenbingkun
+/documentation/CI_CONTRACT.md       @wenbingkun
+/documentation/CI_FAILURE_PATTERNS.md @wenbingkun
+
+# 开发者规范
+/PROJECT_STANDARDS.md               @wenbingkun
+
+# 子系统
+/core/                              @wenbingkun
+/satellite/                         @wenbingkun
+/frontend/                          @wenbingkun
+
+# 基础设施与部署
+/helm/                              @wenbingkun
+/k8s/                               @wenbingkun
+/infra/                             @wenbingkun
