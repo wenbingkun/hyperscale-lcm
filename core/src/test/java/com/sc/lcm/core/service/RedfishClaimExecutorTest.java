@@ -35,6 +35,7 @@ class RedfishClaimExecutorTest {
             assertEquals("OpenBMC", result.manufacturer());
             assertEquals("OpenBMC Reference Board", result.model());
             assertEquals("openbmc-baseline", result.recommendedTemplate());
+            assertEquals("BASIC", result.authMode());
             assertTrue(result.message().contains("validated"));
             assertTrue(server.findRequest("GET", "/redfish/v1/Systems").isPresent());
             assertTrue(server.findRequest("GET", "/redfish/v1/Systems/system")
@@ -66,7 +67,60 @@ class RedfishClaimExecutorTest {
             assertEquals("Dell Inc.", result.manufacturer());
             assertEquals("PowerEdge R760", result.model());
             assertEquals("dell-idrac", result.recommendedTemplate());
+            assertEquals("BASIC", result.authMode());
             assertTrue(result.message().contains("validated"));
+        }
+    }
+
+    @Test
+    @DisplayName("SESSION_PREFERRED 在支持 SessionService 时应优先走 session")
+    void shouldPreferSessionAuthWhenSessionServiceIsAvailable() {
+        try (RedfishMockServer server = RedfishMockServer.builder()
+                .withFixture("openbmc-baseline")
+                .withSessionService()
+                .build()) {
+            RedfishClaimExecutor executor = newExecutor();
+
+            DiscoveredDevice device = new DiscoveredDevice();
+            device.setBmcAddress(server.endpoint());
+
+            CredentialProfile profile = new CredentialProfile();
+            profile.setRedfishAuthMode("SESSION_PREFERRED");
+            profile.setUsernameSecretRef("env://LCM_BMC_USERNAME");
+            profile.setPasswordSecretRef("env://LCM_BMC_PASSWORD");
+
+            RedfishClaimExecutor.ClaimExecutionResult result = executor.execute(device, profile).await().indefinitely();
+
+            assertTrue(result.success());
+            assertEquals("SESSION", result.authMode());
+            assertTrue(server.findRequest("POST", "/redfish/v1/SessionService/Sessions").isPresent());
+            assertTrue(server.findRequest("GET", "/redfish/v1/Systems/system")
+                    .map(RedfishMockServer.CapturedRequest::token)
+                    .orElse("")
+                    .startsWith("session-token-"));
+        }
+    }
+
+    @Test
+    @DisplayName("SESSION_ONLY 命中不支持 session 的设备时应明确失败")
+    void shouldFailWhenSessionOnlyHitsUnsupportedDevice() {
+        try (RedfishMockServer server = RedfishMockServer.builder()
+                .withFixture("openbmc-baseline")
+                .build()) {
+            RedfishClaimExecutor executor = newExecutor();
+
+            DiscoveredDevice device = new DiscoveredDevice();
+            device.setBmcAddress(server.endpoint());
+            device.setRedfishAuthModeOverride("SESSION_ONLY");
+
+            CredentialProfile profile = new CredentialProfile();
+            profile.setUsernameSecretRef("env://LCM_BMC_USERNAME");
+            profile.setPasswordSecretRef("env://LCM_BMC_PASSWORD");
+
+            RedfishClaimExecutor.ClaimExecutionResult result = executor.execute(device, profile).await().indefinitely();
+
+            assertFalse(result.success());
+            assertEquals("SESSION_UNSUPPORTED", result.authFailureCode());
         }
     }
 
@@ -112,6 +166,7 @@ class RedfishClaimExecutorTest {
             RedfishClaimExecutor.ClaimExecutionResult result = executor.execute(device, profile).await().indefinitely();
 
             assertFalse(result.success());
+            assertEquals("HTTP_401", result.authFailureCode());
             assertTrue(result.message().contains("401"));
             assertTrue(server.findRequest("GET", "/redfish/v1/Systems").isPresent());
         }
@@ -137,6 +192,7 @@ class RedfishClaimExecutorTest {
             RedfishClaimExecutor.ClaimExecutionResult result = executor.execute(device, profile).await().indefinitely();
 
             assertFalse(result.success());
+            assertEquals("TIMED_OUT", result.authFailureCode());
             assertTrue(result.message().toLowerCase().contains("timed out"));
         }
     }
@@ -192,6 +248,14 @@ class RedfishClaimExecutorTest {
         executor.secretRefResolver = secretRefResolver;
         executor.redfishTemplateCatalog = templateCatalog;
         executor.objectMapper = new ObjectMapper();
+        executor.redfishTransport = newRedfishTransport();
         return executor;
+    }
+
+    private static RedfishTransport newRedfishTransport() {
+        RedfishTransport transport = new RedfishTransport();
+        transport.objectMapper = new ObjectMapper();
+        transport.sessionManager = new RedfishSessionManager();
+        return transport;
     }
 }

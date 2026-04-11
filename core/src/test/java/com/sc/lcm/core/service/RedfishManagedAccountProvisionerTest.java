@@ -29,6 +29,7 @@ class RedfishManagedAccountProvisionerTest {
             assertTrue(result.success());
             assertEquals("lcm-service", result.username());
             assertEquals("Operator", result.roleId());
+            assertEquals("BASIC", result.authMode());
             assertTrue(server.findRequest("GET", "/redfish/v1/AccountService").isPresent());
             assertTrue(server.findRequest("GET", "/redfish/v1/AccountService/Accounts").isPresent());
             assertTrue(server.findRequest("POST", "/redfish/v1/AccountService/Accounts").isPresent());
@@ -54,12 +55,42 @@ class RedfishManagedAccountProvisionerTest {
 
             assertTrue(result.enabled());
             assertTrue(result.success());
+            assertEquals("BASIC", result.authMode());
             assertTrue(result.message().contains("reconciled"));
             assertTrue(server.findRequest("PATCH", "/redfish/v1/AccountService/Accounts/2").isPresent());
             assertTrue(server.accounts().stream()
                     .anyMatch(account -> "lcm-service".equals(account.get("UserName"))
                             && "managed-secret".equals(account.get("Password"))
                             && "Administrator".equals(account.get("RoleId"))));
+        }
+    }
+
+    @Test
+    @DisplayName("支持 SessionService 时托管账号收敛应复用 session auth")
+    void shouldProvisionManagedAccountOverSessionAuthWhenAvailable() {
+        try (RedfishMockServer server = RedfishMockServer.builder()
+                .withFixture("openbmc-baseline")
+                .withSessionService()
+                .build()) {
+            RedfishManagedAccountProvisioner provisioner = newProvisioner();
+
+            DiscoveredDevice device = new DiscoveredDevice();
+            device.setBmcAddress(server.endpoint());
+
+            CredentialProfile profile = managedProfile("Operator");
+            profile.setRedfishAuthMode("SESSION_PREFERRED");
+
+            RedfishManagedAccountProvisioner.ManagedAccountProvisionResult result =
+                    provisioner.provision(device, profile).await().indefinitely();
+
+            assertTrue(result.enabled());
+            assertTrue(result.success());
+            assertEquals("SESSION", result.authMode());
+            assertTrue(server.findRequest("POST", "/redfish/v1/SessionService/Sessions").isPresent());
+            assertTrue(server.findRequest("POST", "/redfish/v1/AccountService/Accounts")
+                    .map(RedfishMockServer.CapturedRequest::token)
+                    .orElse("")
+                    .startsWith("session-token-"));
         }
     }
 
@@ -103,10 +134,11 @@ class RedfishManagedAccountProvisionerTest {
         RedfishManagedAccountProvisioner.ManagedAccountProvisionResult result =
                 provisioner.provision(device, profile).await().indefinitely();
 
-        assertTrue(result.enabled());
-        assertFalse(result.success());
-        assertTrue(result.message().contains("managed account secret refs are not ready"));
-    }
+            assertTrue(result.enabled());
+            assertFalse(result.success());
+            assertNull(result.authFailureCode());
+            assertTrue(result.message().contains("managed account secret refs are not ready"));
+        }
 
     @Test
     @DisplayName("缺失 AccountService 时应返回明确失败信息")
@@ -125,6 +157,7 @@ class RedfishManagedAccountProvisionerTest {
 
             assertTrue(result.enabled());
             assertFalse(result.success());
+            assertEquals("HTTP_404", result.authFailureCode());
             assertTrue(result.message().contains("404"));
         }
     }
@@ -155,6 +188,14 @@ class RedfishManagedAccountProvisionerTest {
         RedfishManagedAccountProvisioner provisioner = new RedfishManagedAccountProvisioner();
         provisioner.secretRefResolver = resolver;
         provisioner.objectMapper = new ObjectMapper();
+        provisioner.redfishTransport = newRedfishTransport();
         return provisioner;
+    }
+
+    private static RedfishTransport newRedfishTransport() {
+        RedfishTransport transport = new RedfishTransport();
+        transport.objectMapper = new ObjectMapper();
+        transport.sessionManager = new RedfishSessionManager();
+        return transport;
     }
 }

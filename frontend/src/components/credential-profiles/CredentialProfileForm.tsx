@@ -210,6 +210,22 @@ export const CredentialProfileForm: React.FC<CredentialProfileFormProps> = ({
                     )}
                 </div>
 
+                <div>
+                    <label className="mb-2 block text-sm text-gray-400">Redfish Auth Mode</label>
+                    <select
+                        value={form.redfishAuthMode}
+                        onChange={(event) => updateField('redfishAuthMode', event.target.value)}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-white focus:border-cyan-500 focus:outline-none"
+                    >
+                        <option value="SESSION_PREFERRED">SESSION_PREFERRED</option>
+                        <option value="BASIC_ONLY">BASIC_ONLY</option>
+                        <option value="SESSION_ONLY">SESSION_ONLY</option>
+                    </select>
+                    <p className="mt-2 text-xs text-gray-500">
+                        Default is <span className="font-mono">SESSION_PREFERRED</span>: prefer Redfish session auth and fall back to Basic when the BMC does not expose SessionService.
+                    </p>
+                </div>
+
                 <div className="grid grid-cols-1 gap-3">
                     <div>
                         <label className="mb-2 block text-sm text-gray-400">Username Secret Ref</label>

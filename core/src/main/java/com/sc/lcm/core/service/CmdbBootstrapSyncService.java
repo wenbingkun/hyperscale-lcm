@@ -218,6 +218,7 @@ public class CmdbBootstrapSyncService {
                         entry.ipAddressPattern(),
                         entry.macAddressPattern(),
                         entry.redfishTemplate(),
+                        entry.redfishAuthMode(),
                         entry.usernameSecretRef(),
                         entry.passwordSecretRef(),
                         entry.managedAccountEnabled(),
@@ -293,6 +294,7 @@ public class CmdbBootstrapSyncService {
                 ipAddressPattern,
                 macAddressPattern,
                 firstText(readString(entry, fields.redfishTemplate), defaults.redfishTemplate),
+                firstText(readString(entry, fields.redfishAuthMode), defaults.redfishAuthMode),
                 firstText(readString(entry, fields.usernameSecretRef), defaults.usernameSecretRef),
                 firstText(readString(entry, fields.passwordSecretRef), defaults.passwordSecretRef),
                 firstBoolean(readBoolean(entry, fields.managedAccountEnabled), defaults.managedAccountEnabled),
@@ -572,6 +574,7 @@ public class CmdbBootstrapSyncService {
         public String ipAddressPattern;
         public String macAddressPattern;
         public String redfishTemplate;
+        public String redfishAuthMode;
         public String usernameSecretRef;
         public String passwordSecretRef;
         public Boolean managedAccountEnabled;
@@ -617,6 +620,9 @@ public class CmdbBootstrapSyncService {
 
         @JsonProperty("redfish_template")
         public String redfishTemplate;
+
+        @JsonProperty("redfish_auth_mode")
+        public String redfishAuthMode;
 
         @JsonProperty("username_secret_ref")
         public String usernameSecretRef;

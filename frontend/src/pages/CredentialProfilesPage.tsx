@@ -51,6 +51,7 @@ export const CredentialProfilesPage: React.FC = () => {
     "vendorPattern": "OpenBMC",
     "deviceType": "BMC_ENABLED",
     "redfishTemplate": "openbmc-baseline",
+    "redfishAuthMode": "SESSION_PREFERRED",
     "usernameSecretRef": "vault://bmc/rack-a#username",
     "passwordSecretRef": "vault://bmc/rack-a#password",
     "managedAccountEnabled": true,

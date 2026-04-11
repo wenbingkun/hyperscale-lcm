@@ -83,6 +83,7 @@ export interface DiscoveredDevice {
     manufacturerHint?: string;
     modelHint?: string;
     recommendedRedfishTemplate?: string;
+    redfishAuthModeOverride?: string;
     authStatus?: string;
     claimStatus?: string;
     credentialProfileId?: string;
@@ -90,6 +91,11 @@ export interface DiscoveredDevice {
     credentialSource?: string;
     claimMessage?: string;
     lastAuthAttemptAt?: string;
+    lastSuccessfulAuthMode?: string;
+    lastAuthFailureCode?: string;
+    lastAuthFailureReason?: string;
+    bmcCapabilities?: Record<string, unknown>;
+    lastCapabilityProbeAt?: string;
     notes?: string;
     tenantId?: string;
 }
@@ -115,6 +121,7 @@ export interface CredentialProfile {
     ipAddressPattern?: string;
     macAddressPattern?: string;
     redfishTemplate?: string;
+    redfishAuthMode?: string;
     usernameSecretRef?: string;
     passwordSecretRef?: string;
     managedAccountEnabled: boolean;
@@ -142,6 +149,7 @@ export interface CredentialProfileRequest {
     ipAddressPattern?: string;
     macAddressPattern?: string;
     redfishTemplate?: string;
+    redfishAuthMode?: string;
     usernameSecretRef?: string;
     passwordSecretRef?: string;
     managedAccountEnabled?: boolean;

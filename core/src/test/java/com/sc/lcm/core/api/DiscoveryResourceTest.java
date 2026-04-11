@@ -59,7 +59,11 @@ class DiscoveryResourceTest {
                         "OpenBMC",
                         "DemoBMC-9000",
                         "openbmc-baseline",
-                        "ok")));
+                        "ok",
+                        "BASIC",
+                        null,
+                        null,
+                        java.util.Map.of("accountService", true))));
         Mockito.when(redfishManagedAccountProvisioner.provision(any(), any()))
                 .thenReturn(Uni.createFrom().item(new RedfishManagedAccountProvisioner.ManagedAccountProvisionResult(
                         false,
@@ -67,7 +71,9 @@ class DiscoveryResourceTest {
                         null,
                         null,
                         null,
-                        "managed account disabled")));
+                        "managed account disabled",
+                        null,
+                        null)));
 
         authToken = login("admin", "admin123");
     }

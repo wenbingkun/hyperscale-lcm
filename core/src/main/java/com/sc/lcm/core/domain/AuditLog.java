@@ -99,6 +99,11 @@ public class AuditLog extends PanacheEntityBase {
         // 安全相关
         AUTH_SUCCESS,
         AUTH_FAILURE,
-        ACCESS_DENIED
+        ACCESS_DENIED,
+
+        // BMC / Redfish 相关
+        BMC_CLAIM,
+        BMC_ROTATE_CREDENTIALS,
+        BMC_POWER_ACTION
     }
 }

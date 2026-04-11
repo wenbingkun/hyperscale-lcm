@@ -28,6 +28,7 @@ class BootstrapCredentialImportServiceTest {
                 "^10\\.10\\.0\\.50$",
                 null,
                 "dell-idrac",
+                null,
                 "vault://cmdb/rack-a#username",
                 "vault://cmdb/rack-a#password",
                 null,

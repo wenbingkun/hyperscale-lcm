@@ -1,5 +1,8 @@
 package com.sc.lcm.core.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import io.smallrye.mutiny.Uni;
 import jakarta.persistence.*;
@@ -8,7 +11,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 发现的设备 - 待纳管设备池
@@ -24,6 +29,9 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 public class DiscoveredDevice extends PanacheEntityBase {
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -72,6 +80,9 @@ public class DiscoveredDevice extends PanacheEntityBase {
     /** 推荐的 Redfish 模板名称 */
     private String recommendedRedfishTemplate;
 
+    /** 单设备 Redfish 认证模式例外覆盖 */
+    private String redfishAuthModeOverride;
+
     /** 首次认证状态 */
     @Enumerated(EnumType.STRING)
     private AuthStatus authStatus = AuthStatus.PENDING;
@@ -95,6 +106,24 @@ public class DiscoveredDevice extends PanacheEntityBase {
 
     /** 最近一次认证尝试时间 */
     private LocalDateTime lastAuthAttemptAt;
+
+    /** 最近一次成功的 Redfish 认证模式 */
+    private String lastSuccessfulAuthMode;
+
+    /** 最近一次认证失败码（例如 HTTP_401 / SESSION_TOKEN_MISSING） */
+    private String lastAuthFailureCode;
+
+    /** 最近一次认证失败原因 */
+    @Column(columnDefinition = "TEXT")
+    private String lastAuthFailureReason;
+
+    /** BMC capability 快照原始 JSON */
+    @JsonIgnore
+    @Column(name = "bmc_capabilities", columnDefinition = "TEXT")
+    private String bmcCapabilitiesJson;
+
+    /** 最近一次 capability 探测时间 */
+    private LocalDateTime lastCapabilityProbeAt;
 
     /** 最近一次托管账号密码轮换时间 */
     private LocalDateTime lastRotationAt;
@@ -157,5 +186,32 @@ public class DiscoveredDevice extends PanacheEntityBase {
 
     public static Uni<Long> countPending() {
         return count("status", DiscoveryStatus.PENDING);
+    }
+
+    @Transient
+    public Map<String, Object> getBmcCapabilities() {
+        if (bmcCapabilitiesJson == null || bmcCapabilitiesJson.isBlank()) {
+            return null;
+        }
+        try {
+            return JSON_MAPPER.readValue(bmcCapabilitiesJson, MAP_TYPE);
+        } catch (Exception e) {
+            Map<String, Object> fallback = new LinkedHashMap<>();
+            fallback.put("raw", bmcCapabilitiesJson);
+            fallback.put("parseError", e.getMessage());
+            return fallback;
+        }
+    }
+
+    public void setBmcCapabilities(Map<String, Object> capabilities) {
+        if (capabilities == null || capabilities.isEmpty()) {
+            this.bmcCapabilitiesJson = null;
+            return;
+        }
+        try {
+            this.bmcCapabilitiesJson = JSON_MAPPER.writeValueAsString(capabilities);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to serialize BMC capabilities", e);
+        }
     }
 }

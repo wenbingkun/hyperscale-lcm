@@ -55,6 +55,7 @@ const profiles = [
         ipAddressPattern: '^10\\.10\\.0\\.50$',
         macAddressPattern: '^00:11:22:33:44:55$',
         redfishTemplate: 'openbmc-baseline',
+        redfishAuthMode: 'SESSION_PREFERRED',
         usernameSecretRef: 'vault://bmc/rack-a#username',
         passwordSecretRef: 'vault://bmc/rack-a#password',
         managedAccountEnabled: true,

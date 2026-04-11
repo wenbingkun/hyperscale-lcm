@@ -1,35 +1,16 @@
 package com.sc.lcm.core.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc.lcm.core.domain.CredentialProfile;
 import com.sc.lcm.core.domain.DiscoveredDevice;
+import com.sc.lcm.core.domain.RedfishAuthMode;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -41,8 +22,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @Slf4j
 public class RedfishManagedAccountProvisioner {
 
-    private static final String SERVICE_ROOT = "/redfish/v1";
-    private static final String ACCOUNT_SERVICE_PATH = SERVICE_ROOT + "/AccountService";
+    private static final String ACCOUNT_SERVICE_PATH = RedfishTransport.ACCOUNT_SERVICE_PATH;
     private static final String FALLBACK_ACCOUNTS_PATH = ACCOUNT_SERVICE_PATH + "/Accounts";
 
     @Inject
@@ -50,6 +30,9 @@ public class RedfishManagedAccountProvisioner {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    RedfishTransport redfishTransport;
 
     @ConfigProperty(name = "lcm.claim.redfish.connect-timeout-ms", defaultValue = "5000")
     int connectTimeoutMs = 5000;
@@ -66,6 +49,9 @@ public class RedfishManagedAccountProvisioner {
     @ConfigProperty(name = "lcm.claim.redfish.managed-account.rotate-on-claim", defaultValue = "true")
     boolean rotateOnClaim = true;
 
+    @ConfigProperty(name = "lcm.claim.redfish.auth-mode-default", defaultValue = "SESSION_PREFERRED")
+    String defaultAuthMode = RedfishAuthMode.SESSION_PREFERRED.name();
+
     ProvisionTransport transport;
 
     public Uni<ManagedAccountProvisionResult> provision(DiscoveredDevice device, CredentialProfile profile) {
@@ -77,14 +63,16 @@ public class RedfishManagedAccountProvisioner {
                     "Managed account provisioning is disabled for credential profile '" + profile.getName() + "'."));
         }
 
-        String endpoint = resolveEndpoint(device);
+        String endpoint = RedfishClaimExecutor.resolveEndpoint(device);
         if (endpoint == null) {
             return Uni.createFrom().item(ManagedAccountProvisionResult.failure(
                     true,
                     null,
                     null,
                     null,
-                    "BMC endpoint is missing on the discovered device."));
+                    "BMC endpoint is missing on the discovered device.",
+                    null,
+                    null));
         }
 
         return secretRefResolver.resolve(profile)
@@ -96,7 +84,9 @@ public class RedfishManagedAccountProvisioner {
                                 null,
                                 null,
                                 "Managed account provisioning blocked because bootstrap claim credentials are not ready. "
-                                        + bootstrapCredentials.getMessage()));
+                                        + bootstrapCredentials.getMessage(),
+                                null,
+                                null));
                     }
 
                     return secretRefResolver.resolveManagedAccount(profile)
@@ -108,7 +98,9 @@ public class RedfishManagedAccountProvisioner {
                                             null,
                                             resolveRoleId(profile),
                                             "Managed account provisioning blocked because managed account secret refs are not ready. "
-                                                    + managedCredentials.getMessage()));
+                                                    + managedCredentials.getMessage(),
+                                            null,
+                                            null));
                                 }
 
                                 ProvisionRequest request = new ProvisionRequest(
@@ -120,7 +112,8 @@ public class RedfishManagedAccountProvisioner {
                                         resolveRoleId(profile),
                                         insecure,
                                         connectTimeoutMs,
-                                        readTimeoutMs);
+                                        readTimeoutMs,
+                                        resolveAuthMode(device, profile));
 
                                 ProvisionTransport activeTransport = transport != null ? transport : this::provisionBlocking;
                                 return Uni.createFrom().item(() -> {
@@ -132,28 +125,45 @@ public class RedfishManagedAccountProvisioner {
                                         })
                                         .runSubscriptionOn(Infrastructure.getDefaultExecutor())
                                         .onFailure().recoverWithItem(error -> {
-                                            String rootMessage = rootCauseMessage(error);
+                                            RedfishTransport.RedfishTransportException transportException = findTransportException(error);
+                                            Throwable root = rootCause(error);
+                                            String rootMessage = transportException != null
+                                                    ? transportException.getMessage()
+                                                    : rootCauseMessage(root);
+                                            String failureCode = transportException != null
+                                                    ? transportException.failureCode()
+                                                    : extractFailureCode(root);
                                             log.warn("Managed BMC account provisioning failed for {}", endpoint, error);
                                             return ManagedAccountProvisionResult.failure(
                                                     true,
                                                     endpoint,
                                                     request.managedUsername(),
                                                     request.roleId(),
-                                                    "Managed BMC account provisioning failed for " + endpoint + ": " + rootMessage);
+                                                    "Managed BMC account provisioning failed for " + endpoint + ": " + rootMessage,
+                                                    request.authMode().name(),
+                                                    failureCode);
                                         });
                             });
                 });
     }
 
     ManagedAccountProvisionResult provisionBlocking(ProvisionRequest request) throws Exception {
-        Map<String, Object> accountService = getJSON(request, ACCOUNT_SERVICE_PATH);
+        RedfishTransport.AuthContext authContext = redfishTransport.open(new RedfishTransport.RequestOptions(
+                request.endpoint(),
+                request.bootstrapUsername(),
+                request.bootstrapPassword(),
+                request.insecure(),
+                request.connectTimeoutMs(),
+                request.readTimeoutMs(),
+                request.authMode()));
+        Map<String, Object> accountService = redfishTransport.getJson(authContext, ACCOUNT_SERVICE_PATH, true);
         String accountsUri = extractUri(accountService, "Accounts");
         if (accountsUri == null || accountsUri.isBlank()) {
             accountsUri = FALLBACK_ACCOUNTS_PATH;
         }
 
-        Map<String, Object> accountsCollection = getJSON(request, accountsUri);
-        String existingAccountUri = findExistingAccountUri(request, accountsCollection, request.managedUsername());
+        Map<String, Object> accountsCollection = redfishTransport.getJson(authContext, accountsUri, true);
+        String existingAccountUri = findExistingAccountUri(authContext, accountsCollection, request.managedUsername());
         if (existingAccountUri != null) {
             if (!rotateOnClaim) {
                 return ManagedAccountProvisionResult.success(
@@ -161,20 +171,22 @@ public class RedfishManagedAccountProvisioner {
                         request.endpoint(),
                         request.managedUsername(),
                         request.roleId(),
-                        "Managed BMC account '" + request.managedUsername() + "' already exists on " + request.endpoint() + ".");
+                        "Managed BMC account '" + request.managedUsername() + "' already exists on " + request.endpoint() + ".",
+                        authContext.actualAuthMode());
             }
 
             Map<String, Object> patchPayload = new LinkedHashMap<>();
             patchPayload.put("Password", request.managedPassword());
             patchPayload.put("RoleId", request.roleId());
             patchPayload.put("Enabled", true);
-            patchJSON(request, existingAccountUri, patchPayload);
+            redfishTransport.writeJson(authContext, "PATCH", existingAccountUri, patchPayload, false);
             return ManagedAccountProvisionResult.success(
                     true,
                     request.endpoint(),
                     request.managedUsername(),
                     request.roleId(),
-                    "Managed BMC account '" + request.managedUsername() + "' was reconciled on " + request.endpoint() + ".");
+                    "Managed BMC account '" + request.managedUsername() + "' was reconciled on " + request.endpoint() + ".",
+                    authContext.actualAuthMode());
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -182,20 +194,22 @@ public class RedfishManagedAccountProvisioner {
         payload.put("Password", request.managedPassword());
         payload.put("RoleId", request.roleId());
         payload.put("Enabled", true);
-
-        postJSON(request, accountsUri, payload);
+        redfishTransport.writeJson(authContext, "POST", accountsUri, payload, false);
         return ManagedAccountProvisionResult.success(
                 true,
                 request.endpoint(),
                 request.managedUsername(),
                 request.roleId(),
-                "Managed BMC account '" + request.managedUsername() + "' is ready on " + request.endpoint() + ".");
+                "Managed BMC account '" + request.managedUsername() + "' is ready on " + request.endpoint() + ".",
+                authContext.actualAuthMode());
     }
 
-    private String findExistingAccountUri(ProvisionRequest request, Map<String, Object> collection, String targetUsername)
-            throws Exception {
+    private String findExistingAccountUri(
+            RedfishTransport.AuthContext authContext,
+            Map<String, Object> collection,
+            String targetUsername) throws Exception {
         Object rawMembers = collection.get("Members");
-        if (!(rawMembers instanceof java.util.List<?> members)) {
+        if (!(rawMembers instanceof List<?> members)) {
             return null;
         }
 
@@ -208,153 +222,13 @@ public class RedfishManagedAccountProvisioner {
                 continue;
             }
 
-            Map<String, Object> accountDocument = getJSON(request, accountUri);
+            Map<String, Object> accountDocument = redfishTransport.getJson(authContext, accountUri, true);
             String username = extractString(accountDocument, "UserName");
             if (targetUsername.equals(username)) {
                 return accountUri;
             }
         }
         return null;
-    }
-
-    private Map<String, Object> getJSON(ProvisionRequest request, String path) throws Exception {
-        URL url = new URL(absoluteUrl(request.endpoint(), path));
-        HttpURLConnection connection = openConnection(url, request);
-        connection.setRequestMethod("GET");
-        connection.setRequestProperty("Accept", "application/json");
-
-        int status = connection.getResponseCode();
-        if (status >= HttpURLConnection.HTTP_BAD_REQUEST) {
-            throw new ProvisionHttpException(status, "GET " + path + " returned " + status);
-        }
-
-        try (InputStream stream = connection.getInputStream()) {
-            return objectMapper.readValue(stream, new TypeReference<Map<String, Object>>() {
-            });
-        }
-    }
-
-    private void postJSON(ProvisionRequest request, String path, Map<String, Object> payload) throws Exception {
-        writeJSON(request, "POST", path, payload);
-    }
-
-    private void patchJSON(ProvisionRequest request, String path, Map<String, Object> payload) throws Exception {
-        writeJSON(request, "PATCH", path, payload);
-    }
-
-    private void writeJSON(ProvisionRequest request, String method, String path, Map<String, Object> payload) throws Exception {
-        if ("PATCH".equals(method)) {
-            // HttpURLConnection rejects PATCH on the current JDK, so we send it manually while preserving the same TLS/auth settings.
-            int status = sendPatchedJson(request, path, payload);
-            if (status == HttpURLConnection.HTTP_OK
-                    || status == HttpURLConnection.HTTP_CREATED
-                    || status == HttpURLConnection.HTTP_ACCEPTED
-                    || status == HttpURLConnection.HTTP_NO_CONTENT) {
-                return;
-            }
-            throw new ProvisionHttpException(status, method + " " + path + " returned " + status);
-        }
-
-        URL url = new URL(absoluteUrl(request.endpoint(), path));
-        HttpURLConnection connection = openConnection(url, request);
-        connection.setRequestMethod(method);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Content-Type", "application/json");
-
-        try (OutputStream outputStream = connection.getOutputStream()) {
-            objectMapper.writeValue(outputStream, payload);
-        }
-
-        int status = connection.getResponseCode();
-        if (status == HttpURLConnection.HTTP_OK
-                || status == HttpURLConnection.HTTP_CREATED
-                || status == HttpURLConnection.HTTP_ACCEPTED
-                || status == HttpURLConnection.HTTP_NO_CONTENT) {
-            return;
-        }
-
-        throw new ProvisionHttpException(status, method + " " + path + " returned " + status);
-    }
-
-    private HttpURLConnection openConnection(URL url, ProvisionRequest request) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        if (connection instanceof HttpsURLConnection https && request.insecure()) {
-            https.setSSLSocketFactory(insecureSslContext().getSocketFactory());
-            https.setHostnameVerifier(insecureHostnameVerifier());
-        }
-
-        connection.setConnectTimeout(request.connectTimeoutMs());
-        connection.setReadTimeout(request.readTimeoutMs());
-        connection.setRequestProperty("Authorization", basicAuth(request.bootstrapUsername(), request.bootstrapPassword()));
-        return connection;
-    }
-
-    private int sendPatchedJson(ProvisionRequest request, String path, Map<String, Object> payload) throws Exception {
-        URL url = new URL(absoluteUrl(request.endpoint(), path));
-        byte[] body = objectMapper.writeValueAsBytes(payload);
-
-        try (Socket socket = openPatchSocket(url, request);
-                OutputStream outputStream = socket.getOutputStream();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII))) {
-            String target = url.getFile() == null || url.getFile().isBlank() ? "/" : url.getFile();
-            String hostHeader = url.getHost();
-            if (url.getPort() != -1 && url.getPort() != url.getDefaultPort()) {
-                hostHeader += ":" + url.getPort();
-            }
-
-            String headers = "PATCH " + target + " HTTP/1.1\r\n"
-                    + "Host: " + hostHeader + "\r\n"
-                    + "Authorization: " + basicAuth(request.bootstrapUsername(), request.bootstrapPassword()) + "\r\n"
-                    + "Accept: application/json\r\n"
-                    + "Content-Type: application/json\r\n"
-                    + "Content-Length: " + body.length + "\r\n"
-                    + "Connection: close\r\n\r\n";
-            outputStream.write(headers.getBytes(StandardCharsets.US_ASCII));
-            outputStream.write(body);
-            outputStream.flush();
-
-            String statusLine = reader.readLine();
-            if (statusLine == null || statusLine.isBlank()) {
-                throw new IOException("PATCH " + path + " returned an empty response");
-            }
-
-            while (true) {
-                String line = reader.readLine();
-                if (line == null || line.isEmpty()) {
-                    break;
-                }
-            }
-
-            String[] tokens = statusLine.split(" ");
-            if (tokens.length < 2) {
-                throw new IOException("PATCH " + path + " returned malformed status line: " + statusLine);
-            }
-            return Integer.parseInt(tokens[1]);
-        }
-    }
-
-    private Socket openPatchSocket(URL url, ProvisionRequest request) throws Exception {
-        String protocol = url.getProtocol();
-        int port = url.getPort() != -1 ? url.getPort() : url.getDefaultPort();
-        if ("https".equalsIgnoreCase(protocol)) {
-            SSLSocketFactory socketFactory = request.insecure()
-                    ? insecureSslContext().getSocketFactory()
-                    : (SSLSocketFactory) SSLSocketFactory.getDefault();
-            SSLSocket socket = (SSLSocket) socketFactory.createSocket();
-            socket.connect(new InetSocketAddress(url.getHost(), port), request.connectTimeoutMs());
-            socket.setSoTimeout(request.readTimeoutMs());
-            socket.startHandshake();
-            if (!request.insecure() && !HttpsURLConnection.getDefaultHostnameVerifier().verify(url.getHost(), socket.getSession())) {
-                throw new javax.net.ssl.SSLHandshakeException("Hostname verification failed for " + url.getHost());
-            }
-            return socket;
-        }
-
-        Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(url.getHost(), port), request.connectTimeoutMs());
-        socket.setSoTimeout(request.readTimeoutMs());
-        return socket;
     }
 
     private String resolveRoleId(CredentialProfile profile) {
@@ -364,36 +238,11 @@ public class RedfishManagedAccountProvisioner {
         return defaultRoleId;
     }
 
-    private static String resolveEndpoint(DiscoveredDevice device) {
-        if (device == null) {
-            return null;
-        }
-        String candidate = device.getBmcAddress();
-        if (candidate == null || candidate.isBlank()) {
-            candidate = device.getIpAddress();
-        }
-        if (candidate == null || candidate.isBlank()) {
-            return null;
-        }
-        if (!candidate.startsWith("https://") && !candidate.startsWith("http://")) {
-            candidate = "https://" + candidate;
-        }
-        return candidate.replaceAll("/+$", "");
-    }
-
-    private static String absoluteUrl(String endpoint, String path) {
-        if (path.startsWith("http://") || path.startsWith("https://")) {
-            return path;
-        }
-        if (path.startsWith("/")) {
-            return endpoint + path;
-        }
-        return endpoint + "/" + path;
-    }
-
-    private static String basicAuth(String username, String password) {
-        String raw = username + ":" + password;
-        return "Basic " + Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    private RedfishAuthMode resolveAuthMode(DiscoveredDevice device, CredentialProfile profile) {
+        String rawValue = device != null && device.getRedfishAuthModeOverride() != null
+                ? device.getRedfishAuthModeOverride()
+                : profile.getRedfishAuthMode();
+        return RedfishAuthMode.parse(rawValue, RedfishAuthMode.parse(defaultAuthMode, RedfishAuthMode.SESSION_PREFERRED));
     }
 
     private static String extractUri(Map<String, Object> document, String field) {
@@ -416,38 +265,34 @@ public class RedfishManagedAccountProvisioner {
         return value instanceof String stringValue && !stringValue.isBlank() ? stringValue : null;
     }
 
-    private static SSLContext insecureSslContext() throws GeneralSecurityException {
-        TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    @Override
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return new java.security.cert.X509Certificate[0];
-                    }
-
-                    @Override
-                    public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                    }
-
-                    @Override
-                    public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                    }
-                }
-        };
-        SSLContext context = SSLContext.getInstance("TLS");
-        context.init(null, trustAllCerts, new SecureRandom());
-        return context;
-    }
-
-    private static HostnameVerifier insecureHostnameVerifier() {
-        return (hostname, session) -> true;
-    }
-
-    private static String rootCauseMessage(Throwable error) {
+    private static Throwable rootCause(Throwable error) {
         Throwable current = error;
         while (current.getCause() != null) {
             current = current.getCause();
         }
-        return current.getMessage() != null ? current.getMessage() : current.getClass().getSimpleName();
+        return current;
+    }
+
+    private static RedfishTransport.RedfishTransportException findTransportException(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof RedfishTransport.RedfishTransportException transportException) {
+                return transportException;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private static String extractFailureCode(Throwable error) {
+        if (error instanceof RedfishTransport.RedfishTransportException transportException) {
+            return transportException.failureCode();
+        }
+        return error.getClass().getSimpleName();
+    }
+
+    private static String rootCauseMessage(Throwable error) {
+        return error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
     }
 
     @FunctionalInterface
@@ -461,10 +306,12 @@ public class RedfishManagedAccountProvisioner {
             String endpoint,
             String username,
             String roleId,
-            String message) {
+            String message,
+            String authMode,
+            String authFailureCode) {
 
         static ManagedAccountProvisionResult notEnabled(String message) {
-            return new ManagedAccountProvisionResult(false, false, null, null, null, message);
+            return new ManagedAccountProvisionResult(false, false, null, null, null, message, null, null);
         }
 
         static ManagedAccountProvisionResult success(
@@ -472,8 +319,9 @@ public class RedfishManagedAccountProvisioner {
                 String endpoint,
                 String username,
                 String roleId,
-                String message) {
-            return new ManagedAccountProvisionResult(enabled, true, endpoint, username, roleId, message);
+                String message,
+                String authMode) {
+            return new ManagedAccountProvisionResult(enabled, true, endpoint, username, roleId, message, authMode, null);
         }
 
         static ManagedAccountProvisionResult failure(
@@ -481,8 +329,10 @@ public class RedfishManagedAccountProvisioner {
                 String endpoint,
                 String username,
                 String roleId,
-                String message) {
-            return new ManagedAccountProvisionResult(enabled, false, endpoint, username, roleId, message);
+                String message,
+                String authMode,
+                String authFailureCode) {
+            return new ManagedAccountProvisionResult(enabled, false, endpoint, username, roleId, message, authMode, authFailureCode);
         }
     }
 
@@ -495,12 +345,7 @@ public class RedfishManagedAccountProvisioner {
             String roleId,
             boolean insecure,
             int connectTimeoutMs,
-            int readTimeoutMs) {
-    }
-
-    static final class ProvisionHttpException extends IOException {
-        ProvisionHttpException(int statusCode, String message) {
-            super(message + " (status=" + statusCode + ")");
-        }
+            int readTimeoutMs,
+            RedfishAuthMode authMode) {
     }
 }

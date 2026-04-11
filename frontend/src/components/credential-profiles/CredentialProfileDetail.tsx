@@ -61,6 +61,11 @@ export const CredentialProfileDetail: React.FC<CredentialProfileDetailProps> = (
                                 {profile.redfishTemplate}
                             </span>
                         )}
+                        {profile.redfishAuthMode && (
+                            <span className="rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-cyan-200">
+                                {profile.redfishAuthMode}
+                            </span>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 gap-3 text-sm text-gray-300 md:grid-cols-2">

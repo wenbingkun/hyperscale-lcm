@@ -1,0 +1,15 @@
+version: 1
+schema:
+  vendor: Manufacturer reported by Redfish service root
+  model: ComputerSystem.Model
+  firmware: Manager.FirmwareVersion
+  authModes: List of validated Redfish auth modes (BASIC_ONLY|SESSION_PREFERRED|SESSION_ONLY)
+  claim: Result of /api/bmc/devices/{id}/claim (PASS|FAIL|NOT_TESTED)
+  rotate: Result of /api/bmc/devices/{id}/rotate-credentials (PASS|FAIL|SKIPPED|NOT_TESTED)
+  capabilities: Snapshot of capability flags (sessionAuth/accountService/managerActions/powerControl)
+  resetActions: Reset actions exercised in dryRun=true (subset of On/ForceOff/GracefulShutdown/GracefulRestart/ForceRestart)
+  resetDestructive: Whether a destructive reset action was executed inside a maintenance window
+  lastVerified: ISO date of the most recent successful verification
+  owner: Engineer or team accountable for this row
+  notes: Reference to per-machine markdown or quirks worth highlighting
+machines: []

@@ -37,6 +37,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class RedfishMockServer implements AutoCloseable {
 
+    private static final String SERVICE_ROOT = "/redfish/v1";
+    private static final String SESSION_SERVICE_PATH = SERVICE_ROOT + "/SessionService";
+    private static final String SESSIONS_PATH = SESSION_SERVICE_PATH + "/Sessions";
     private static final String ACCOUNT_SERVICE_PATH = "/redfish/v1/AccountService";
     private static final String ACCOUNTS_PATH = ACCOUNT_SERVICE_PATH + "/Accounts";
     private static final char[] KEYSTORE_PASSWORD = "changeit".toCharArray();
@@ -46,20 +49,32 @@ public final class RedfishMockServer implements AutoCloseable {
     };
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final String bootstrapUsername;
+    private final String bootstrapPassword;
     private final String expectedAuthorization;
     private final boolean accountServiceEnabled;
+    private final boolean sessionServiceEnabled;
     private final Duration responseDelay;
     private final Map<String, Map<String, Object>> fixtures;
+    private final Map<String, ActionResponse> actionResponses;
     private final List<Map<String, Object>> accounts = new CopyOnWriteArrayList<>();
+    private final List<Map<String, Object>> sessions = new CopyOnWriteArrayList<>();
     private final List<CapturedRequest> requests = new CopyOnWriteArrayList<>();
     private final AtomicInteger nextAccountId = new AtomicInteger(1);
+    private final AtomicInteger nextSessionId = new AtomicInteger(1);
     private final HttpsServer server;
 
     private RedfishMockServer(Builder builder) {
+        bootstrapUsername = builder.bootstrapUsername;
+        bootstrapPassword = builder.bootstrapPassword;
         expectedAuthorization = basicAuth(builder.bootstrapUsername, builder.bootstrapPassword);
         accountServiceEnabled = builder.accountServiceEnabled;
+        sessionServiceEnabled = builder.sessionServiceEnabled;
         responseDelay = builder.responseDelay != null ? builder.responseDelay : Duration.ZERO;
-        fixtures = loadFixtureBundle(builder.fixtureName, objectMapper);
+        Map<String, Map<String, Object>> resolvedFixtures = new LinkedHashMap<>(loadFixtureBundle(builder.fixtureName, objectMapper));
+        resolvedFixtures.putAll(builder.fixtureOverrides);
+        fixtures = resolvedFixtures;
+        actionResponses = new LinkedHashMap<>(builder.actionResponses);
         initializeAccounts(builder);
         server = createHttpsServer();
     }
@@ -133,7 +148,8 @@ public final class RedfishMockServer implements AutoCloseable {
         String method = exchange.getRequestMethod();
         String path = exchange.getRequestURI().getPath();
         String authorization = exchange.getRequestHeaders().getFirst("Authorization");
-        requests.add(new CapturedRequest(method, path, authorization, requestBody));
+        String token = exchange.getRequestHeaders().getFirst("X-Auth-Token");
+        requests.add(new CapturedRequest(method, path, authorization, token, requestBody));
 
         try {
             maybeDelay();
@@ -143,7 +159,12 @@ public final class RedfishMockServer implements AutoCloseable {
             return;
         }
 
-        if (!Objects.equals(authorization, expectedAuthorization)) {
+        if ("POST".equals(method) && SESSIONS_PATH.equals(path)) {
+            handleSessionCreate(exchange, requestBody);
+            return;
+        }
+
+        if (!isAuthorized(authorization, token)) {
             exchange.getResponseHeaders().set("WWW-Authenticate", "Basic realm=\"redfish-test\"");
             respondJson(exchange, 401, Map.of("error", "unauthorized"));
             return;
@@ -153,11 +174,52 @@ public final class RedfishMockServer implements AutoCloseable {
             case "GET" -> handleGet(exchange, path);
             case "POST" -> handlePost(exchange, path, requestBody);
             case "PATCH" -> handlePatch(exchange, path, requestBody);
+            case "DELETE" -> handleDelete(exchange, path, token);
             default -> respondJson(exchange, 405, Map.of("error", "method not allowed"));
         }
     }
 
     private void handleGet(HttpExchange exchange, String path) throws IOException {
+        if (SERVICE_ROOT.equals(path)) {
+            respondJson(exchange, 200, serviceRootDocument());
+            return;
+        }
+        if (SESSION_SERVICE_PATH.equals(path)) {
+            if (!sessionServiceEnabled) {
+                respondJson(exchange, 404, Map.of("error", "session service not found"));
+                return;
+            }
+            respondJson(exchange, 200, Map.of(
+                    "Id", "SessionService",
+                    "Name", "Session Service",
+                    "SessionTimeout", 600,
+                    "Sessions", Map.of("@odata.id", SESSIONS_PATH)));
+            return;
+        }
+        if (SESSIONS_PATH.equals(path)) {
+            if (!sessionServiceEnabled) {
+                respondJson(exchange, 404, Map.of("error", "sessions not found"));
+                return;
+            }
+            List<Map<String, Object>> members = sessions.stream()
+                    .map(session -> Map.<String, Object>of("@odata.id", asString(session.get("@odata.id"))))
+                    .toList();
+            respondJson(exchange, 200, Map.of("Members", members));
+            return;
+        }
+        if (path.startsWith(SESSIONS_PATH + "/")) {
+            if (!sessionServiceEnabled) {
+                respondJson(exchange, 404, Map.of("error", "session not found"));
+                return;
+            }
+            Map<String, Object> session = findSession(path);
+            if (session == null) {
+                respondJson(exchange, 404, Map.of("error", "session not found"));
+                return;
+            }
+            respondJson(exchange, 200, session);
+            return;
+        }
         if (ACCOUNT_SERVICE_PATH.equals(path)) {
             if (!accountServiceEnabled) {
                 respondJson(exchange, 404, Map.of("error", "account service not found"));
@@ -201,6 +263,24 @@ public final class RedfishMockServer implements AutoCloseable {
     }
 
     private void handlePost(HttpExchange exchange, String path, String requestBody) throws IOException {
+        ActionResponse actionResponse = actionResponses.get(path);
+        if (actionResponse != null) {
+            Headers headers = exchange.getResponseHeaders();
+            headers.set("Content-Type", "application/json");
+            if (actionResponse.locationHeader() != null && !actionResponse.locationHeader().isBlank()) {
+                headers.set("Location", actionResponse.locationHeader());
+            }
+            byte[] body = actionResponse.body() == null
+                    ? new byte[0]
+                    : objectMapper.writeValueAsBytes(actionResponse.body());
+            exchange.sendResponseHeaders(actionResponse.statusCode(), body.length == 0 ? -1 : body.length);
+            if (body.length > 0) {
+                exchange.getResponseBody().write(body);
+            }
+            exchange.close();
+            return;
+        }
+
         if (!accountServiceEnabled || !ACCOUNTS_PATH.equals(path)) {
             respondJson(exchange, 404, Map.of("error", "not found"));
             return;
@@ -233,6 +313,53 @@ public final class RedfishMockServer implements AutoCloseable {
         respondJson(exchange, 200, account);
     }
 
+    private void handleDelete(HttpExchange exchange, String path, String token) throws IOException {
+        if (!path.startsWith(SESSIONS_PATH + "/")) {
+            respondJson(exchange, 404, Map.of("error", "not found"));
+            return;
+        }
+        sessions.removeIf(session -> Objects.equals(path, session.get("@odata.id"))
+                || Objects.equals(token, session.get("Token")));
+        exchange.sendResponseHeaders(204, -1);
+        exchange.close();
+    }
+
+    private void handleSessionCreate(HttpExchange exchange, String requestBody) throws IOException {
+        if (!sessionServiceEnabled) {
+            respondJson(exchange, 404, Map.of("error", "session service not found"));
+            return;
+        }
+
+        Map<String, Object> payload = parseJson(requestBody);
+        String username = asString(payload.get("UserName"));
+        String password = asString(payload.get("Password"));
+        if (!Objects.equals(username, bootstrapUsername) || !Objects.equals(password, bootstrapPassword)) {
+            exchange.getResponseHeaders().set("WWW-Authenticate", "Basic realm=\"redfish-test\"");
+            respondJson(exchange, 401, Map.of("error", "unauthorized"));
+            return;
+        }
+
+        int sessionId = nextSessionId.getAndIncrement();
+        String sessionUri = SESSIONS_PATH + "/" + sessionId;
+        String token = "session-token-" + sessionId;
+        Map<String, Object> session = new LinkedHashMap<>();
+        session.put("Id", Integer.toString(sessionId));
+        session.put("Name", "Session " + sessionId);
+        session.put("@odata.id", sessionUri);
+        session.put("UserName", username);
+        session.put("Token", token);
+        sessions.add(session);
+
+        Headers headers = exchange.getResponseHeaders();
+        headers.set("Content-Type", "application/json");
+        headers.set("Location", sessionUri);
+        headers.set("X-Auth-Token", token);
+        byte[] body = objectMapper.writeValueAsBytes(Map.of("@odata.id", sessionUri, "Id", Integer.toString(sessionId)));
+        exchange.sendResponseHeaders(201, body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
+    }
+
     private Map<String, Object> parseJson(String requestBody) throws IOException {
         if (requestBody == null || requestBody.isBlank()) {
             return new LinkedHashMap<>();
@@ -243,6 +370,13 @@ public final class RedfishMockServer implements AutoCloseable {
     private Map<String, Object> findAccount(String accountId) {
         return accounts.stream()
                 .filter(account -> Objects.equals(accountId, account.get("Id")))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Map<String, Object> findSession(String sessionUri) {
+        return sessions.stream()
+                .filter(session -> Objects.equals(sessionUri, session.get("@odata.id")))
                 .findFirst()
                 .orElse(null);
     }
@@ -263,6 +397,16 @@ public final class RedfishMockServer implements AutoCloseable {
         }
     }
 
+    private boolean isAuthorized(String authorization, String token) {
+        if (Objects.equals(authorization, expectedAuthorization)) {
+            return true;
+        }
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        return sessions.stream().anyMatch(session -> Objects.equals(token, session.get("Token")));
+    }
+
     private void respondJson(HttpExchange exchange, int statusCode, Object payload) throws IOException {
         byte[] body = objectMapper.writeValueAsBytes(payload);
         Headers headers = exchange.getResponseHeaders();
@@ -279,6 +423,20 @@ public final class RedfishMockServer implements AutoCloseable {
     private static String basicAuth(String username, String password) {
         String raw = username + ":" + password;
         return "Basic " + Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private Map<String, Object> serviceRootDocument() {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("Systems", Map.of("@odata.id", SERVICE_ROOT + "/Systems"));
+        payload.put("Managers", Map.of("@odata.id", SERVICE_ROOT + "/Managers"));
+        payload.put("Chassis", Map.of("@odata.id", SERVICE_ROOT + "/Chassis"));
+        if (accountServiceEnabled) {
+            payload.put("AccountService", Map.of("@odata.id", ACCOUNT_SERVICE_PATH));
+        }
+        if (sessionServiceEnabled) {
+            payload.put("SessionService", Map.of("@odata.id", SESSION_SERVICE_PATH));
+        }
+        return payload;
     }
 
     private static Map<String, Map<String, Object>> loadFixtureBundle(String fixtureName, ObjectMapper objectMapper) {
@@ -341,7 +499,10 @@ public final class RedfishMockServer implements AutoCloseable {
         return KeyFactory.getInstance("RSA").generatePrivate(spec);
     }
 
-    public record CapturedRequest(String method, String path, String authorization, String body) {
+    public record CapturedRequest(String method, String path, String authorization, String token, String body) {
+    }
+
+    public record ActionResponse(int statusCode, String locationHeader, Map<String, Object> body) {
     }
 
     public static final class Builder {
@@ -349,8 +510,11 @@ public final class RedfishMockServer implements AutoCloseable {
         private String bootstrapUsername = "admin";
         private String bootstrapPassword = "password";
         private boolean accountServiceEnabled = true;
+        private boolean sessionServiceEnabled = false;
         private Duration responseDelay = Duration.ZERO;
         private final List<AccountSeed> preexistingAccounts = new ArrayList<>();
+        private final Map<String, Map<String, Object>> fixtureOverrides = new LinkedHashMap<>();
+        private final Map<String, ActionResponse> actionResponses = new LinkedHashMap<>();
 
         public Builder withFixture(String fixtureName) {
             this.fixtureName = Objects.requireNonNull(fixtureName, "fixtureName");
@@ -368,6 +532,11 @@ public final class RedfishMockServer implements AutoCloseable {
             return this;
         }
 
+        public Builder withSessionService() {
+            this.sessionServiceEnabled = true;
+            return this;
+        }
+
         public Builder withResponseDelay(Duration responseDelay) {
             this.responseDelay = Objects.requireNonNull(responseDelay, "responseDelay");
             return this;
@@ -375,6 +544,19 @@ public final class RedfishMockServer implements AutoCloseable {
 
         public Builder withPreexistingAccount(String username, String password, String roleId) {
             preexistingAccounts.add(new AccountSeed(username, password, roleId, true));
+            return this;
+        }
+
+        public Builder withFixtureOverride(String path, Map<String, Object> payload) {
+            fixtureOverrides.put(Objects.requireNonNull(path, "path"),
+                    new LinkedHashMap<>(Objects.requireNonNull(payload, "payload")));
+            return this;
+        }
+
+        public Builder withActionResponse(String path, int statusCode, String locationHeader,
+                Map<String, Object> body) {
+            actionResponses.put(Objects.requireNonNull(path, "path"),
+                    new ActionResponse(statusCode, locationHeader, body));
             return this;
         }
 

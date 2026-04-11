@@ -1,13 +1,10 @@
 package com.sc.lcm.core.api;
 
-import com.sc.lcm.core.domain.CredentialProfile;
 import com.sc.lcm.core.domain.DiscoveredDevice;
-import com.sc.lcm.core.domain.DiscoveredDevice.AuthStatus;
-import com.sc.lcm.core.domain.DiscoveredDevice.ClaimStatus;
 import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus;
+import com.sc.lcm.core.service.BmcClaimWorkflowService;
+import com.sc.lcm.core.service.BmcClaimWorkflowService.ClaimWorkflowOutcome;
 import com.sc.lcm.core.service.DeviceClaimPlanner;
-import com.sc.lcm.core.service.RedfishClaimExecutor;
-import com.sc.lcm.core.service.RedfishManagedAccountProvisioner;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.common.annotation.NonBlocking;
 import io.smallrye.mutiny.Uni;
@@ -16,13 +13,12 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.Context;
 import lombok.extern.slf4j.Slf4j;
-import io.vertx.mutiny.core.Vertx;
 
-import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * 设备发现 REST API
@@ -36,23 +32,17 @@ import java.util.function.Supplier;
 @Slf4j
 public class DiscoveryResource {
 
-    @Inject
-    Vertx vertx;
-
     @jakarta.inject.Inject
     DeviceClaimPlanner deviceClaimPlanner;
 
     @jakarta.inject.Inject
-    RedfishClaimExecutor redfishClaimExecutor;
-
-    @jakarta.inject.Inject
-    RedfishManagedAccountProvisioner redfishManagedAccountProvisioner;
+    BmcClaimWorkflowService bmcClaimWorkflowService;
 
     @jakarta.inject.Inject
     com.sc.lcm.core.service.BmcCredentialRotationService bmcCredentialRotationService;
 
-    /** 可在测试中替换以控制时间，默认使用系统时钟。 */
-    Clock clock = Clock.systemDefaultZone();
+    @jakarta.inject.Inject
+    com.sc.lcm.core.service.AuditService auditService;
 
     /**
      * 获取所有发现的设备
@@ -192,133 +182,71 @@ public class DiscoveryResource {
 
     /**
      * 执行一次真实的 Redfish claim 验证。
-     * 当前阶段先验证首次凭据是否可登录 BMC，并将结果回写到发现池状态机。
+     *
+     * @deprecated Phase 7 起统一入口为 {@code POST /api/bmc/devices/{id}/claim}；
+     *     本路径仅做薄转发，将在 Phase 8 删除。
      */
+    @Deprecated(forRemoval = true)
     @POST
     @Path("/{id}/claim")
     @RolesAllowed("ADMIN")
     @NonBlocking
-    public Uni<Response> executeClaim(@PathParam("id") String id) {
-        // 第一阶段：在 session 上下文中读取设备与凭据档案（不持有 DB 连接）
-        return Panache.withSession(() ->
-                DiscoveredDevice.<DiscoveredDevice>findById(id)
-                        .onItem().transformToUni(device -> {
-                            if (device == null) {
-                                return Uni.createFrom().item(
-                                        Response.status(Response.Status.NOT_FOUND)
-                                                .entity(new ErrorResponse("Device not found"))
-                                                .build());
-                            }
-                            if (device.getCredentialProfileId() == null || device.getCredentialProfileId().isBlank()) {
-                                return Uni.createFrom().item(
-                                        Response.status(Response.Status.BAD_REQUEST)
-                                                .entity(new ErrorResponse("Device has no matched credential profile"))
-                                                .build());
-                            }
-
-                            return CredentialProfile.<CredentialProfile>findById(device.getCredentialProfileId())
-                                    .onItem().transformToUni(profile -> {
-                                        if (profile == null) {
-                                            return Uni.createFrom().item(
-                                                    Response.status(Response.Status.BAD_REQUEST)
-                                                            .entity(new ErrorResponse("Credential profile not found"))
-                                                            .build());
-                                        }
-
-                                        // 第二阶段：session 外执行真实 Redfish HTTP 探测（阻塞 I/O 在 worker 线程）
-                                        return redfishClaimExecutor.execute(device, profile)
-                                                .onItem().transformToUni(result -> {
-                                                    if (!result.success()) {
-                                                        return Uni.createFrom().item(new ClaimWorkflowResult(result, null));
-                                                    }
-                                                return redfishManagedAccountProvisioner.provision(device, profile)
-                                                            .map(provisionResult -> new ClaimWorkflowResult(result, provisionResult));
-                                                })
-                                                // 第三阶段：将探测结果写回 DB（新事务，重新加载托管实体）
-                                                .onItem().transformToUni(workflowResult -> runOnEventLoop(() ->
-                                                        Panache.withTransaction(() ->
-                                                                DiscoveredDevice.<DiscoveredDevice>findById(id)
-                                                                        .map(attachedDevice -> {
-                                                                            if (attachedDevice == null) {
-                                                                                return Response.status(Response.Status.NOT_FOUND)
-                                                                                        .entity(new ErrorResponse("Device not found"))
-                                                                                        .build();
-                                                                            }
-
-                                                                            attachedDevice.setLastAuthAttemptAt(LocalDateTime.now(clock));
-                                                                            attachedDevice.setClaimMessage(composeClaimMessage(workflowResult));
-
-                                                                            if (workflowResult.claimResult().success()) {
-                                                                                attachedDevice.setAuthStatus(AuthStatus.AUTHENTICATED);
-                                                                                attachedDevice.setClaimStatus(ClaimStatus.CLAIMED);
-                                                                                if ((attachedDevice.getManufacturerHint() == null || attachedDevice.getManufacturerHint().isBlank())
-                                                                                        && workflowResult.claimResult().manufacturer() != null
-                                                                                        && !workflowResult.claimResult().manufacturer().isBlank()) {
-                                                                                    attachedDevice.setManufacturerHint(workflowResult.claimResult().manufacturer());
-                                                                                }
-                                                                                if ((attachedDevice.getModelHint() == null || attachedDevice.getModelHint().isBlank())
-                                                                                        && workflowResult.claimResult().model() != null
-                                                                                        && !workflowResult.claimResult().model().isBlank()) {
-                                                                                    attachedDevice.setModelHint(workflowResult.claimResult().model());
-                                                                                }
-                                                                                if (workflowResult.claimResult().recommendedTemplate() != null
-                                                                                        && !workflowResult.claimResult().recommendedTemplate().isBlank()) {
-                                                                                    attachedDevice.setRecommendedRedfishTemplate(workflowResult.claimResult().recommendedTemplate());
-                                                                                }
-                                                                                if (workflowResult.provisionResult() != null && workflowResult.provisionResult().enabled()) {
-                                                                                    if (workflowResult.provisionResult().success()) {
-                                                                                        log.info("🔐 Managed BMC account ready for {}", attachedDevice.getIpAddress());
-                                                                                    } else {
-                                                                                        log.warn("⚠️ Managed BMC account provisioning incomplete for {}: {}",
-                                                                                                attachedDevice.getIpAddress(),
-                                                                                                workflowResult.provisionResult().message());
-                                                                                    }
-                                                                                }
-                                                                                log.info("✅ Redfish claim validated for {}", attachedDevice.getIpAddress());
-                                                                            } else {
-                                                                                attachedDevice.setAuthStatus(AuthStatus.AUTH_FAILED);
-                                                                                attachedDevice.setClaimStatus(ClaimStatus.DISCOVERED);
-                                                                                log.warn("❌ Redfish claim failed for {}: {}",
-                                                                                        attachedDevice.getIpAddress(),
-                                                                                        workflowResult.claimResult().message());
-                                                                            }
-
-                                                                            return Response.ok(attachedDevice).build();
-                                                                        }))));
-                                    });
-                        }));
+    public Uni<Response> executeClaim(@PathParam("id") String id, @Context SecurityContext securityContext) {
+        String actor = resolveActor(securityContext);
+        return bmcClaimWorkflowService.claim(id, actor)
+                .map(DiscoveryResource::toClaimResponse);
     }
 
-    private <T> Uni<T> runOnEventLoop(Supplier<Uni<T>> supplier) {
-        return Uni.createFrom().emitter(emitter ->
-                vertx.runOnContext(() ->
-                        supplier.get().subscribe().with(emitter::complete, emitter::fail)));
-    }
-
-    private static String composeClaimMessage(ClaimWorkflowResult workflowResult) {
-        if (workflowResult == null || workflowResult.claimResult() == null) {
-            return "Claim result is unavailable.";
-        }
-        if (workflowResult.provisionResult() == null || !workflowResult.provisionResult().enabled()) {
-            return workflowResult.claimResult().message();
-        }
-        return workflowResult.claimResult().message() + " " + workflowResult.provisionResult().message();
+    private static Response toClaimResponse(ClaimWorkflowOutcome outcome) {
+        return switch (outcome.status()) {
+            case NOT_FOUND -> Response.status(Response.Status.NOT_FOUND)
+                    .entity(new ErrorResponse("Device not found"))
+                    .build();
+            case BAD_REQUEST -> Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorResponse(outcome.errorMessage()))
+                    .build();
+            case OK -> Response.ok(outcome.device()).build();
+        };
     }
 
     /**
      * 手动触发单台设备的 BMC 托管账号密码轮换。
-     * 要求设备处于 CLAIMED 或 MANAGED 状态，且凭据档案已启用 managedAccount。
+     *
+     * @deprecated Phase 7 起统一入口为 {@code POST /api/bmc/devices/{id}/rotate-credentials}；
+     *     本路径仅做薄转发，将在 Phase 8 删除。
      */
+    @Deprecated(forRemoval = true)
     @POST
     @Path("/{id}/rotate-credentials")
     @RolesAllowed("ADMIN")
-    public Uni<Response> rotateCredentials(@PathParam("id") String id) {
+    public Uni<Response> rotateCredentials(@PathParam("id") String id, @Context SecurityContext securityContext) {
+        String actor = resolveActor(securityContext);
         return bmcCredentialRotationService.rotateDevice(id)
+                .onItem().call(result -> auditService.logBmcRotateCredentials(
+                                id,
+                                actor,
+                                null,
+                                result.status().name(),
+                                result.message())
+                        .onFailure().recoverWithItem(error -> {
+                            log.warn("Failed to write BMC rotate-credentials audit log for {}: {}",
+                                    id, error.getMessage());
+                            return null;
+                        }))
                 .map(result -> switch (result.status()) {
                     case SUCCESS -> Response.ok(result).build();
                     case SKIPPED -> Response.status(Response.Status.NOT_MODIFIED).entity(result).build();
                     case FAILURE -> Response.status(Response.Status.BAD_REQUEST).entity(result).build();
                 });
+    }
+
+    private static String resolveActor(SecurityContext securityContext) {
+        if (securityContext != null && securityContext.getUserPrincipal() != null
+                && securityContext.getUserPrincipal().getName() != null
+                && !securityContext.getUserPrincipal().getName().isBlank()) {
+            return securityContext.getUserPrincipal().getName();
+        }
+        return "SYSTEM";
     }
 
     /**
@@ -356,10 +284,5 @@ public class DiscoveryResource {
     }
 
     public record ErrorResponse(String error) {
-    }
-
-    record ClaimWorkflowResult(
-            RedfishClaimExecutor.ClaimExecutionResult claimResult,
-            RedfishManagedAccountProvisioner.ManagedAccountProvisionResult provisionResult) {
     }
 }

@@ -138,4 +138,31 @@ public class MetricsService {
         public void stopSchedulingTimer(Timer.Sample sample) {
                 sample.stop(schedulingDurationTimer);
         }
+
+        // ============== BMC / Redfish (Phase 7) ==============
+
+        /**
+         * BMC 受控电源动作累计计数。
+         * tag: action (例如 ForceOff/On), result (COMPLETED/ACCEPTED/DRY_RUN/FAILURE)
+         */
+        public void recordBmcPowerAction(String action, String result) {
+                Counter.builder("lcm_bmc_power_action_total")
+                                .description("Total number of Redfish power actions executed")
+                                .tag("action", action == null ? "unknown" : action)
+                                .tag("result", result == null ? "unknown" : result)
+                                .register(registry)
+                                .increment();
+        }
+
+        /**
+         * BMC session 自动重建计数（401 触发的隐式 reauth）。
+         * tag: component (例如 transport)
+         */
+        public void recordBmcSessionReauth(String component) {
+                Counter.builder("lcm_bmc_session_reauth_total")
+                                .description("Total number of Redfish session re-authentications")
+                                .tag("component", component == null ? "transport" : component)
+                                .register(registry)
+                                .increment();
+        }
 }

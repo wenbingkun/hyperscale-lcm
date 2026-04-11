@@ -1,6 +1,7 @@
 package com.sc.lcm.core.api;
 
 import com.sc.lcm.core.domain.CredentialProfile;
+import com.sc.lcm.core.domain.RedfishAuthMode;
 import com.sc.lcm.core.service.BootstrapCredentialImportService;
 import com.sc.lcm.core.service.CmdbBootstrapSyncService;
 import com.sc.lcm.core.service.RedfishTemplateCatalog;
@@ -166,6 +167,9 @@ public class CredentialProfileResource {
         profile.setIpAddressPattern(request.ipAddressPattern());
         profile.setMacAddressPattern(request.macAddressPattern());
         profile.setRedfishTemplate(request.redfishTemplate());
+        profile.setRedfishAuthMode(request.redfishAuthMode() == null || request.redfishAuthMode().isBlank()
+                ? profile.getRedfishAuthMode()
+                : RedfishAuthMode.normalize(request.redfishAuthMode(), RedfishAuthMode.SESSION_PREFERRED));
         profile.setUsernameSecretRef(request.usernameSecretRef());
         profile.setPasswordSecretRef(request.passwordSecretRef());
         profile.setManagedAccountEnabled(request.managedAccountEnabled() == null
@@ -195,6 +199,7 @@ public class CredentialProfileResource {
             String ipAddressPattern,
             String macAddressPattern,
             String redfishTemplate,
+            String redfishAuthMode,
             String usernameSecretRef,
             String passwordSecretRef,
             Boolean managedAccountEnabled,

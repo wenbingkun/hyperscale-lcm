@@ -16,6 +16,7 @@ export interface CredentialProfileFormState {
     ipAddressPattern: string;
     macAddressPattern: string;
     redfishTemplate: string;
+    redfishAuthMode: string;
     usernameSecretRef: string;
     passwordSecretRef: string;
     managedAccountEnabled: boolean;
@@ -41,6 +42,7 @@ export const createEmptyCredentialProfileForm = (): CredentialProfileFormState =
     ipAddressPattern: '',
     macAddressPattern: '',
     redfishTemplate: 'openbmc-baseline',
+    redfishAuthMode: 'SESSION_PREFERRED',
     usernameSecretRef: '',
     passwordSecretRef: '',
     managedAccountEnabled: false,
@@ -71,6 +73,7 @@ export const toCredentialProfileFormState = (profile: CredentialProfile): Creden
     ipAddressPattern: profile.ipAddressPattern || '',
     macAddressPattern: profile.macAddressPattern || '',
     redfishTemplate: profile.redfishTemplate || 'openbmc-baseline',
+    redfishAuthMode: profile.redfishAuthMode || 'SESSION_PREFERRED',
     usernameSecretRef: profile.usernameSecretRef || '',
     passwordSecretRef: profile.passwordSecretRef || '',
     managedAccountEnabled: profile.managedAccountEnabled || false,
@@ -96,6 +99,7 @@ export const toCredentialProfileRequest = (form: CredentialProfileFormState): Cr
     ipAddressPattern: optionalValue(form.ipAddressPattern),
     macAddressPattern: optionalValue(form.macAddressPattern),
     redfishTemplate: optionalValue(form.redfishTemplate),
+    redfishAuthMode: optionalValue(form.redfishAuthMode),
     usernameSecretRef: optionalValue(form.usernameSecretRef),
     passwordSecretRef: optionalValue(form.passwordSecretRef),
     managedAccountEnabled: form.managedAccountEnabled,

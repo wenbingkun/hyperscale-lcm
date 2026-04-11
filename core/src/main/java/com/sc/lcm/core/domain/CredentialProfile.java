@@ -50,6 +50,7 @@ public class CredentialProfile extends PanacheEntityBase {
     private String ipAddressPattern;
     private String macAddressPattern;
     private String redfishTemplate;
+    private String redfishAuthMode;
 
     private String usernameSecretRef;
     private String passwordSecretRef;

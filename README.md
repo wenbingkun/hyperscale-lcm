@@ -110,9 +110,10 @@ For Core validation, follow the environment-specific commands in `documentation/
 | `DEVELOPMENT_ROADMAP.md` | Roadmap, completion checklist, sprint log |
 | `documentation/PROJECT_ANALYSIS_AND_NEXT_STEPS.md` | Current-state analysis and next-step priorities |
 | `documentation/TASK_COMPLETION_AUDIT.md` | Completion audit and weighted progress view |
-| `documentation/README.md` | Documentation index and maintenance rules |
 | `documentation/CI_CONTRACT.md` | CI/test source of truth |
 | `documentation/CI_FAILURE_PATTERNS.md` | CI troubleshooting patterns |
+| `documentation/REDFISH_BMC_PHASE7_PLAN.md` | Phase 7 Redfish/BMC hardening plan |
+| `documentation/hardware-acceptance/` | Real hardware Redfish/BMC acceptance matrix |
 
 ## Repository Layout
 

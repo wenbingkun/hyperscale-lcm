@@ -105,4 +105,56 @@ public class AuditService {
         return logEvent(AuditEventType.CONFIG_CHANGED, "CONFIG", configKey, actor, tenantId,
                 String.format("{\"old\":\"%s\",\"new\":\"%s\"}", oldValue, newValue));
     }
+
+    // ============== BMC / Redfish ==============
+
+    /**
+     * 记录 BMC claim 事件。
+     */
+    public Uni<Void> logBmcClaim(String deviceId, String actor, String tenantId,
+            String authMode, String result, String message) {
+        return logEvent(AuditEventType.BMC_CLAIM, "BMC", deviceId, actor, tenantId,
+                String.format(
+                        "{\"deviceId\":\"%s\",\"authMode\":\"%s\",\"result\":\"%s\",\"message\":%s}",
+                        escape(deviceId), escape(authMode), escape(result), jsonString(message)));
+    }
+
+    /**
+     * 记录 BMC 托管账号密码轮换事件。
+     */
+    public Uni<Void> logBmcRotateCredentials(String deviceId, String actor, String tenantId,
+            String result, String message) {
+        return logEvent(AuditEventType.BMC_ROTATE_CREDENTIALS, "BMC", deviceId, actor, tenantId,
+                String.format(
+                        "{\"deviceId\":\"%s\",\"result\":\"%s\",\"message\":%s}",
+                        escape(deviceId), escape(result), jsonString(message)));
+    }
+
+    /**
+     * 记录 BMC 受控电源动作事件。
+     */
+    public Uni<Void> logBmcPowerAction(String deviceId, String actor, String tenantId,
+            String action, String systemId, String authMode, String result,
+            String taskLocation, boolean dryRun) {
+        return logEvent(AuditEventType.BMC_POWER_ACTION, "BMC", deviceId, actor, tenantId,
+                String.format(
+                        "{\"deviceId\":\"%s\",\"action\":\"%s\",\"systemId\":%s,\"authMode\":\"%s\","
+                                + "\"result\":\"%s\",\"taskLocation\":%s,\"dryRun\":%s}",
+                        escape(deviceId), escape(action), jsonString(systemId), escape(authMode),
+                        escape(result), jsonString(taskLocation), dryRun));
+    }
+
+    private static String escape(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static String jsonString(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return "\"" + escape(value) + "\"";
+    }
 }

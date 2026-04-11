@@ -1,28 +1,14 @@
 package com.sc.lcm.core.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc.lcm.core.domain.CredentialProfile;
 import com.sc.lcm.core.domain.DiscoveredDevice;
+import com.sc.lcm.core.domain.RedfishAuthMode;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.util.Base64;
 import java.util.Map;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -34,13 +20,14 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @Slf4j
 public class RedfishClaimExecutor {
 
-    private static final String SERVICE_ROOT = "/redfish/v1";
-
     @Inject
     SecretRefResolver secretRefResolver;
 
     @Inject
     RedfishTemplateCatalog redfishTemplateCatalog;
+
+    @Inject
+    RedfishTransport redfishTransport;
 
     @Inject
     ObjectMapper objectMapper;
@@ -54,21 +41,25 @@ public class RedfishClaimExecutor {
     @ConfigProperty(name = "lcm.claim.redfish.insecure", defaultValue = "true")
     boolean insecure = true;
 
+    @ConfigProperty(name = "lcm.claim.redfish.auth-mode-default", defaultValue = "SESSION_PREFERRED")
+    String defaultAuthMode = RedfishAuthMode.SESSION_PREFERRED.name();
+
     ProbeTransport transport;
 
     public Uni<ClaimExecutionResult> execute(DiscoveredDevice device, CredentialProfile profile) {
         if (device == null) {
-            return Uni.createFrom().item(ClaimExecutionResult.failure(null, null, "Device not found."));
+            return Uni.createFrom().item(ClaimExecutionResult.failure(null, null, null,
+                    "Device not found.", null, null));
         }
         if (profile == null) {
-            return Uni.createFrom().item(ClaimExecutionResult.failure(resolveEndpoint(device), null,
-                    "Credential profile not found."));
+            return Uni.createFrom().item(ClaimExecutionResult.failure(resolveEndpoint(device), null, null,
+                    "Credential profile not found.", null, null));
         }
 
         String endpoint = resolveEndpoint(device);
         if (endpoint == null) {
-            return Uni.createFrom().item(ClaimExecutionResult.failure(null, null,
-                    "BMC endpoint is missing on the discovered device."));
+            return Uni.createFrom().item(ClaimExecutionResult.failure(null, null, null,
+                    "BMC endpoint is missing on the discovered device.", null, null));
         }
 
         return secretRefResolver.resolve(profile)
@@ -77,7 +68,10 @@ public class RedfishClaimExecutor {
                         return Uni.createFrom().item(ClaimExecutionResult.failure(
                                 endpoint,
                                 credentials.getCredentialSource(),
-                                "Claim blocked because secret refs are not ready. " + credentials.getMessage()));
+                                null,
+                                "Claim blocked because secret refs are not ready. " + credentials.getMessage(),
+                                null,
+                                null));
                     }
 
                     ProbeRequest request = new ProbeRequest(
@@ -86,7 +80,8 @@ public class RedfishClaimExecutor {
                             credentials.getPassword().getValue(),
                             insecure,
                             connectTimeoutMs,
-                            readTimeoutMs);
+                            readTimeoutMs,
+                            resolveAuthMode(device, profile));
 
                     ProbeTransport activeTransport = transport != null ? transport : this::probeBlocking;
 
@@ -114,68 +109,51 @@ public class RedfishClaimExecutor {
                                         response.manufacturer(),
                                         response.model(),
                                         recommendedTemplate,
-                                        message);
+                                        message,
+                                        response.authMode(),
+                                        response.capabilities());
                             })
                             .onFailure().recoverWithItem(error -> {
-                                String rootMessage = rootCauseMessage(error);
+                                RedfishTransport.RedfishTransportException transportException = findTransportException(error);
+                                Throwable root = rootCause(error);
+                                String failureCode = transportException != null
+                                        ? transportException.failureCode()
+                                        : extractFailureCode(root);
+                                String failureMessage = transportException != null
+                                        ? transportException.getMessage()
+                                        : rootCauseMessage(root);
                                 log.warn("Redfish claim failed for {}", endpoint, error);
                                 return ClaimExecutionResult.failure(
                                         endpoint,
                                         credentials.getCredentialSource(),
-                                        "Redfish claim failed for " + endpoint + ": " + rootMessage);
+                                        failureCode,
+                                        "Redfish claim failed for " + endpoint + ": " + failureMessage,
+                                        failureMessage,
+                                        null);
                             });
                 });
     }
 
     ProbeResponse probeBlocking(ProbeRequest request) throws Exception {
-        Map<String, Object> systems = getJSON(request, SERVICE_ROOT + "/Systems");
-        Map<String, Object> system = unwrapPrimaryMember(request, systems);
-
-        String manufacturer = extractString(system, "Manufacturer");
-        String model = extractString(system, "Model");
-        return new ProbeResponse(manufacturer, model);
+        RedfishTransport.InspectionResult inspection = redfishTransport.inspect(new RedfishTransport.RequestOptions(
+                request.endpoint(),
+                request.username(),
+                request.password(),
+                request.insecure(),
+                request.connectTimeoutMs(),
+                request.readTimeoutMs(),
+                request.authMode()));
+        return new ProbeResponse(
+                inspection.manufacturer(),
+                inspection.model(),
+                inspection.authMode(),
+                inspection.capabilities());
     }
 
-    private Map<String, Object> unwrapPrimaryMember(ProbeRequest request, Map<String, Object> document) throws Exception {
-        String memberUri = firstMemberUri(document);
-        if (memberUri == null) {
-            return document;
+    static String resolveEndpoint(DiscoveredDevice device) {
+        if (device == null) {
+            return null;
         }
-        return getJSON(request, memberUri);
-    }
-
-    private Map<String, Object> getJSON(ProbeRequest request, String path) throws Exception {
-        URL url = new URL(absoluteUrl(request.endpoint(), path));
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        if (connection instanceof HttpsURLConnection https && request.insecure()) {
-            https.setSSLSocketFactory(insecureSslContext().getSocketFactory());
-            https.setHostnameVerifier(insecureHostnameVerifier());
-        }
-
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(request.connectTimeoutMs());
-        connection.setReadTimeout(request.readTimeoutMs());
-        connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("Authorization", basicAuth(request.username(), request.password()));
-
-        try {
-            int status = connection.getResponseCode();
-            if (status >= HttpURLConnection.HTTP_BAD_REQUEST) {
-                log.warn("Redfish GET {} returned HTTP {}", url, status);
-                throw new ProbeHttpException(status, "GET " + path + " returned " + status);
-            }
-
-            try (InputStream stream = connection.getInputStream()) {
-                return objectMapper.readValue(stream, new TypeReference<Map<String, Object>>() {
-                });
-            }
-        } catch (IOException e) {
-            log.warn("Redfish GET {} failed: {}", url, e.getMessage());
-            throw e;
-        }
-    }
-
-    private static String resolveEndpoint(DiscoveredDevice device) {
         String candidate = device.getBmcAddress();
         if (candidate == null || candidate.isBlank()) {
             candidate = device.getIpAddress();
@@ -190,94 +168,14 @@ public class RedfishClaimExecutor {
     }
 
     static String absoluteUrl(String endpoint, String path) {
-        URI endpointUri = URI.create(endpoint).normalize();
-        URI pathUri = URI.create(path).normalize();
-
-        if (pathUri.isAbsolute()) {
-            if (!isSameOrigin(endpointUri, pathUri)) {
-                throw new IllegalArgumentException("Redfish path host does not match endpoint.");
-            }
-            return pathUri.toString();
-        }
-
-        URI baseUri = endpointUri;
-        if (!path.startsWith("/")) {
-            baseUri = URI.create(endpointUri.toString() + "/");
-        }
-
-        return baseUri.resolve(pathUri).normalize().toString();
+        return RedfishTransport.absoluteUrl(endpoint, path);
     }
 
-    private static boolean isSameOrigin(URI endpointUri, URI targetUri) {
-        return endpointUri.getScheme().equalsIgnoreCase(targetUri.getScheme())
-                && endpointUri.getHost().equalsIgnoreCase(targetUri.getHost())
-                && effectivePort(endpointUri) == effectivePort(targetUri);
-    }
-
-    private static int effectivePort(URI uri) {
-        int port = uri.getPort();
-        if (port != -1) {
-            return port;
-        }
-        if ("https".equalsIgnoreCase(uri.getScheme())) {
-            return 443;
-        }
-        if ("http".equalsIgnoreCase(uri.getScheme())) {
-            return 80;
-        }
-        return -1;
-    }
-
-    private static String basicAuth(String username, String password) {
-        String raw = username + ":" + password;
-        return "Basic " + Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static String firstMemberUri(Map<String, Object> document) {
-        Object rawMembers = document.get("Members");
-        if (!(rawMembers instanceof java.util.List<?> members) || members.isEmpty()) {
-            return null;
-        }
-        Object first = members.getFirst();
-        if (!(first instanceof Map<?, ?> firstMap)) {
-            return null;
-        }
-        Object uri = firstMap.get("@odata.id");
-        return uri instanceof String value ? value : null;
-    }
-
-    private static String extractString(Map<String, Object> document, String field) {
-        if (document == null) {
-            return null;
-        }
-        Object value = document.get(field);
-        return value instanceof String stringValue && !stringValue.isBlank() ? stringValue : null;
-    }
-
-    private static SSLContext insecureSslContext() throws GeneralSecurityException {
-        TrustManager[] trustAllCerts = new TrustManager[]{
-                new X509TrustManager() {
-                    @Override
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                        return new java.security.cert.X509Certificate[0];
-                    }
-
-                    @Override
-                    public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                    }
-
-                    @Override
-                    public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-                    }
-                }
-        };
-        SSLContext context = SSLContext.getInstance("TLS");
-        context.init(null, trustAllCerts, new SecureRandom());
-        return context;
-    }
-
-    private static HostnameVerifier insecureHostnameVerifier() {
-        return (hostname, session) -> true;
+    private RedfishAuthMode resolveAuthMode(DiscoveredDevice device, CredentialProfile profile) {
+        String rawValue = device != null && device.getRedfishAuthModeOverride() != null
+                ? device.getRedfishAuthModeOverride()
+                : profile.getRedfishAuthMode();
+        return RedfishAuthMode.parse(rawValue, RedfishAuthMode.parse(defaultAuthMode, RedfishAuthMode.SESSION_PREFERRED));
     }
 
     private static String preferConfiguredTemplate(String configured, String recommended) {
@@ -287,12 +185,34 @@ public class RedfishClaimExecutor {
         return recommended;
     }
 
-    private static String rootCauseMessage(Throwable error) {
+    private static Throwable rootCause(Throwable error) {
         Throwable current = error;
         while (current.getCause() != null) {
             current = current.getCause();
         }
-        return current.getMessage() != null ? current.getMessage() : current.getClass().getSimpleName();
+        return current;
+    }
+
+    private static RedfishTransport.RedfishTransportException findTransportException(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof RedfishTransport.RedfishTransportException transportException) {
+                return transportException;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private static String extractFailureCode(Throwable error) {
+        if (error instanceof RedfishTransport.RedfishTransportException transportException) {
+            return transportException.failureCode();
+        }
+        return error.getClass().getSimpleName();
+    }
+
+    private static String rootCauseMessage(Throwable error) {
+        return error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
     }
 
     @FunctionalInterface
@@ -307,7 +227,11 @@ public class RedfishClaimExecutor {
             String manufacturer,
             String model,
             String recommendedTemplate,
-            String message) {
+            String message,
+            String authMode,
+            String authFailureCode,
+            String authFailureReason,
+            Map<String, Object> bmcCapabilities) {
 
         static ClaimExecutionResult success(
                 String endpoint,
@@ -315,12 +239,42 @@ public class RedfishClaimExecutor {
                 String manufacturer,
                 String model,
                 String recommendedTemplate,
-                String message) {
-            return new ClaimExecutionResult(true, endpoint, credentialSource, manufacturer, model, recommendedTemplate, message);
+                String message,
+                String authMode,
+                Map<String, Object> bmcCapabilities) {
+            return new ClaimExecutionResult(
+                    true,
+                    endpoint,
+                    credentialSource,
+                    manufacturer,
+                    model,
+                    recommendedTemplate,
+                    message,
+                    authMode,
+                    null,
+                    null,
+                    bmcCapabilities);
         }
 
-        static ClaimExecutionResult failure(String endpoint, String credentialSource, String message) {
-            return new ClaimExecutionResult(false, endpoint, credentialSource, null, null, null, message);
+        static ClaimExecutionResult failure(
+                String endpoint,
+                String credentialSource,
+                String authFailureCode,
+                String message,
+                String authFailureReason,
+                Map<String, Object> bmcCapabilities) {
+            return new ClaimExecutionResult(
+                    false,
+                    endpoint,
+                    credentialSource,
+                    null,
+                    null,
+                    null,
+                    message,
+                    null,
+                    authFailureCode,
+                    authFailureReason,
+                    bmcCapabilities);
         }
     }
 
@@ -330,15 +284,14 @@ public class RedfishClaimExecutor {
             String password,
             boolean insecure,
             int connectTimeoutMs,
-            int readTimeoutMs) {
+            int readTimeoutMs,
+            RedfishAuthMode authMode) {
     }
 
-    record ProbeResponse(String manufacturer, String model) {
-    }
-
-    static final class ProbeHttpException extends IOException {
-        ProbeHttpException(int statusCode, String message) {
-            super(message + " (status=" + statusCode + ")");
-        }
+    record ProbeResponse(
+            String manufacturer,
+            String model,
+            String authMode,
+            Map<String, Object> capabilities) {
     }
 }

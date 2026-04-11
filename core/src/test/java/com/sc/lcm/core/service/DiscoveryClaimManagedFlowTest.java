@@ -59,7 +59,11 @@ class DiscoveryClaimManagedFlowTest {
 
         // ── 第二阶段：RedfishClaimExecutor - 真实 BMC 登录验证（mocked）─────
         RedfishClaimExecutor executor = newExecutor(resolver);
-        executor.transport = request -> new RedfishClaimExecutor.ProbeResponse("Dell Inc.", "PowerEdge R760");
+        executor.transport = request -> new RedfishClaimExecutor.ProbeResponse(
+                "Dell Inc.",
+                "PowerEdge R760",
+                "SESSION",
+                java.util.Map.of("accountService", true, "sessionAuth", true));
 
         RedfishClaimExecutor.ClaimExecutionResult claimResult =
                 executor.execute(device, profile).await().indefinitely();
@@ -93,7 +97,8 @@ class DiscoveryClaimManagedFlowTest {
                 request.endpoint(),
                 request.managedUsername(),
                 request.roleId(),
-                "Managed BMC account '" + request.managedUsername() + "' is ready on " + request.endpoint() + ".");
+                "Managed BMC account '" + request.managedUsername() + "' is ready on " + request.endpoint() + ".",
+                "SESSION");
 
         RedfishManagedAccountProvisioner.ManagedAccountProvisionResult provisionResult =
                 provisioner.provision(device, profile).await().indefinitely();
@@ -217,6 +222,7 @@ class DiscoveryClaimManagedFlowTest {
         executor.secretRefResolver = resolver;
         executor.redfishTemplateCatalog = templateCatalog;
         executor.objectMapper = new ObjectMapper();
+        executor.redfishTransport = newRedfishTransport();
         return executor;
     }
 
@@ -224,6 +230,14 @@ class DiscoveryClaimManagedFlowTest {
         RedfishManagedAccountProvisioner provisioner = new RedfishManagedAccountProvisioner();
         provisioner.secretRefResolver = resolver;
         provisioner.objectMapper = new ObjectMapper();
+        provisioner.redfishTransport = newRedfishTransport();
         return provisioner;
+    }
+
+    private static RedfishTransport newRedfishTransport() {
+        RedfishTransport transport = new RedfishTransport();
+        transport.objectMapper = new ObjectMapper();
+        transport.sessionManager = new RedfishSessionManager();
+        return transport;
     }
 }

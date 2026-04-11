@@ -77,6 +77,7 @@ public class BootstrapCredentialImportService {
         profile.setIpAddressPattern(request.ipAddressPattern());
         profile.setMacAddressPattern(request.macAddressPattern());
         profile.setRedfishTemplate(request.redfishTemplate());
+        profile.setRedfishAuthMode(request.redfishAuthMode());
         profile.setUsernameSecretRef(request.usernameSecretRef());
         profile.setPasswordSecretRef(request.passwordSecretRef());
         profile.setManagedAccountEnabled(request.managedAccountEnabled() != null && request.managedAccountEnabled());
