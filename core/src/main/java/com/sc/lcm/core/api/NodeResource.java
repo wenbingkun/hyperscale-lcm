@@ -3,6 +3,7 @@ package com.sc.lcm.core.api;
 import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
 import com.sc.lcm.core.service.SatelliteStateCache;
+import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -31,15 +32,16 @@ public class NodeResource {
          * 列出所有节点（包含 Redfish/BMC 硬件规格）
          */
         @GET
+        @WithSession
         public Uni<List<NodeResponse>> listNodes(
                         @QueryParam("status") String status,
                         @QueryParam("limit") @DefaultValue("100") int limit) {
 
                 Uni<List<Satellite>> satellitesUni = "online".equalsIgnoreCase(status)
                         ? Satellite.findActive(LocalDateTime.now().minusMinutes(2))
-                        : Satellite.findAll().page(0, limit).list();
+                        : Satellite.<Satellite>findAll().page(0, limit).list();
 
-                return satellitesUni.onItem().transformToUni(satellites -> {
+                return satellitesUni.flatMap(satellites -> {
                         List<String> ids = satellites.stream().map(Satellite::getId).toList();
                         if (ids.isEmpty()) {
                                 return Uni.createFrom().item(List.<NodeResponse>of());
@@ -62,23 +64,22 @@ public class NodeResource {
          */
         @GET
         @Path("/{id}")
+        @WithSession
         public Uni<Response> getNode(@PathParam("id") String id) {
-                return Uni.combine().all()
-                                .unis(Satellite.<Satellite>findById(id), Node.<Node>findById(id))
-                                .asTuple()
-                                .map(tuple -> {
-                                        Satellite satellite = tuple.getItem1();
-                                        if (satellite == null) {
-                                                return Response.status(Response.Status.NOT_FOUND)
-                                                                .entity(new ErrorResponse("Node not found: " + id))
-                                                                .build();
-                                        }
-                                        return Response.ok(NodeResponse.of(
+                return Satellite.<Satellite>findById(id)
+                        .flatMap(satellite -> {
+                                if (satellite == null) {
+                                        return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND)
+                                                        .entity(new ErrorResponse("Node not found: " + id))
+                                                        .build());
+                                }
+                                return Node.<Node>findById(id)
+                                        .map(node -> Response.ok(NodeResponse.of(
                                                         satellite,
-                                                        tuple.getItem2(),
+                                                        node,
                                                         stateCache.isOnline(id),
-                                                        stateCache.getLastHeartbeat(id))).build();
-                                });
+                                                        stateCache.getLastHeartbeat(id))).build());
+                        });
         }
 
         /**
@@ -118,25 +119,23 @@ public class NodeResource {
          */
         @GET
         @Path("/stats")
+        @WithSession
         public Uni<ClusterStats> getClusterStats() {
-                Uni<List<Satellite>> activeUni = Satellite.findActive(LocalDateTime.now().minusMinutes(2));
-                Uni<Long> totalUni = Satellite.count();
+                return Satellite.<Satellite>findActive(LocalDateTime.now().minusMinutes(2))
+                        .flatMap(active -> Satellite.count()
+                                .flatMap(total -> Node.<Node>listAll()
+                                        .map(nodes -> {
+                                                long onlineCount = active.size();
+                                                long totalNodes = total;
 
-                Uni<List<Node>> nodesUni = Node.<Node>listAll();
+                                                long totalCpuCores = nodes.stream().mapToLong(Node::getCpuCores).sum();
+                                                long totalGpus = nodes.stream().mapToLong(Node::getGpuCount).sum();
+                                                long totalMemoryGb = nodes.stream().mapToLong(Node::getMemoryGb).sum();
 
-                return Uni.combine().all().unis(activeUni, totalUni, nodesUni)
-                                .asTuple()
-                                .onItem().transform(tuple -> {
-                                        long onlineCount = tuple.getItem1().size();
-                                        long totalNodes = tuple.getItem2();
-                                        List<Node> nodes = tuple.getItem3();
-
-                                        long totalCpuCores = nodes.stream().mapToLong(Node::getCpuCores).sum();
-                                        long totalGpus = nodes.stream().mapToLong(Node::getGpuCount).sum();
-                                        long totalMemoryGb = nodes.stream().mapToLong(Node::getMemoryGb).sum();
-
-                                        return new ClusterStats(onlineCount, totalNodes, totalCpuCores, totalGpus, totalMemoryGb);
-                                });
+                                                return new ClusterStats(onlineCount, totalNodes, totalCpuCores, totalGpus, totalMemoryGb);
+                                        })
+                                )
+                        );
         }
 
         /**
@@ -144,6 +143,7 @@ public class NodeResource {
          */
         @GET
         @Path("/online/count")
+        @WithSession
         public Uni<OnlineCountResponse> getOnlineCount() {
                 return Satellite.findActive(LocalDateTime.now().minusMinutes(2))
                                 .onItem().transform(satellites -> new OnlineCountResponse(satellites.size()));

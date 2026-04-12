@@ -87,6 +87,24 @@ def make_handler(state, bootstrap_user, bootstrap_password):
             return self._json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
         def do_POST(self):
+            if self.path == "/redfish/v1/SessionService/Sessions":
+                payload = self._read_json()
+                user = payload.get("UserName")
+                passwd = payload.get("Password")
+                if user == bootstrap_user and passwd == bootstrap_password:
+                    token = "dummy-session-token"
+                    state["sessions"] = state.get("sessions", []) + [token]
+                    body = json.dumps({"@odata.id": "/redfish/v1/SessionService/Sessions/1"}).encode("utf-8")
+                    self.send_response(HTTPStatus.CREATED)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.send_header("X-Auth-Token", token)
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                else:
+                    return self._json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
+
             if not self._authorized():
                 return
             if self.path != "/redfish/v1/AccountService/Accounts":
@@ -103,6 +121,11 @@ def make_handler(state, bootstrap_user, bootstrap_password):
             state["next_account_id"] += 1
             state["accounts"].append(account)
             return self._json(account, status=HTTPStatus.CREATED)
+
+        def do_DELETE(self):
+            if self.path.startswith("/redfish/v1/SessionService/Sessions/"):
+                return self._json({"message": "deleted"}, status=HTTPStatus.NO_CONTENT)
+            return self._json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
         def do_PATCH(self):
             if not self._authorized():
@@ -130,7 +153,12 @@ def make_handler(state, bootstrap_user, bootstrap_password):
             print(format % args)
 
         def _authorized(self):
+            # Check Basic Auth
             if self.headers.get("Authorization") == expected_auth:
+                return True
+            # Check Session Auth
+            token = self.headers.get("X-Auth-Token")
+            if token and token in state.get("sessions", []):
                 return True
 
             self.send_response(HTTPStatus.UNAUTHORIZED)

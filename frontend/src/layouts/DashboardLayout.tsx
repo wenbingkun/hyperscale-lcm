@@ -31,7 +31,7 @@ export const DashboardLayout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
 
                 <nav className="hidden md:flex items-center gap-1">
-                    <NavLink to="/" className={navLinkClass}>
+                    <NavLink to="/" end className={navLinkClass}>
                         <LayoutDashboard size={18} />
                         Overview
                     </NavLink>

@@ -35,7 +35,7 @@ class ImageCatalogResourceTest {
 
     @BeforeAll
     static void startImageApiServer() throws IOException {
-        imageApiServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 18090), 0);
+        imageApiServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 18095), 0);
         imageApiServer.createContext("/api/images", ImageCatalogResourceTest::handleImageCatalogRequest);
         imageApiServer.start();
     }
