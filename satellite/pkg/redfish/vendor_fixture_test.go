@@ -3,6 +3,7 @@ package redfish
 import (
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -152,7 +153,7 @@ func newFixtureTLSServer(t *testing.T, fixtures map[string]map[string]any, usern
 	t.Helper()
 
 	expectedAuthorization := "Basic " + base64.StdEncoding.EncodeToString([]byte(username+":"+password))
-	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.Header.Get("Authorization") != expectedAuthorization {
 			writer.Header().Set("WWW-Authenticate", `Basic realm="redfish-fixture"`)
 			writer.WriteHeader(http.StatusUnauthorized)
@@ -170,7 +171,18 @@ func newFixtureTLSServer(t *testing.T, fixtures map[string]map[string]any, usern
 		if err := json.NewEncoder(writer).Encode(payload); err != nil {
 			t.Fatalf("encode fixture payload: %v", err)
 		}
-	}))
+	})
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen tcp4: %v", err)
+	}
+	server := &httptest.Server{
+		Listener: listener,
+		Config: &http.Server{
+			Handler: handler,
+		},
+	}
+	server.StartTLS()
 	t.Cleanup(server.Close)
 	return server
 }

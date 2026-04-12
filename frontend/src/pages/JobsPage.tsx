@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GlassCard } from '../components/GlassCard';
 import { fetchJobs, type Job } from '../api/client';
@@ -10,15 +10,21 @@ export const JobsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const { lastEvent } = useWebSocketContext();
 
-    const refreshJobsRef = useRef<() => Promise<void>>(undefined);
-    refreshJobsRef.current = async () => {
+    const refreshJobs = useCallback(async () => {
         setLoading(true);
-        const data = await fetchJobs();
-        setJobs(data);
-        setLoading(false);
-    };
+        try {
+            const data = await fetchJobs();
+            setJobs(data);
+        } catch (error) {
+            console.error('Failed to refresh jobs', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-    const loadJobs = useCallback(() => { void refreshJobsRef.current?.(); }, []);
+    const loadJobs = useEffectEvent(() => {
+        void refreshJobs();
+    });
 
     useEffect(() => {
         void loadJobs();
@@ -28,13 +34,13 @@ export const JobsPage: React.FC = () => {
         return () => {
             clearInterval(interval);
         };
-    }, [loadJobs]);
+    }, []);
 
     useEffect(() => {
         if (lastEvent?.type === 'SCHEDULE_EVENT' || lastEvent?.type === 'JOB_STATUS') {
             void loadJobs();
         }
-    }, [lastEvent, loadJobs]);
+    }, [lastEvent]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -55,7 +61,7 @@ export const JobsPage: React.FC = () => {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => void loadJobs()}
+                        onClick={() => void refreshJobs()}
                         className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white transition-colors"
                     >
                         <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} />

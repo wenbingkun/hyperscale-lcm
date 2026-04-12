@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { parseJwt } from '../jwt';
 
 interface User {
     username: string;
@@ -21,34 +22,6 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const TOKEN_KEY = 'lcm_auth_token';
 const USER_KEY = 'lcm_auth_user';
-
-/** 解析 JWT payload（不验证签名，仅解码） */
-export function parseJwt(token: string): Record<string, unknown> | null {
-    try {
-        const parts = token.split('.');
-        if (parts.length < 3 || !parts[1]) {
-            throw new Error('Invalid JWT format: expected header.payload.signature');
-        }
-
-        let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-        const remainder = base64.length % 4;
-        if (remainder === 2) {
-            base64 += '==';
-        } else if (remainder === 3) {
-            base64 += '=';
-        } else if (remainder !== 0) {
-            throw new Error('Invalid base64url payload length');
-        }
-
-        return JSON.parse(atob(base64));
-    } catch (error) {
-        if (import.meta.env.DEV) {
-            // 仅在开发环境输出详细诊断，避免生产环境噪音
-            console.debug('Failed to parse JWT payload', { error, tokenPreview: token.slice(0, 24) });
-        }
-        return null;
-    }
-}
 
 /** 检查 Token 是否过期 */
 function isTokenExpired(token: string): boolean {

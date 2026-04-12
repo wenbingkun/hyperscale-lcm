@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { AuthProvider, parseJwt, useAuth } from './AuthContext';
+import { AuthProvider, useAuth } from './AuthContext';
+import { parseJwt } from '../jwt';
 
 function createJwt(overrides: Record<string, unknown> = {}) {
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
