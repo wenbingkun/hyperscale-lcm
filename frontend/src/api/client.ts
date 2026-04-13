@@ -100,6 +100,56 @@ export interface DiscoveredDevice {
     tenantId?: string;
 }
 
+export interface BmcCapabilitySnapshot {
+    deviceId: string;
+    ipAddress: string;
+    bmcAddress?: string;
+    manufacturer?: string;
+    model?: string;
+    recommendedRedfishTemplate?: string;
+    redfishAuthModeOverride?: string;
+    lastSuccessfulAuthMode?: string;
+    lastAuthAttemptAt?: string;
+    lastAuthFailureCode?: string;
+    lastAuthFailureReason?: string;
+    lastCapabilityProbeAt?: string;
+    capabilities?: Record<string, unknown>;
+}
+
+export interface BmcRotationResult {
+    deviceId: string;
+    status: 'SUCCESS' | 'SKIPPED' | 'FAILURE';
+    message: string;
+}
+
+export const BMC_POWER_ACTIONS = [
+    'On',
+    'ForceOff',
+    'GracefulShutdown',
+    'GracefulRestart',
+    'ForceRestart',
+] as const;
+
+export type BmcPowerAction = (typeof BMC_POWER_ACTIONS)[number];
+
+export interface BmcPowerActionRequest {
+    action: BmcPowerAction;
+    systemId?: string;
+}
+
+export interface BmcPowerActionResult {
+    status: 'COMPLETED' | 'ACCEPTED' | 'DRY_RUN' | 'BAD_REQUEST' | 'NOT_FOUND' | 'FAILURE';
+    action?: string;
+    systemId?: string;
+    targetUri?: string;
+    authMode?: string;
+    taskLocation?: string;
+    allowedValues?: string[];
+    message?: string;
+    replayed?: boolean;
+    failureCode?: string;
+}
+
 export interface DiscoveryCountResponse {
     count: number;
 }
@@ -227,6 +277,43 @@ export interface JobRequest {
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const TOKEN_KEY = 'lcm_auth_token';
 
+async function safeJson<T>(response: Response): Promise<T | null> {
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+        return null;
+    }
+    try {
+        return await response.json() as T;
+    } catch {
+        return null;
+    }
+}
+
+async function readApiError(response: Response, fallback: string): Promise<string> {
+    const payload = await safeJson<{ message?: string; code?: string }>(response);
+    if (payload?.message) {
+        return payload.message;
+    }
+
+    try {
+        const text = await response.text();
+        if (text.trim()) {
+            return text;
+        }
+    } catch {
+        // ignore text parsing fallback failures
+    }
+
+    return `${fallback}: ${response.statusText}`;
+}
+
+function createIdempotencyKey(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `bmc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 /**
  * 获取带 Authorization 头的通用 headers
  */
@@ -309,11 +396,72 @@ export async function refreshDiscoveryClaimPlan(id: string): Promise<void> {
     }
 }
 
-export async function executeDiscoveryClaim(id: string): Promise<void> {
-    const response = await apiFetch(`${API_BASE}/api/discovery/${id}/claim`, { method: 'POST' });
+export async function fetchBmcCapabilities(id: string): Promise<BmcCapabilitySnapshot> {
+    const response = await apiFetch(`${API_BASE}/api/bmc/devices/${id}/capabilities`);
     if (!response.ok) {
-        throw new Error(`Failed to execute claim: ${response.statusText}`);
+        throw new Error(await readApiError(response, 'Failed to load BMC capabilities'));
     }
+    return await response.json();
+}
+
+export async function executeBmcClaim(id: string): Promise<DiscoveredDevice> {
+    const response = await apiFetch(`${API_BASE}/api/bmc/devices/${id}/claim`, { method: 'POST' });
+    if (!response.ok) {
+        throw new Error(await readApiError(response, 'Failed to execute BMC claim'));
+    }
+    return await response.json();
+}
+
+export async function rotateBmcCredentials(id: string): Promise<BmcRotationResult> {
+    const response = await apiFetch(`${API_BASE}/api/bmc/devices/${id}/rotate-credentials`, { method: 'POST' });
+    if (response.status === 304) {
+        return {
+            deviceId: id,
+            status: 'SKIPPED',
+            message: 'Credential rotation was skipped because no managed-account update was required.',
+        };
+    }
+    if (!response.ok) {
+        throw new Error(await readApiError(response, 'Failed to rotate BMC credentials'));
+    }
+    const payload = await safeJson<BmcRotationResult>(response);
+    return payload ?? {
+        deviceId: id,
+        status: 'SUCCESS',
+        message: 'BMC credential rotation completed.',
+    };
+}
+
+export async function executeBmcPowerAction(
+    id: string,
+    request: BmcPowerActionRequest,
+    options?: { dryRun?: boolean; idempotencyKey?: string },
+): Promise<BmcPowerActionResult> {
+    const dryRun = options?.dryRun ?? false;
+    const response = await apiFetch(`${API_BASE}/api/bmc/devices/${id}/power-actions?dryRun=${dryRun}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': options?.idempotencyKey ?? createIdempotencyKey(),
+        },
+        body: JSON.stringify(request),
+    });
+
+    const payload = await safeJson<BmcPowerActionResult>(response);
+    if (payload) {
+        return payload;
+    }
+    if (!response.ok) {
+        throw new Error(await readApiError(response, 'Failed to execute BMC power action'));
+    }
+    return {
+        status: response.status === 202 ? 'ACCEPTED' : 'COMPLETED',
+        message: dryRun ? 'Dry run completed.' : 'BMC power action completed.',
+    };
+}
+
+export async function executeDiscoveryClaim(id: string): Promise<void> {
+    await executeBmcClaim(id);
 }
 
 export async function fetchCredentialProfiles(): Promise<CredentialProfile[]> {

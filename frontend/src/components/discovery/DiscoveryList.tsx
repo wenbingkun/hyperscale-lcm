@@ -1,4 +1,9 @@
 import React from 'react';
+import type {
+    BmcCapabilitySnapshot,
+    BmcPowerAction,
+    BmcPowerActionResult,
+} from '../../api/client';
 import { Monitor, Search, Wifi } from 'lucide-react';
 import type { DiscoveredDevice } from '../../api/client';
 import { GlassCard } from '../GlassCard';
@@ -12,16 +17,30 @@ interface DiscoveryListProps {
     authFilter: string;
     claimFilter: string;
     busyAction: string | null;
+    canManageBmc: boolean;
+    powerActions: readonly BmcPowerAction[];
+    powerPreviewByDevice: Record<string, BmcPowerActionResult>;
+    powerActionByDevice: Record<string, BmcPowerAction>;
+    powerSystemIdByDevice: Record<string, string>;
+    powerConfirmationByDevice: Record<string, string>;
     formatDate: (value?: string) => string;
     getStatusColor: (status?: string) => string;
     getAuthColor: (status?: string) => string;
     getClaimColor: (status?: string) => string;
+    getCapabilitySnapshot: (device: DiscoveredDevice) => BmcCapabilitySnapshot | null;
     onSearchQueryChange: (value: string) => void;
     onStatusFilterChange: (value: string) => void;
     onAuthFilterChange: (value: string) => void;
     onClaimFilterChange: (value: string) => void;
     onRefreshClaimPlan: (id: string) => void;
     onExecuteClaim: (id: string) => void;
+    onInspectBmc: (id: string) => void;
+    onRotateBmcCredentials: (id: string) => void;
+    onPreviewPowerAction: (id: string) => void;
+    onExecutePowerAction: (id: string) => void;
+    onPowerActionChange: (id: string, action: BmcPowerAction) => void;
+    onPowerSystemIdChange: (id: string, value: string) => void;
+    onPowerConfirmationChange: (id: string, value: string) => void;
     onApproveDevice: (id: string) => void;
     onRejectDevice: (id: string) => void;
 }
@@ -34,16 +53,30 @@ export const DiscoveryList: React.FC<DiscoveryListProps> = ({
     authFilter,
     claimFilter,
     busyAction,
+    canManageBmc,
+    powerActions,
+    powerPreviewByDevice,
+    powerActionByDevice,
+    powerSystemIdByDevice,
+    powerConfirmationByDevice,
     formatDate,
     getStatusColor,
     getAuthColor,
     getClaimColor,
+    getCapabilitySnapshot,
     onSearchQueryChange,
     onStatusFilterChange,
     onAuthFilterChange,
     onClaimFilterChange,
     onRefreshClaimPlan,
     onExecuteClaim,
+    onInspectBmc,
+    onRotateBmcCredentials,
+    onPreviewPowerAction,
+    onExecutePowerAction,
+    onPowerActionChange,
+    onPowerSystemIdChange,
+    onPowerConfirmationChange,
     onApproveDevice,
     onRejectDevice,
 }) => {
@@ -169,9 +202,23 @@ export const DiscoveryList: React.FC<DiscoveryListProps> = ({
                                     <DiscoveryApprovalPanel
                                         device={device}
                                         busyAction={busyAction}
+                                        canManageBmc={canManageBmc}
+                                        powerActions={powerActions}
+                                        capabilitySnapshot={getCapabilitySnapshot(device)}
+                                        powerPreview={powerPreviewByDevice[device.id]}
+                                        selectedPowerAction={powerActionByDevice[device.id] ?? powerActions[0] ?? 'GracefulRestart'}
+                                        powerSystemId={powerSystemIdByDevice[device.id] ?? ''}
+                                        powerConfirmation={powerConfirmationByDevice[device.id] ?? ''}
                                         formatDate={formatDate}
                                         onRefreshClaimPlan={onRefreshClaimPlan}
                                         onExecuteClaim={onExecuteClaim}
+                                        onInspectBmc={onInspectBmc}
+                                        onRotateBmcCredentials={onRotateBmcCredentials}
+                                        onPreviewPowerAction={onPreviewPowerAction}
+                                        onExecutePowerAction={onExecutePowerAction}
+                                        onPowerActionChange={onPowerActionChange}
+                                        onPowerSystemIdChange={onPowerSystemIdChange}
+                                        onPowerConfirmationChange={onPowerConfirmationChange}
                                         onApproveDevice={onApproveDevice}
                                         onRejectDevice={onRejectDevice}
                                     />

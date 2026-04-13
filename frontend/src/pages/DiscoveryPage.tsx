@@ -3,16 +3,24 @@ import { Play, RefreshCw, Search, Square } from 'lucide-react';
 import {
     apiFetch,
     API_BASE,
+    type BmcCapabilitySnapshot,
+    BMC_POWER_ACTIONS,
+    type BmcPowerAction,
+    type BmcPowerActionResult,
     type DiscoveredDevice,
     approveDiscoveredDevice,
-    executeDiscoveryClaim,
+    executeBmcClaim,
+    executeBmcPowerAction,
+    fetchBmcCapabilities,
     fetchDiscoveredDevices,
     fetchPendingDiscoveryCount,
     refreshDiscoveryClaimPlan,
     rejectDiscoveredDevice,
+    rotateBmcCredentials,
 } from '../api/client';
 import { GlassCard } from '../components/GlassCard';
 import { DiscoveryList } from '../components/discovery/DiscoveryList';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ScanJob {
     id: string;
@@ -24,7 +32,60 @@ interface ScanJob {
     discoveredCount: number;
 }
 
+interface ActionNotice {
+    tone: 'success' | 'error' | 'info';
+    message: string;
+}
+
+const DEFAULT_POWER_ACTION: BmcPowerAction = 'GracefulRestart';
+
+function hasBmcContext(device: DiscoveredDevice): boolean {
+    return device.inferredType === 'BMC'
+        || Boolean(
+            device.bmcAddress
+            || device.recommendedRedfishTemplate
+            || device.bmcCapabilities
+            || device.lastCapabilityProbeAt
+            || device.lastSuccessfulAuthMode
+            || device.lastAuthFailureCode,
+        );
+}
+
+function toCapabilitySnapshot(device: DiscoveredDevice): BmcCapabilitySnapshot | null {
+    if (!hasBmcContext(device)) {
+        return null;
+    }
+    return {
+        deviceId: device.id,
+        ipAddress: device.ipAddress,
+        bmcAddress: device.bmcAddress,
+        manufacturer: device.manufacturerHint,
+        model: device.modelHint,
+        recommendedRedfishTemplate: device.recommendedRedfishTemplate,
+        redfishAuthModeOverride: device.redfishAuthModeOverride,
+        lastSuccessfulAuthMode: device.lastSuccessfulAuthMode,
+        lastAuthAttemptAt: device.lastAuthAttemptAt,
+        lastAuthFailureCode: device.lastAuthFailureCode,
+        lastAuthFailureReason: device.lastAuthFailureReason,
+        lastCapabilityProbeAt: device.lastCapabilityProbeAt,
+        capabilities: device.bmcCapabilities,
+    };
+}
+
+function noticeToneForPowerResult(result: BmcPowerActionResult): ActionNotice['tone'] {
+    return result.status === 'DRY_RUN' ? 'info' : result.status === 'COMPLETED' || result.status === 'ACCEPTED' ? 'success' : 'error';
+}
+
+function formatPowerResult(result: BmcPowerActionResult, action: BmcPowerAction): string {
+    const headline = result.message?.trim() || `Power action ${action} returned ${result.status}.`;
+    const target = result.systemId ? ` system=${result.systemId}` : '';
+    const authMode = result.authMode ? ` via ${result.authMode}` : '';
+    const suffix = result.replayed ? ' Cached idempotent result reused.' : '';
+    return `${headline}${target}${authMode}.${suffix}`.trim();
+}
+
 export const DiscoveryPage: React.FC = () => {
+    const { user } = useAuth();
     const [devices, setDevices] = useState<DiscoveredDevice[]>([]);
     const [loading, setLoading] = useState(true);
     const [pendingCount, setPendingCount] = useState(0);
@@ -38,7 +99,14 @@ export const DiscoveryPage: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [authFilter, setAuthFilter] = useState('ALL');
     const [claimFilter, setClaimFilter] = useState('ALL');
+    const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+    const [capabilitySnapshots, setCapabilitySnapshots] = useState<Record<string, BmcCapabilitySnapshot>>({});
+    const [powerActionByDevice, setPowerActionByDevice] = useState<Record<string, BmcPowerAction>>({});
+    const [powerSystemIdByDevice, setPowerSystemIdByDevice] = useState<Record<string, string>>({});
+    const [powerPreviewByDevice, setPowerPreviewByDevice] = useState<Record<string, BmcPowerActionResult>>({});
+    const [powerConfirmationByDevice, setPowerConfirmationByDevice] = useState<Record<string, string>>({});
 
+    const canManageBmc = user?.roles.includes('ADMIN') ?? false;
     const readyToClaimCount = devices.filter((device) => device.claimStatus === 'READY_TO_CLAIM').length;
     const authPendingCount = devices.filter((device) => device.authStatus === 'AUTH_PENDING').length;
     const filteredDevices = devices.filter((device) => {
@@ -155,32 +223,156 @@ export const DiscoveryPage: React.FC = () => {
         }
     };
 
-    const runDeviceAction = async (actionKey: string, operation: () => Promise<void>) => {
+    const runDeviceAction = async <T,>(
+        actionKey: string,
+        operation: () => Promise<T>,
+        options?: {
+            refreshAfter?: boolean;
+            afterSuccess?: (result: T) => void | Promise<void>;
+            onSuccess?: (result: T) => ActionNotice | null;
+        },
+    ): Promise<T | null> => {
         setBusyAction(actionKey);
         try {
-            await operation();
-            await Promise.all([loadDevices(), loadPendingCount()]);
+            const result = await operation();
+            if (options?.afterSuccess) {
+                await options.afterSuccess(result);
+            }
+            if (options?.refreshAfter ?? true) {
+                await Promise.all([loadDevices(), loadPendingCount()]);
+            }
+            const notice = options?.onSuccess?.(result);
+            if (notice) {
+                setActionNotice(notice);
+            }
+            return result;
         } catch (error) {
             console.error(`Failed to run device action ${actionKey}:`, error);
+            setActionNotice({
+                tone: 'error',
+                message: error instanceof Error ? error.message : `Failed to run device action ${actionKey}.`,
+            });
+            return null;
         } finally {
             setBusyAction(null);
         }
     };
 
     const approveDevice = async (id: string) => {
-        await runDeviceAction(`approve:${id}`, () => approveDiscoveredDevice(id));
+        await runDeviceAction(`approve:${id}`, () => approveDiscoveredDevice(id), {
+            onSuccess: () => ({ tone: 'success', message: `Device ${id} approved.` }),
+        });
     };
 
     const rejectDevice = async (id: string) => {
-        await runDeviceAction(`reject:${id}`, () => rejectDiscoveredDevice(id));
+        await runDeviceAction(`reject:${id}`, () => rejectDiscoveredDevice(id), {
+            onSuccess: () => ({ tone: 'info', message: `Device ${id} rejected.` }),
+        });
     };
 
     const refreshClaimPlan = async (id: string) => {
-        await runDeviceAction(`replan:${id}`, () => refreshDiscoveryClaimPlan(id));
+        await runDeviceAction(`replan:${id}`, () => refreshDiscoveryClaimPlan(id), {
+            onSuccess: () => ({ tone: 'info', message: `Claim plan refreshed for ${id}.` }),
+        });
     };
 
     const executeClaim = async (id: string) => {
-        await runDeviceAction(`claim:${id}`, () => executeDiscoveryClaim(id));
+        await runDeviceAction(`claim:${id}`, () => executeBmcClaim(id), {
+            onSuccess: (device) => ({
+                tone: 'success',
+                message: device.claimMessage || `BMC claim completed for ${device.ipAddress}.`,
+            }),
+        });
+    };
+
+    const inspectBmc = async (id: string) => {
+        await runDeviceAction(`inspect:${id}`, () => fetchBmcCapabilities(id), {
+            refreshAfter: false,
+            afterSuccess: (snapshot) => {
+                setCapabilitySnapshots((current) => ({ ...current, [id]: snapshot }));
+            },
+            onSuccess: (snapshot) => ({
+                tone: 'info',
+                message: `Loaded BMC snapshot for ${snapshot.ipAddress}.`,
+            }),
+        });
+    };
+
+    const rotateCredentials = async (id: string) => {
+        await runDeviceAction(`rotate:${id}`, () => rotateBmcCredentials(id), {
+            onSuccess: (result) => ({
+                tone: result.status === 'SUCCESS' ? 'success' : 'info',
+                message: result.message,
+            }),
+        });
+    };
+
+    const previewPowerAction = async (id: string) => {
+        const action = powerActionByDevice[id] ?? DEFAULT_POWER_ACTION;
+        const systemId = powerSystemIdByDevice[id]?.trim() || undefined;
+        await runDeviceAction(
+            `power-preview:${id}`,
+            () => executeBmcPowerAction(id, { action, systemId }, { dryRun: true }),
+            {
+                refreshAfter: false,
+                afterSuccess: (result) => {
+                    setPowerPreviewByDevice((current) => ({ ...current, [id]: result }));
+                    setPowerConfirmationByDevice((current) => ({ ...current, [id]: '' }));
+                },
+                onSuccess: (result) => ({
+                    tone: noticeToneForPowerResult(result),
+                    message: formatPowerResult(result, action),
+                }),
+            },
+        );
+    };
+
+    const executePowerAction = async (id: string) => {
+        const action = powerActionByDevice[id] ?? DEFAULT_POWER_ACTION;
+        const systemId = powerSystemIdByDevice[id]?.trim() || undefined;
+        await runDeviceAction(
+            `power-execute:${id}`,
+            () => executeBmcPowerAction(id, { action, systemId }),
+            {
+                refreshAfter: false,
+                afterSuccess: (result) => {
+                    setPowerPreviewByDevice((current) => ({ ...current, [id]: result }));
+                    setPowerConfirmationByDevice((current) => ({ ...current, [id]: '' }));
+                },
+                onSuccess: (result) => ({
+                    tone: noticeToneForPowerResult(result),
+                    message: formatPowerResult(result, action),
+                }),
+            },
+        );
+    };
+
+    const updatePowerAction = (id: string, action: BmcPowerAction) => {
+        setPowerActionByDevice((current) => ({ ...current, [id]: action }));
+        setPowerPreviewByDevice((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+        });
+        setPowerConfirmationByDevice((current) => ({ ...current, [id]: '' }));
+    };
+
+    const updatePowerSystemId = (id: string, value: string) => {
+        setPowerSystemIdByDevice((current) => ({ ...current, [id]: value }));
+        setPowerPreviewByDevice((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+        });
+        setPowerConfirmationByDevice((current) => ({ ...current, [id]: '' }));
+    };
+
+    const updatePowerConfirmation = (id: string, value: string) => {
+        setPowerConfirmationByDevice((current) => ({ ...current, [id]: value }));
+    };
+
+    const getCapabilitySnapshot = (device: DiscoveredDevice): BmcCapabilitySnapshot | null => {
+        return capabilitySnapshots[device.id] ?? toCapabilitySnapshot(device);
     };
 
     const getStatusColor = (status?: string) => {
@@ -263,6 +455,18 @@ export const DiscoveryPage: React.FC = () => {
                 <div className="rounded-lg border border-red-500/30 bg-red-500/15 px-4 py-3 text-sm text-red-400">
                     {loadError}
                     <button onClick={() => void loadOverview()} className="ml-3 underline hover:no-underline">Retry</button>
+                </div>
+            )}
+
+            {actionNotice && (
+                <div className={`rounded-lg border px-4 py-3 text-sm ${
+                    actionNotice.tone === 'success'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                        : actionNotice.tone === 'error'
+                            ? 'border-red-500/30 bg-red-500/15 text-red-300'
+                            : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+                }`}>
+                    {actionNotice.message}
                 </div>
             )}
 
@@ -360,16 +564,30 @@ export const DiscoveryPage: React.FC = () => {
                 authFilter={authFilter}
                 claimFilter={claimFilter}
                 busyAction={busyAction}
+                canManageBmc={canManageBmc}
+                powerActions={BMC_POWER_ACTIONS}
+                powerPreviewByDevice={powerPreviewByDevice}
+                powerActionByDevice={powerActionByDevice}
+                powerSystemIdByDevice={powerSystemIdByDevice}
+                powerConfirmationByDevice={powerConfirmationByDevice}
                 formatDate={formatDate}
                 getStatusColor={getStatusColor}
                 getAuthColor={getAuthColor}
                 getClaimColor={getClaimColor}
+                getCapabilitySnapshot={getCapabilitySnapshot}
                 onSearchQueryChange={setSearchQuery}
                 onStatusFilterChange={setStatusFilter}
                 onAuthFilterChange={setAuthFilter}
                 onClaimFilterChange={setClaimFilter}
                 onRefreshClaimPlan={(id) => void refreshClaimPlan(id)}
                 onExecuteClaim={(id) => void executeClaim(id)}
+                onInspectBmc={(id) => void inspectBmc(id)}
+                onRotateBmcCredentials={(id) => void rotateCredentials(id)}
+                onPreviewPowerAction={(id) => void previewPowerAction(id)}
+                onExecutePowerAction={(id) => void executePowerAction(id)}
+                onPowerActionChange={updatePowerAction}
+                onPowerSystemIdChange={updatePowerSystemId}
+                onPowerConfirmationChange={updatePowerConfirmation}
                 onApproveDevice={(id) => void approveDevice(id)}
                 onRejectDevice={(id) => void rejectDevice(id)}
             />
