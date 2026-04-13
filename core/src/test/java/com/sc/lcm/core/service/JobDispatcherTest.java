@@ -44,6 +44,21 @@ class JobDispatcherTest {
     }
 
     @Test
+    void dispatchFallsBackToAssignedNodeIdWhenTransientNodeIsMissing() {
+        Job job = new Job("job-node-id", 4, 8, 1, "A100");
+        job.setAssignedNodeId("node-from-kafka");
+
+        dispatcher.dispatch(job);
+
+        verify(streamRegistry).sendCommand(
+                eq("node-from-kafka"),
+                eq("job-node-id"),
+                eq("EXEC_DOCKER"),
+                eq("hello-world"),
+                anyMap());
+    }
+
+    @Test
     void dispatchUsesCustomDockerImageWhenProvided() {
         Job job = new Job("job-docker", 4, 8, 1, "A100");
         job.setAssignedNode(new Node("node-2", 32, 128, 4, "A100"));

@@ -25,6 +25,7 @@ import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 作业执行服务 (P6-1, P6-3)
@@ -202,6 +203,26 @@ public class JobExecutionService {
             return Uni.createFrom().voidItem();
         }
 
+        return processJobStatusCallback(callback, callbackStatus, message);
+    }
+
+    public Uni<Void> processJobStatusCallback(JobStatusCallback callback) {
+        if (callback == null) {
+            return Uni.createFrom().voidItem();
+        }
+
+        JobStatus callbackStatus;
+        try {
+            callbackStatus = JobStatus.valueOf(callback.status());
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid direct job status callback {}, ignoring", callback.status(), e);
+            return Uni.createFrom().voidItem();
+        }
+
+        return processJobStatusCallback(callback, callbackStatus, null);
+    }
+
+    private Uni<Void> processJobStatusCallback(JobStatusCallback callback, JobStatus callbackStatus, String rawMessage) {
         log.info("Received status callback for job {}: {}", callback.jobId(), callback.status());
 
         JobStatus finalCallbackStatus = callbackStatus;
@@ -225,14 +246,28 @@ public class JobExecutionService {
                                 if (job == null) {
                                     log.warn("Job not found: {}, routing original message to DLQ",
                                             callback.jobId());
-                                    dlqEmitter.send(message);
+                                    if (rawMessage != null) {
+                                        dlqEmitter.send(rawMessage);
+                                    }
+                                    return Uni.createFrom().nullItem();
+                                }
+
+                                String effectiveNodeId = callback.nodeId() == null || callback.nodeId().isBlank()
+                                        ? job.getAssignedNodeId()
+                                        : callback.nodeId();
+                                if (job.getStatus() == finalCallbackStatus
+                                        && Objects.equals(job.getAssignedNodeId(), effectiveNodeId)
+                                        && Objects.equals(job.getExitCode(), callback.exitCode())
+                                        && Objects.equals(job.getErrorMessage(), callback.errorMessage())
+                                        && Objects.equals(job.getCompletedAt(), callback.completedAt())) {
+                                    log.debug("Skipping duplicate status callback for job {}", callback.jobId());
                                     return Uni.createFrom().nullItem();
                                 }
 
                                 // 更新作业状态
                                 job.setStatus(finalCallbackStatus);
-                                if (callback.nodeId() != null && !callback.nodeId().isBlank()) {
-                                    job.setAssignedNodeId(callback.nodeId());
+                                if (effectiveNodeId != null && !effectiveNodeId.isBlank()) {
+                                    job.setAssignedNodeId(effectiveNodeId);
                                 }
                                 job.setExitCode(callback.exitCode());
                                 job.setErrorMessage(callback.errorMessage());
@@ -284,7 +319,9 @@ public class JobExecutionService {
                     }
                 }).onFailure().invoke(err -> {
                     log.error("Database or business logic failure processing callback, routing to DLQ", err);
-                    dlqEmitter.send(message);
+                    if (rawMessage != null) {
+                        dlqEmitter.send(rawMessage);
+                    }
                 }).onFailure().recoverWithNull()
                 .replaceWithVoid()
                 .onTermination().invoke(() -> callbackSpan.end());

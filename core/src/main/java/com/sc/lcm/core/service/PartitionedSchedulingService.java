@@ -7,7 +7,6 @@ import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
 import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
-import io.vertx.mutiny.core.Vertx;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -47,9 +46,6 @@ public class PartitionedSchedulingService {
     @Inject
     @Channel("job-queue-out")
     Emitter<Job> jobEmitter;
-
-    @Inject
-    Vertx vertx;
 
     /** 并行求解的线程池 */
     private final ExecutorService zoneExecutor = Executors.newFixedThreadPool(
@@ -147,10 +143,16 @@ public class PartitionedSchedulingService {
                     try {
                         jobExecutionService.recordScheduledDispatchBlocking(originalJob.getId(), assignedNode.getId());
                         Job dispatchJob = cloneJob(originalJob);
-                        dispatchJob.setAssignedNode(assignedNode);
+                        dispatchJob.setAssignedNode(null);
                         dispatchJob.setAssignedNodeId(assignedNode.getId());
                         dispatchJob.setStatus(Job.JobStatus.SCHEDULED);
-                        vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
+                        jobEmitter.send(dispatchJob).whenComplete((ignored, error) -> {
+                            if (error != null) {
+                                log.error("Failed to enqueue scheduled job {}", originalJob.getId(), error);
+                            } else {
+                                log.info("Queued scheduled job {} for node {}", originalJob.getId(), assignedNode.getId());
+                            }
+                        });
                     } catch (RuntimeException error) {
                         log.error("Failed to persist scheduled state for job {}", originalJob.getId(), error);
                     }

@@ -84,6 +84,10 @@ java {
 
 test {
     systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
+    jacoco {
+        excludeClassLoaders = ['*QuarkusClassLoader']
+        destinationFile = layout.buildDirectory.file('jacoco-quarkus.exec').get().asFile
+    }
     finalizedBy jacocoTestReport
 }
 compileJava {
@@ -110,10 +114,7 @@ def coverageExcludes = [
     'com/sc/lcm/core/grpc/**'
 ]
 
-def jacocoExecutionDataFiles = files(fileTree(buildDir) {
-    include 'jacoco/*.exec'
-    include 'jacoco-quarkus.exec'
-})
+def jacocoExecutionDataFiles = files(layout.buildDirectory.file('jacoco-quarkus.exec'))
 
 def hasJacocoExecutionData = {
     jacocoExecutionDataFiles.files.any { it.exists() }

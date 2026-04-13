@@ -6,7 +6,6 @@ import com.sc.lcm.core.domain.Node;
 import com.sc.lcm.core.domain.Satellite;
 import io.quarkus.hibernate.reactive.panache.common.WithSession;
 import io.smallrye.mutiny.Uni;
-import io.vertx.mutiny.core.Vertx;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.ArrayList;
@@ -35,9 +34,6 @@ public class SchedulingService {
     @Inject
     @Channel("job-queue-out")
     Emitter<Job> jobEmitter;
-
-    @Inject
-    Vertx vertx;
 
     /**
      * 响应式加载问题数据
@@ -74,7 +70,15 @@ public class SchedulingService {
                 jobExecutionService.recordScheduledDispatchBlocking(job.getId(), nodeId);
                 job.setStatus(Job.JobStatus.SCHEDULED);
                 Job dispatchJob = copyJob(job);
-                vertx.getDelegate().runOnContext(ignored -> jobEmitter.send(dispatchJob));
+                dispatchJob.setAssignedNode(null);
+                dispatchJob.setAssignedNodeId(nodeId);
+                jobEmitter.send(dispatchJob).whenComplete((ignored, error) -> {
+                    if (error != null) {
+                        log.error("Failed to enqueue scheduled job {}", job.getId(), error);
+                    } else {
+                        log.info("Queued scheduled job {} for node {}", job.getId(), nodeId);
+                    }
+                });
             } catch (RuntimeException error) {
                 log.error("Failed to persist scheduled state for job {}", job.getId(), error);
             }

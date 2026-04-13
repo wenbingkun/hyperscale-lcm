@@ -23,7 +23,7 @@ public class JobStatusForwarder {
     @Inject
     ObjectMapper objectMapper;
 
-    public void forwardStatus(String jobId, String nodeId, String statusName, int exitCode, String message,
+    public JobStatusCallback forwardStatus(String jobId, String nodeId, String statusName, int exitCode, String message,
             Map<String, String> traceContextMap) {
         try {
             JobStatusCallback callback = new JobStatusCallback(
@@ -32,8 +32,20 @@ public class JobStatusForwarder {
                     traceContextMap == null || traceContextMap.isEmpty() ? null : Map.copyOf(traceContextMap));
             String json = objectMapper.writeValueAsString(callback);
             jobStatusEmitter.send(json);
+            return callback;
         } catch (Exception e) {
             LOG.error("Failed to forward status to Kafka", e);
+            return new JobStatusCallback(
+                    jobId,
+                    nodeId,
+                    statusName,
+                    exitCode,
+                    message,
+                    "",
+                    "",
+                    0L,
+                    LocalDateTime.now(),
+                    traceContextMap == null || traceContextMap.isEmpty() ? null : Map.copyOf(traceContextMap));
         }
     }
 }

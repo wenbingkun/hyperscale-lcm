@@ -31,12 +31,12 @@ public class JobDispatcher {
      */
     @Incoming("job-queue-in")
     public void dispatch(Job job) {
-        if (job == null || job.getAssignedNode() == null) {
-            LOG.debug("Ignoring invalid job from Kafka");
+        String nodeId = resolveTargetNodeId(job);
+        if (job == null || nodeId == null) {
+            LOG.warn("Ignoring invalid job from Kafka because no assigned node information was present");
             return;
         }
 
-        String nodeId = job.getAssignedNode().getId();
         LOG.infof("📨 [Kafka -> Dispatcher] Processing Job %s for Node %s", job.getId(), nodeId);
 
         ExecutionCommand executionCommand = resolveExecutionCommand(job);
@@ -52,6 +52,23 @@ public class JobDispatcher {
                 executionCommand.commandType(),
                 executionCommand.payload(),
                 traceContext);
+    }
+
+    private String resolveTargetNodeId(Job job) {
+        if (job == null) {
+            return null;
+        }
+
+        if (job.getAssignedNodeId() != null && !job.getAssignedNodeId().isBlank()) {
+            return job.getAssignedNodeId();
+        }
+
+        if (job.getAssignedNode() != null && job.getAssignedNode().getId() != null
+                && !job.getAssignedNode().getId().isBlank()) {
+            return job.getAssignedNode().getId();
+        }
+
+        return null;
     }
 
     private ExecutionCommand resolveExecutionCommand(Job job) {

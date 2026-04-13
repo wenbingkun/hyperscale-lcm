@@ -7,12 +7,14 @@ import com.sc.lcm.core.grpc.DiscoveryRequest;
 import com.sc.lcm.core.grpc.DiscoveryResponse;
 import com.sc.lcm.core.grpc.HeartbeatRequest;
 import com.sc.lcm.core.grpc.HeartbeatResponse;
+import com.sc.lcm.core.domain.JobStatusCallback;
 import com.sc.lcm.core.grpc.LcmService;
 import com.sc.lcm.core.grpc.RegisterRequest;
 import com.sc.lcm.core.grpc.RegisterResponse;
 import com.sc.lcm.core.grpc.StreamRequest;
 import com.sc.lcm.core.grpc.StreamResponse;
 import com.sc.lcm.core.service.JobStatusForwarder;
+import com.sc.lcm.core.service.JobExecutionService;
 import com.sc.lcm.core.service.DeviceClaimPlanner;
 import com.sc.lcm.core.service.SatelliteRegistrationService;
 import com.sc.lcm.core.service.SatelliteStateCache;
@@ -57,6 +59,9 @@ public class LcmGrpcService implements LcmService {
 
     @Inject
     JobStatusForwarder jobStatusForwarder;
+
+    @Inject
+    JobExecutionService jobExecutionService;
 
     @Inject
     DeviceClaimPlanner deviceClaimPlanner;
@@ -258,13 +263,18 @@ public class LcmGrpcService implements LcmService {
                             log.info("JOB STATUS UPDATE: Job={} Status={} Msg={} Exit={}",
                                     status.getJobId(), status.getStatus(), status.getMessage(), status.getExitCode());
 
-                            jobStatusForwarder.forwardStatus(
+                            JobStatusCallback callback = jobStatusForwarder.forwardStatus(
                                     status.getJobId(),
                                     req.getSatelliteId(),
                                     status.getStatus().name(),
                                     status.getExitCode(),
                                     status.getMessage(),
                                     status.getTraceContextMap());
+                            jobExecutionService.processJobStatusCallback(callback)
+                                    .subscribe().with(
+                                            ignored -> {
+                                            },
+                                            failure -> log.error("Failed to process direct job status callback", failure));
                         } else {
                             if (!req.getSatelliteId().isEmpty()) {
                                 streamRegistry.register(req.getSatelliteId(), emitter);
