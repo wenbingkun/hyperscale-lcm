@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-04-11 (文档职责收敛与 Phase 7 计划对齐)
+> 最后更新: 2026-04-14 (Phase 7 Core 管理面与前端闭环落地)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -104,17 +104,18 @@
 
 ---
 
-## 📅 阶段七：Redfish/BMC 协议深化与硬件准入 🟡 进行中
+## 📅 阶段七：Redfish/BMC 协议深化与硬件准入 🟢 Core 闭环
 **目标**: 在现有 claim / managed-account / 仿真验收基础上，把 Redfish/BMC 从“可验证”推进到“可管理、可准入、可运维”。
 *   **协议与认证深化**:
-    *   [ ] 统一 `session-aware` Redfish 传输层与能力探测策略。
-    *   [ ] 明确 `SESSION_PREFERRED` 默认策略，并支持设备级覆盖。
+    *   [x] 统一 `session-aware` Redfish 传输层与能力探测策略（`RedfishTransport + RedfishSessionManager`，统一承接 GET/POST/PATCH/DELETE 与 401 自动重建）。
+    *   [x] 明确 `SESSION_PREFERRED` 默认策略，并支持设备级覆盖（`DiscoveredDevice.redfishAuthModeOverride` + `CredentialProfile.redfishAuthMode`）。
 *   **BMC 管理平面**:
-    *   [ ] 新增 `/api/bmc/devices/{id}/...` 管理接口，保留旧 discovery 入口兼容一阶段。
-    *   [ ] 引入受控 `power-actions`、审计日志和指标采集。
+    *   [x] 新增 `/api/bmc/devices/{id}/{capabilities,claim,rotate-credentials,power-actions}` 管理接口；旧 `/api/discovery/{id}/...` 入口标记 `@Deprecated(forRemoval=true)` 作薄转发。
+    *   [x] 引入受控 `power-actions`（白名单 + `Idempotency-Key` + 显式 `systemId`）、`AuditLog` BMC 事件类型与 `lcm_bmc_power_action_total` / `lcm_bmc_session_reauth_total` 指标。
+    *   [x] 前端 `DiscoveryPage` 接入 BMC 能力快照、凭据轮换、`dry-run` 预演与 ADMIN 角色强校验。
 *   **采集与验收扩展**:
-    *   [ ] Satellite 补齐 `session-aware` 只读采集能力。
-    *   [ ] 扩展真实硬件准入矩阵，覆盖 OpenBMC 与至少一种商业 BMC。
+    *   [ ] Satellite 补齐 `session-aware` 只读采集能力（**延后到 Phase 8**，Core 侧 `RedfishMockServer.withSessionService()` 已覆盖协议路径）。
+    *   [ ] 扩展真实硬件准入矩阵，覆盖 OpenBMC 与至少一种商业 BMC（框架与样板已就绪，等待实验台数据填入）。
 *   **参考文档**:
     *   [x] 详细方案见 `documentation/REDFISH_BMC_PHASE7_PLAN.md`。
 
@@ -129,9 +130,9 @@
 *   **Redfish/BMC 当前专项计划**: 统一见 `documentation/REDFISH_BMC_PHASE7_PLAN.md`
 
 当前仍在推进或待完成的高优先级事项：
-*   [ ] Phase 7 Redfish/BMC 管理面与 `power-actions`
-*   [ ] 真实硬件 Redfish / BMC 验收扩面
-*   [ ] AlertManager 外部通知通道
+*   [ ] 真实硬件 Redfish / BMC 验收扩面（OpenBMC + 至少一种商业 BMC）
+*   [ ] AlertManager 外部通知通道（邮件 / Slack / PagerDuty）
+*   [ ] Satellite session-aware 只读采集（延后自 Phase 7）
 *   [ ] PXE / iPXE 生产硬化与真实环境验证
 *   [ ] Demo smoke 扩展与 Playwright 浏览器级回归
 

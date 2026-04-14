@@ -92,6 +92,14 @@
   - destructive power action 的真实验收只允许在维护窗口或专用样机执行；默认验收先覆盖 claim、rotate、capability probe。
 - 本次文档收敛只做计划整合，不涉及代码行为变更。
 
+## Implementation Notes (2026-04-14)
+
+- **测试闭环**: 新增 `core/src/test/java/com/sc/lcm/core/api/BmcManagementResourceTest.java`（5 个用例）覆盖 `GET /capabilities` 快照读取（OPERATOR 可读）、OPERATOR 对 `claim / rotate / power-actions` 的 `403` 拒绝、`claim` 返回 `CLAIMED/AUTHENTICATED` 设备、`rotate-credentials` 在 `SKIPPED` 路径下返回 `304`、`power-actions` 返回 `202 + Location + taskLocation` 并校验 `MetricsService.recordBmcPowerAction` 被触发。测试使用 `@InjectMock` 隔离 `BmcClaimWorkflowService / BmcCredentialRotationService / RedfishPowerActionService / AuditService / MetricsService`，通过 JDBC 直接写入 `discovered_devices` 夹具以避免 reactive flush 竞态。
+- **前端管理面接入**: `frontend/src/pages/DiscoveryPage.tsx` 及 `DiscoveryApprovalPanel` 接入 Phase 7 管理面：能力快照面板、凭据轮换、`power-actions` 下拉与 `dry-run` 预演、ADMIN 角色强校验与二次确认；`frontend/src/api/client.ts` 新增 `fetchBmcCapabilities / executeBmcClaim / rotateBmcCredentials / executeBmcPowerAction`，旧 `executeDiscoveryClaim` 薄转发到 `/api/bmc/devices/{id}/claim`；`DiscoveryPage.test.tsx` 补齐 “BMC power execution locked behind ADMIN” 回归。
+- **E2E 与 JaCoCo 阻塞点收口**: `JobDispatcher.resolveTargetNodeId` 优先使用 `assignedNodeId`，避免解绑后 dispatch 取空；`PartitionedSchedulingService` / `SchedulingService` 在发送调度消息前显式置空 `assignedNode` 并只写 `assignedNodeId`，消除 Hibernate Reactive 下的 transient 关联；`LcmGrpcService` 在 gRPC 状态回调路径上直接调用 `JobExecutionService.processJobStatusCallback`，该方法对 `(status, nodeId, exitCode, errorMessage, completedAt)` 做幂等短路，避免与 Kafka 路径重复落库；`core/build.gradle` 将 JaCoCo 输出统一到 `jacoco-quarkus.exec`，消除与 Quarkus 双重插桩的 merge 冲突。合入后 `./gradlew cleanTest check --no-daemon` 在清洁环境下 158/158 通过（含 `E2EIntegrationTest` 2/2）。
+- **开发期环境提示**: 本地如同时运行 `quarkusDev` 与测试 JVM，会共享 `lcm-core-group` Kafka 消费组并互抢 `jobs.scheduled` 消息，导致 `E2EIntegrationTest` 偶发 `TimeoutException`。复现 E2E 前务必停掉 `quarkusDev` 与 `demo-satellite` 容器并清理 `jobs / satellites` 残留行。
+- **待办不变**: Satellite session-aware 只读客户端仍按计划延后到 Phase 8；真实硬件准入矩阵仍等待实验台数据填入 `documentation/hardware-acceptance/matrix.yaml`。
+
 ## Implementation Notes (2026-04-11)
 
 - Core 部分按计划全部落地：`RedfishTransport + RedfishSessionManager` 已统一承接 GET/POST/PATCH/DELETE 与 401 自动重建；`BmcManagementResource` 上线 `/api/bmc/devices/{id}/{capabilities,claim,rotate-credentials,power-actions}`；旧 `/api/discovery/{id}/claim` 与 `/api/discovery/{id}/rotate-credentials` 标记 `@Deprecated(forRemoval=true)`，仅做薄转发。
