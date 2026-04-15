@@ -1,8 +1,8 @@
 # ============================================================================
-# IMPORTANT: This is a TEMPLATE configuration. Before deploying to production,
-# you MUST replace ALL placeholder values (CHANGE_ME, REPLACE_ME, example.com)
-# with real credentials. Deploying with placeholders will cause silent alert
-# delivery failures.
+# Dev-local Alertmanager configuration.
+# Matches the Helm chart route tree structure (see files/alertmanager.yml.tpl).
+# All receivers are empty (no real secrets in dev); alerts will be accepted
+# and visible via API but silently dropped by empty receiver blocks.
 # ============================================================================
 
 global:
@@ -17,31 +17,23 @@ route:
   group_wait: 10s
   group_interval: 5m
   repeat_interval: 3h
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: critical-receiver
+      continue: false
+    - matchers:
+        - severity="warning"
+      receiver: warning-receiver
+      continue: false
 
 receivers:
   - name: default-receiver
 
-  # Email placeholder. Replace with real SMTP settings before enabling.
-  - name: email-placeholder
-    email_configs:
-      - to: alerts@example.com
-        from: alertmanager@example.com
-        smarthost: smtp.example.com:587
-        auth_username: alertmanager@example.com
-        auth_password: CHANGE_ME
-        require_tls: true
+  - name: critical-receiver
+    # In dev, no real notification channels are configured.
+    # Enable receivers via Helm values in production deployments.
 
-  # Slack placeholder. Replace with a real incoming webhook URL before enabling.
-  - name: slack-placeholder
-    slack_configs:
-      - api_url: https://hooks.slack.com/services/REPLACE/ME
-        channel: '#alerts'
-        send_resolved: true
-        title: '{{ .CommonLabels.alertname }}'
-        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
-
-  # PagerDuty placeholder. Replace with a real routing key before enabling.
-  - name: pagerduty-placeholder
-    pagerduty_configs:
-      - routing_key: REPLACE_ME
-        severity: '{{ .CommonLabels.severity | default "warning" }}'
+  - name: warning-receiver
+    # In dev, no real notification channels are configured.
+    # Enable receivers via Helm values in production deployments.
