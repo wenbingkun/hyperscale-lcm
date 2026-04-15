@@ -16,7 +16,7 @@ Satellite is the edge agent that runs close to managed nodes or within a data ce
 - Go 1.24
 - gRPC client with mTLS
 - Docker SDK
-- Redfish client (`gofish`)
+- Redfish session-aware HTTP transport
 - OpenTelemetry
 - TFTP / PXE support
 
@@ -35,6 +35,8 @@ Useful optional environment variables:
 - `LCM_BMC_IP`
 - `LCM_BMC_USER`
 - `LCM_BMC_PASSWORD`
+- `LCM_BMC_AUTH_MODE`
+- `LCM_BMC_SESSION_TTL_SECONDS_MAX`
 - `LCM_REDFISH_TEMPLATE_DIR`
 - `LCM_REDFISH_TEMPLATE_NAME`
 - `LCM_PXE_TFTP_ADDR`
@@ -51,6 +53,10 @@ Useful optional environment variables:
 - `LCM_PXE_BOOT_INITRD_URL`
 - `LCM_PXE_BOOT_KERNEL_ARGS`
 - `LCM_PXE_KICKSTART_TEMPLATE`
+
+`LCM_BMC_AUTH_MODE` supports `BASIC_ONLY`, `SESSION_PREFERRED`, and `SESSION_ONLY`. The default is `SESSION_PREFERRED`.
+
+`LCM_BMC_SESSION_TTL_SECONDS_MAX` caps local Redfish session reuse TTL in seconds. The default is `1800`.
 
 ## Validation
 

@@ -30,7 +30,7 @@
 | 设备自动发现（DHCP / ARP） | ✅ 已落地 | 已接入发现设备池与 claim 规划 |
 | 多执行模式（Docker / Shell / Ansible / SSH） | ✅ 已落地 | `EXEC_*` 全量 + 单元/E2E 覆盖 |
 | 模拟 Redfish / BMC 验收矩阵 | ✅ 已落地 | OpenBMC / iDRAC / iLO / XCC 共享 fixture + HTTPS mock 已接入 |
-| Redfish / BMC Phase 7 深化 | ✅ 核心落地 | Core 统一 `RedfishTransport + RedfishSessionManager`、`/api/bmc/devices/{id}/...` 管理面、受控 `power-actions`、审计/指标、前端 ADMIN 闭环均已落地；Satellite session-aware 只读与真实硬件准入矩阵扩面已纳入 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md) |
+| Redfish / BMC Phase 7 深化 | ✅ 核心落地 | Core 统一 `RedfishTransport + RedfishSessionManager`、`/api/bmc/devices/{id}/...` 管理面、受控 `power-actions`、审计/指标、前端 ADMIN 闭环均已落地；Satellite session-aware 只读、fixture BASIC/SESSION 回归与优雅退出 session cleanup 已进入 Phase 8 实现，真实硬件准入矩阵扩面见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md) |
 | PXE / iPXE 裸金属装机 | 🟡 软件闭环已具备 | 生产硬化和真实环境验证仍待收敛 |
 
 ### 1.3 生产运营能力
@@ -90,7 +90,7 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 |--------|------|---------|---------|
 | 🔴 P0 | 真实硬件 Redfish / BMC 验收扩面（Dell iDRAC / HPE iLO / Lenovo XCC） | 生产接入 | 降低硬件接入风险 |
 | 🔴 P0 | AlertManager 外部通知打通（邮件 / Slack / PagerDuty） | 可运维性 | 告警真正触达值班人 |
-| 🟡 P1 | Satellite session-aware 只读采集（Phase 8 已规划，见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)） | 采集侧闭环 | 让 Satellite 与 Core 共享同一套 session 协议路径 |
+| 🟡 P1 | Satellite session-aware 只读采集（Phase 8 实现中，见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)） | 采集侧闭环 | 让 Satellite 与 Core 共享同一套 session 协议路径 |
 | 🟡 P1 | PXE / iPXE 生产硬化与真实环境验证 | 自动化交付 | 降低裸机交付落地风险 |
 | 🟡 P1 | Demo smoke 扩展与 Playwright E2E（登录、发现、作业提交、拓扑） | 回归保护 | 浏览器级关键流程覆盖 |
 | 🟠 P2 | 覆盖率门槛从 50% 渐进提升至 70% | 工程质量 | 长期目标收敛 |
