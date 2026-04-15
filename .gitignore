@@ -84,6 +84,12 @@ coverage/
 *.lcov
 htmlcov/
 
+# ============ Playwright ============
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+
 # ============ Local-only workspace ============
 # 个人 TODO / 草稿 / AI agent 实验记录；详见 .local/README.md
 .local/
