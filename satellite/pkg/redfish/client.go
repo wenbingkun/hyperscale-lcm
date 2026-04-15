@@ -37,7 +37,9 @@ func NewCollector() *Collector {
 	adapter, buildErr := registry.Build()
 	if buildErr != nil {
 		log.Printf("⚠️ Failed to build Redfish adapter: %v. Falling back to OpenBMC baseline.", buildErr)
-		adapter = NewOpenBMCAdapter(config)
+		adapter = NewOpenBMCAdapter(config, NewTransport(config, TransportOptions{
+			AuthMode: AuthModeBasicOnly,
+		}, nil))
 	}
 
 	log.Printf("🔌 Redfish collector initialized with adapter: %s", adapter.Name())

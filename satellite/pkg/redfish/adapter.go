@@ -41,18 +41,27 @@ func (MockAdapter) CollectDynamicTelemetry() (string, int32) {
 type AdapterRegistry struct {
 	config              Config
 	templates           []Template
+	transport           *Transport
 	fingerprintDetector func() (string, string, error)
 }
 
 func NewAdapterRegistry(config Config) (*AdapterRegistry, error) {
 	templates, err := LoadTemplates(config.TemplateDir)
 	if err != nil {
-		return &AdapterRegistry{config: config}, err
+		return &AdapterRegistry{
+			config: config,
+			transport: NewTransport(config, TransportOptions{
+				AuthMode: AuthModeBasicOnly,
+			}, nil),
+		}, err
 	}
 
 	return &AdapterRegistry{
 		config:    config,
 		templates: templates,
+		transport: NewTransport(config, TransportOptions{
+			AuthMode: AuthModeBasicOnly,
+		}, nil),
 	}, nil
 }
 
@@ -61,7 +70,7 @@ func (r *AdapterRegistry) Build() (Adapter, error) {
 		if template, ok := r.detectTemplate(); ok {
 			return NewTemplateAdapter(r.config, template), nil
 		}
-		return NewOpenBMCAdapter(r.config), nil
+		return NewOpenBMCAdapter(r.config, r.transport), nil
 	}
 
 	template, ok := r.findTemplate(r.config.TemplateName)
