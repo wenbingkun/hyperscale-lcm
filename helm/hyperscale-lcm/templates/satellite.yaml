@@ -43,6 +43,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            {{- with .Values.satellite.env }}
+            {{- range $name, $value := . }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
           resources:
             {{- toYaml .Values.satellite.resources | nindent 12 }}
           securityContext:

@@ -100,6 +100,11 @@ satellite:
   
   # 节点选择器
   nodeSelector: {}
+
+  # 可选环境变量覆盖
+  env:
+    # LCM_BMC_AUTH_MODE: SESSION_PREFERRED
+    # LCM_BMC_SESSION_TTL_SECONDS_MAX: "1800"
   
   # 容忍度 (用于 GPU 节点)
   tolerations:

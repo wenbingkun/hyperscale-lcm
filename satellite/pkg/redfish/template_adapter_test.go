@@ -56,6 +56,31 @@ func TestTemplateAdapterCollectsStaticAndDynamicData(t *testing.T) {
 		Password: "password",
 		Insecure: true,
 	}
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			payload, ok := fixtures[req.URL.Path]
+			if !ok {
+				return &http.Response{
+					StatusCode: http.StatusNotFound,
+					Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
+					Header:     make(http.Header),
+					Request:    req,
+				}, nil
+			}
+
+			body, err := json.Marshal(payload)
+			if err != nil {
+				return nil, err
+			}
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(string(body))),
+				Header:     make(http.Header),
+				Request:    req,
+			}, nil
+		}),
+	}
 	adapter := NewTemplateAdapter(config, Template{
 		Name: "vendor-x",
 		Resources: TemplateResources{
@@ -63,30 +88,10 @@ func TestTemplateAdapterCollectsStaticAndDynamicData(t *testing.T) {
 			Managers: PathSpec{"/redfish/v1/Managers"},
 			Chassis:  PathSpec{"/redfish/v1/Chassis"},
 		},
-	})
-	adapter.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		payload, ok := fixtures[req.URL.Path]
-		if !ok {
-			return &http.Response{
-				StatusCode: http.StatusNotFound,
-				Body:       io.NopCloser(strings.NewReader(`{"error":"not found"}`)),
-				Header:     make(http.Header),
-				Request:    req,
-			}, nil
-		}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader(string(body))),
-			Header:     make(http.Header),
-			Request:    req,
-		}, nil
-	})
+	}, NewTransport(config, TransportOptions{
+		AuthMode: AuthModeBasicOnly,
+		Client:   client,
+	}, nil))
 
 	info, err := adapter.CollectStaticInfo()
 	if err != nil {

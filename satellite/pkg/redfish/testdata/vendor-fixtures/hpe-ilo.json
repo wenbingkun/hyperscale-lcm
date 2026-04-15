@@ -25,6 +25,17 @@
       }
     ]
   },
+  "/redfish/v1/SessionService": {
+    "@odata.id": "/redfish/v1/SessionService",
+    "SessionTimeout": 600,
+    "Sessions": {
+      "@odata.id": "/redfish/v1/SessionService/Sessions"
+    }
+  },
+  "/redfish/v1/SessionService/Sessions": {
+    "Members": [],
+    "Members@odata.count": 0
+  },
   "/redfish/v1/Managers/1": {
     "@odata.id": "/redfish/v1/Managers/1",
     "EthernetInterfaces": {
