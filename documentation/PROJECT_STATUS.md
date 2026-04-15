@@ -1,6 +1,6 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-04-15
+> **Last Updated:** 2026-04-15 (Phase AlertManager landed)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
@@ -19,7 +19,7 @@
 | OpenTelemetry 全链路追踪 | ✅ 已打通 | Satellite → Kafka → Core 状态回调已续接，有回归测试 |
 | CI 质量门禁（CodeQL / gradle check / npm / go test） | ✅ 已落地 | |
 | 集成测试（Testcontainers / DevServices / E2EIntegrationTest） | 🟡 主链路覆盖 | 浏览器级 E2E、断连恢复和压力级故障场景仍不充分 |
-| Prometheus / Grafana 仪表盘与告警规则 | 🟡 基础已落地 | 仪表盘和规则已接入，但 AlertManager 外部通知仍未闭环 |
+| Prometheus / Grafana 仪表盘与告警规则 | ✅ 已落地 | 仪表盘、规则、AlertManager receiver 链路已就绪（默认 disabled，需按 [runbook](runbooks/alertmanager.md) 注入真实 secret 生效） |
 
 ### 1.2 功能深化与自动化
 
@@ -37,7 +37,7 @@
 
 | 能力 | 状态 | 备注 |
 |------|------|------|
-| AlertManager 外部通知（邮件/Slack/PagerDuty） | ❌ 未完成 | **P0 阻塞项** |
+| AlertManager 外部通知（邮件/Slack/PagerDuty） | ✅ 代码就绪 | Helm values 参数化 + Secret 模板 + CI guard 已落地；默认 disabled，需按 [runbook](runbooks/alertmanager.md) 注入真实 secret 才生效。详见 [ALERTMANAGER_PHASE_PLAN.md](ALERTMANAGER_PHASE_PLAN.md) |
 | 负载测试自动化（loadgen + CI load-test） | 🟡 95% | 缺明确的回归阈值与趋势基线 |
 | 多集群管理（clusterId 隔离、集群汇总 API） | 🟡 80% | 字段、调度隔离、查询 API 已具备；生命周期管理与联邦能力未完成 |
 | 真实硬件 Redfish/BMC 验收 | 🟡 骨架齐备 | `documentation/hardware-acceptance/` 已有 OpenBMC / iDRAC / iLO / XCC 四份 per-machine 样板 + `matrix.yaml` `pending:` 追踪，待填充真实实验台数据 |
@@ -88,7 +88,7 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 
 | 优先级 | 事项 | 阻塞类别 | 预期效果 |
 |--------|------|---------|---------|
-| 🔴 P0 | AlertManager 外部通知打通（邮件 / Slack / PagerDuty） | 可运维性 | 告警真正触达值班人 |
+| 🟡 P1 | AlertManager 真实 channel 接入与冒烟（代码已就绪，需 prod secret 注入） | 可运维性 | 按 [runbook](runbooks/alertmanager.md) 完成 Slack/PagerDuty/邮件真实验证 |
 | 🔴 P0 | 真实硬件 Redfish / BMC 验收数据填充（Dell iDRAC / HPE iLO / Lenovo XCC 骨架已就位，见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)） | 生产接入 | 降低硬件接入风险 |
 | 🟡 P1 | PXE / iPXE 生产硬化与真实环境验证 | 自动化交付 | 降低裸机交付落地风险 |
 | 🟡 P1 | Demo smoke 扩展与 Playwright E2E（登录、发现、作业提交、拓扑） | 回归保护 | 浏览器级关键流程覆盖 |
@@ -97,7 +97,7 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 | 🟠 P2 | 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调） | 规模化运营 | 跨数据中心统一运营 |
 
 **建议执行顺序：**
-- **近期 1-2 周：** AlertManager 外部通道 + 真实硬件 Redfish/BMC 验收数据填充（骨架已齐）
+- **近期 1-2 周：** 真实硬件 Redfish/BMC 验收数据填充（骨架已齐） + AlertManager 真实 channel 冒烟验证
 - **中期 3-4 周：** Demo smoke、Playwright、PXE 生产硬化、负载基线
 - **远期 5-8 周：** 多集群联邦增强
 
