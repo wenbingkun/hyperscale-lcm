@@ -201,6 +201,25 @@ monitoring:
       limits:
         cpu: 500m
         memory: 256Mi
+    secrets:
+      mode: chart-managed     # chart-managed | external
+      externalSecretName: ""  # 仅 mode=external 时生效
+    receivers:
+      email:
+        enabled: false
+        to: ""
+        from: ""
+        smarthost: ""
+        requireTls: true
+      slack:
+        enabled: false
+        channel: "#alerts"
+      pagerduty:
+        enabled: false
+    route:
+      groupWait: 10s
+      groupInterval: 5m
+      repeatInterval: 3h
 
 # ============== 网络隔离 ==============
 networkPolicy:

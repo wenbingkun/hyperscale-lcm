@@ -9,7 +9,6 @@ data:
   {{ $key }}: {{ $value | quote }}
   {{- end }}
 ---
-{{- /* Always create the secret - auto-generate passwords when not provided */ -}}
 apiVersion: v1
 kind: Secret
 metadata:

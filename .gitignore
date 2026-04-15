@@ -100,3 +100,7 @@ temp/
 *.key
 core/src/main/resources/META-INF/resources/privateKey.pem
 certs/
+
+# Helm dependency build artifacts
+helm/*/charts/
+helm/*/Chart.lock
