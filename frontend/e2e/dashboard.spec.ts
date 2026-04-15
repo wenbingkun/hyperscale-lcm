@@ -1,67 +1,35 @@
-import { test, expect, Page } from '@playwright/test';
-
-// Helper to set auth token in localStorage before navigating
-async function loginViaLocalStorage(page: Page) {
-    await page.goto('/login');
-    await page.evaluate(() => {
-        const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-        const payload = btoa(JSON.stringify({
-            upn: 'admin',
-            groups: ['ADMIN'],
-            tenant_id: 'default',
-            exp: Math.floor(Date.now() / 1000) + 3600
-        }));
-        const token = `${header}.${payload}.test-signature`;
-        localStorage.setItem('lcm_auth_token', token);
-        localStorage.setItem('lcm_auth_user', JSON.stringify({
-            username: 'admin',
-            roles: ['ADMIN'],
-            tenantId: 'default'
-        }));
-    });
-}
+import { expect, test } from './fixtures/test-fixtures';
 
 test.describe('Dashboard Page', () => {
-    test.beforeEach(async ({ page }) => {
-        await loginViaLocalStorage(page);
+    test.beforeEach(async ({ authenticatedPage }) => {
+        await authenticatedPage.goto('/');
+        await expect(authenticatedPage.getByText('Total Nodes')).toBeVisible();
     });
 
-    test('should display dashboard header', async ({ page }) => {
-        await page.goto('/');
-
-        // Check page title
-        await expect(page).toHaveTitle(/Hyperscale/i);
-
-        // Check header is visible
-        await expect(page.locator('h1')).toContainText('Hyperscale');
+    test('renders the main stat cards', async ({ authenticatedPage }) => {
+        await expect(authenticatedPage.getByText('GPU Capacity')).toBeVisible();
+        await expect(authenticatedPage.getByText('Active Jobs')).toBeVisible();
+        await expect(authenticatedPage.getByText('Network')).toBeVisible();
     });
 
-    test('should display navigation links', async ({ page }) => {
-        await page.goto('/');
-
-        // Check navigation links exist
-        await expect(page.getByRole('link', { name: /overview/i })).toBeVisible();
-        await expect(page.getByRole('link', { name: /satellites/i })).toBeVisible();
-        await expect(page.getByRole('link', { name: /jobs/i })).toBeVisible();
-        await expect(page.getByRole('link', { name: /discovery/i })).toBeVisible();
-        await expect(page.getByRole('link', { name: /tenants/i })).toBeVisible();
+    test('shows the mocked cluster stat value', async ({ authenticatedPage }) => {
+        await expect(authenticatedPage.getByText('42', { exact: true })).toBeVisible();
     });
 
-    test('should navigate to satellites page', async ({ page }) => {
-        await page.goto('/');
-
-        await page.getByRole('link', { name: /satellites/i }).click();
-
-        await expect(page).toHaveURL('/satellites');
-        await expect(page.locator('h2')).toContainText('Satellites');
+    test('renders the satellite table with mocked data', async ({ authenticatedPage }) => {
+        await expect(authenticatedPage.getByRole('link', { name: 'gpu-node-alpha' })).toBeVisible();
+        await expect(authenticatedPage.getByText('10.0.1.10')).toBeVisible();
     });
 
-    test('should navigate to jobs page', async ({ page }) => {
-        await page.goto('/');
+    test('shows the job submission form', async ({ authenticatedPage }) => {
+        await expect(authenticatedPage.getByText('Submit AI Training Job')).toBeVisible();
+        await expect(authenticatedPage.getByPlaceholder('e.g. LLM-Training-v1')).toBeVisible();
+    });
 
-        await page.getByRole('link', { name: /jobs/i }).click();
+    test('navigates to the satellites page from the top navigation', async ({ authenticatedPage }) => {
+        await authenticatedPage.getByRole('link', { name: 'Satellites' }).click();
 
-        await expect(page).toHaveURL('/jobs');
-        await expect(page.locator('h2')).toContainText('Jobs');
+        await expect(authenticatedPage).toHaveURL(/\/satellites$/);
+        await expect(authenticatedPage.getByText('Satellite Fleet')).toBeVisible();
     });
 });

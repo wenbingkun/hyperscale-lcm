@@ -1,77 +1,47 @@
-import { test, expect, Page } from '@playwright/test';
-
-async function loginViaLocalStorage(page: Page) {
-    await page.goto('/login');
-    await page.evaluate(() => {
-        const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-        const payload = btoa(JSON.stringify({
-            upn: 'admin',
-            groups: ['ADMIN'],
-            tenant_id: 'default',
-            exp: Math.floor(Date.now() / 1000) + 3600
-        }));
-        const token = `${header}.${payload}.test-signature`;
-        localStorage.setItem('lcm_auth_token', token);
-        localStorage.setItem('lcm_auth_user', JSON.stringify({
-            username: 'admin',
-            roles: ['ADMIN'],
-            tenantId: 'default'
-        }));
-    });
-}
+import { expect, test } from './fixtures/test-fixtures';
 
 test.describe('Discovery Page', () => {
-    test.beforeEach(async ({ page }) => {
-        await loginViaLocalStorage(page);
+    test.beforeEach(async ({ authenticatedPage }) => {
+        await authenticatedPage.goto('/discovery');
+        await expect(authenticatedPage.getByText('Device Discovery')).toBeVisible();
     });
 
-    test('should display discovery page header', async ({ page }) => {
-        await page.goto('/discovery');
-
-        await expect(page.locator('h2')).toContainText('Device Discovery');
+    test('loads the discovery table', async ({ authenticatedPage }) => {
+        await expect(authenticatedPage.getByRole('columnheader', { name: 'Discovery' })).toBeVisible();
+        await expect(authenticatedPage.getByRole('columnheader', { name: 'Endpoint' })).toBeVisible();
+        await expect(authenticatedPage.getByRole('columnheader', { name: 'Claim Plan' })).toBeVisible();
     });
 
-    test('should show scan network button', async ({ page }) => {
-        await page.goto('/discovery');
-
-        // Check scan button exists
-        const scanButton = page.getByRole('button', { name: /scan network/i });
-        await expect(scanButton).toBeVisible();
+    test('shows discovered device details', async ({ authenticatedPage }) => {
+        await expect(authenticatedPage.getByText('192.168.1.100')).toBeVisible();
+        await expect(authenticatedPage.getByText('AA:BB:CC:DD:EE:01')).toBeVisible();
+        await expect(authenticatedPage.getByText('dell-r750-bmc')).toBeVisible();
     });
 
-    test('should open scan modal when clicking scan button', async ({ page }) => {
-        await page.goto('/discovery');
+    test('filters the list by search query', async ({ authenticatedPage }) => {
+        await authenticatedPage
+            .getByPlaceholder('Search by IP, host, vendor, model, profile, template')
+            .fill('dell-r750-bmc');
 
-        // Click scan button
-        await page.getByRole('button', { name: /scan network/i }).click();
-
-        // Modal should appear
-        await expect(page.getByText('Start Network Scan')).toBeVisible();
-
-        // Form fields should be visible
-        await expect(page.getByPlaceholder(/192\.168/i)).toBeVisible();
-        await expect(page.getByPlaceholder(/22,8080/i)).toBeVisible();
+        await expect(authenticatedPage.locator('tbody tr', { hasText: '192.168.1.101' })).toBeVisible();
+        await expect(authenticatedPage.locator('tbody tr', { hasText: '192.168.1.100' })).toHaveCount(0);
     });
 
-    test('should close scan modal on cancel', async ({ page }) => {
-        await page.goto('/discovery');
+    test('approves a pending device and updates its status', async ({ authenticatedPage }) => {
+        const deviceRow = authenticatedPage.locator('tbody tr', { hasText: '192.168.1.100' });
 
-        await page.getByRole('button', { name: /scan network/i }).click();
-        await expect(page.getByText('Start Network Scan')).toBeVisible();
+        await deviceRow.locator('button[title="Approve"]').click();
 
-        // Click cancel
-        await page.getByRole('button', { name: /cancel/i }).click();
-
-        // Modal should disappear
-        await expect(page.getByText('Start Network Scan')).not.toBeVisible();
+        await expect(deviceRow).toContainText('APPROVED');
+        await expect(authenticatedPage.getByText('Device dev-001 approved.')).toBeVisible();
     });
 
-    test('should display devices table', async ({ page }) => {
-        await page.goto('/discovery');
+    test('refreshes a claim plan for a discovered device', async ({ authenticatedPage }) => {
+        const deviceRow = authenticatedPage.locator('tbody tr', { hasText: '192.168.1.100' });
 
-        // Table headers should be visible
-        await expect(page.getByRole('columnheader', { name: /status/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /ip address/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /hostname/i })).toBeVisible();
+        await deviceRow.getByRole('button', { name: 'Replan' }).click();
+
+        await expect(deviceRow).toContainText('READY_TO_CLAIM');
+        await expect(deviceRow).toContainText('Dell iDRAC Default');
     });
 });
