@@ -207,6 +207,13 @@ func main() {
 				bgCancel()
 				discoveryMgr.Stop()
 				ticker.Stop()
+				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+				if err := rfCollector.Close(shutdownCtx); err != nil {
+					log.Printf("⚠️ Redfish session DELETE best-effort cleanup finished with warning: %v", err)
+				} else {
+					log.Println("🧹 Redfish session DELETE best-effort cleanup completed")
+				}
+				shutdownCancel()
 				// conn.Close() is handled by defer
 				log.Println("Satellite Agent stopped")
 				return
