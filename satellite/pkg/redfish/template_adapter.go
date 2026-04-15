@@ -1,25 +1,31 @@
 package redfish
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 )
 
 // TemplateAdapter executes Redfish reads from an imported JSON mapping.
 type TemplateAdapter struct {
-	config   Config
-	template Template
-	client   *http.Client
+	config    Config
+	template  Template
+	transport *Transport
 }
 
-func NewTemplateAdapter(config Config, template Template) *TemplateAdapter {
+func NewTemplateAdapter(config Config, template Template, transport *Transport) *TemplateAdapter {
+	if transport == nil {
+		transport = NewTransport(config, TransportOptions{
+			AuthMode: AuthModeBasicOnly,
+		}, nil)
+	}
+
 	return &TemplateAdapter{
-		config:   config,
-		template: template,
-		client:   config.HTTPClient(),
+		config:    config,
+		template:  template,
+		transport: transport,
 	}
 }
 
@@ -165,30 +171,16 @@ func (a *TemplateAdapter) unwrapMember(document map[string]any) (map[string]any,
 }
 
 func (a *TemplateAdapter) getJSON(path string) (map[string]any, error) {
-	req, err := http.NewRequest(http.MethodGet, absoluteURL(a.config.Endpoint, path), nil)
+	resp, err := a.transport.Do(context.Background(), TransportRequest{
+		Method:   "GET",
+		Path:     path,
+		ReadOnly: true,
+	})
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
-	if a.config.Username != "" {
-		req.SetBasicAuth(a.config.Username, a.config.Password)
-	}
 
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("GET %s returned %d", path, resp.StatusCode)
-	}
-
-	var payload map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
+	return resp.JSON()
 }
 
 func firstMemberURI(document map[string]any) string {

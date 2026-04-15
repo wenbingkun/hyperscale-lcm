@@ -1,10 +1,9 @@
 package redfish
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 )
 
@@ -45,30 +44,32 @@ type AdapterRegistry struct {
 	fingerprintDetector func() (string, string, error)
 }
 
-func NewAdapterRegistry(config Config) (*AdapterRegistry, error) {
+func NewAdapterRegistry(config Config, transport *Transport) (*AdapterRegistry, error) {
+	if transport == nil {
+		transport = NewTransport(config, TransportOptions{
+			AuthMode: AuthModeBasicOnly,
+		}, nil)
+	}
+
 	templates, err := LoadTemplates(config.TemplateDir)
 	if err != nil {
 		return &AdapterRegistry{
-			config: config,
-			transport: NewTransport(config, TransportOptions{
-				AuthMode: AuthModeBasicOnly,
-			}, nil),
+			config:    config,
+			transport: transport,
 		}, err
 	}
 
 	return &AdapterRegistry{
 		config:    config,
 		templates: templates,
-		transport: NewTransport(config, TransportOptions{
-			AuthMode: AuthModeBasicOnly,
-		}, nil),
+		transport: transport,
 	}, nil
 }
 
 func (r *AdapterRegistry) Build() (Adapter, error) {
 	if strings.TrimSpace(r.config.TemplateName) == "" {
 		if template, ok := r.detectTemplate(); ok {
-			return NewTemplateAdapter(r.config, template), nil
+			return NewTemplateAdapter(r.config, template, r.transport), nil
 		}
 		return NewOpenBMCAdapter(r.config, r.transport), nil
 	}
@@ -78,7 +79,7 @@ func (r *AdapterRegistry) Build() (Adapter, error) {
 		return nil, fmt.Errorf("template %q not found in %s", r.config.TemplateName, r.config.TemplateDir)
 	}
 
-	return NewTemplateAdapter(r.config, template), nil
+	return NewTemplateAdapter(r.config, template, r.transport), nil
 }
 
 func (r *AdapterRegistry) findTemplate(name string) (Template, bool) {
@@ -141,28 +142,14 @@ func (r *AdapterRegistry) fetchPrimaryResource(collectionPath string) (map[strin
 }
 
 func (r *AdapterRegistry) getJSON(path string) (map[string]any, error) {
-	req, err := http.NewRequest(http.MethodGet, absoluteURL(r.config.Endpoint, path), nil)
+	resp, err := r.transport.Do(context.Background(), TransportRequest{
+		Method:   "GET",
+		Path:     path,
+		ReadOnly: true,
+	})
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
-	if r.config.Username != "" {
-		req.SetBasicAuth(r.config.Username, r.config.Password)
-	}
 
-	resp, err := r.config.HTTPClient().Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, fmt.Errorf("GET %s returned %d", path, resp.StatusCode)
-	}
-
-	var payload map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
+	return resp.JSON()
 }

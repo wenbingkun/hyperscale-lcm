@@ -76,7 +76,15 @@ func TestVendorTemplateFixtures(t *testing.T) {
 				Username: "admin",
 				Password: "password",
 				Insecure: true,
-			}, template)
+			}, template, NewTransport(Config{
+				Endpoint: server.URL,
+				Username: "admin",
+				Password: "password",
+				Insecure: true,
+			}, TransportOptions{
+				AuthMode: AuthModeBasicOnly,
+				Client:   server.Client(),
+			}, nil))
 
 			info, err := adapter.CollectStaticInfo()
 			if err != nil {
