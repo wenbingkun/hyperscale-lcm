@@ -28,6 +28,92 @@ jobs:
           chmod +x scripts/check_quarkus_ci_contract.sh scripts/check_load_test_contract.sh scripts/check_ci_contract.sh
           ./scripts/check_ci_contract.sh
 
+  # ==================== Helm Chart Lint ====================
+  helm-chart-lint:
+    name: Helm Chart Lint
+    runs-on: ubuntu-latest
+    needs: [ci-contract-guard]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: helm lint
+        run: helm lint helm/hyperscale-lcm
+
+      - name: render default values
+        run: helm template hyperscale-lcm helm/hyperscale-lcm > /tmp/rendered.yaml
+
+      - name: install amtool
+        run: |
+          curl -sL https://github.com/prometheus/alertmanager/releases/download/v0.28.1/alertmanager-0.28.1.linux-amd64.tar.gz | tar xz
+          sudo mv alertmanager-0.28.1.linux-amd64/amtool /usr/local/bin/
+
+      - name: extract and check alertmanager config (default values)
+        run: |
+          python3 -c "
+          import yaml, sys
+          docs = list(yaml.safe_load_all(open('/tmp/rendered.yaml')))
+          for doc in docs:
+              if doc and doc.get('kind') == 'ConfigMap' and 'alertmanager' in doc.get('metadata',{}).get('name',''):
+                  cfg = doc['data']['alertmanager.yml']
+                  with open('/tmp/am.yml', 'w') as f:
+                      f.write(cfg)
+                  print('Extracted alertmanager.yml from ConfigMap')
+                  sys.exit(0)
+          print('ERROR: alertmanager ConfigMap not found')
+          sys.exit(1)
+          "
+          # amtool check-config may require _file paths to exist; create empty stubs
+          sudo mkdir -p /etc/alertmanager/secrets
+          sudo touch /etc/alertmanager/secrets/smtp-password
+          sudo touch /etc/alertmanager/secrets/slack-webhook-url
+          sudo touch /etc/alertmanager/secrets/pagerduty-routing-key
+          amtool check-config /tmp/am.yml
+
+      - name: render with slack enabled + check-config
+        run: |
+          helm template hyperscale-lcm helm/hyperscale-lcm \
+            --set monitoring.alertmanager.receivers.slack.enabled=true > /tmp/rendered-slack.yaml
+          python3 -c "
+          import yaml, sys
+          docs = list(yaml.safe_load_all(open('/tmp/rendered-slack.yaml')))
+          for doc in docs:
+              if doc and doc.get('kind') == 'ConfigMap' and 'alertmanager' in doc.get('metadata',{}).get('name',''):
+                  cfg = doc['data']['alertmanager.yml']
+                  with open('/tmp/am-slack.yml', 'w') as f:
+                      f.write(cfg)
+                  sys.exit(0)
+          sys.exit(1)
+          "
+          amtool check-config /tmp/am-slack.yml
+
+      - name: render with all receivers enabled + check-config
+        run: |
+          helm template hyperscale-lcm helm/hyperscale-lcm \
+            --set monitoring.alertmanager.receivers.slack.enabled=true \
+            --set monitoring.alertmanager.receivers.pagerduty.enabled=true \
+            --set monitoring.alertmanager.receivers.email.enabled=true \
+            --set monitoring.alertmanager.receivers.email.to=test@example.com \
+            --set monitoring.alertmanager.receivers.email.from=am@example.com \
+            --set monitoring.alertmanager.receivers.email.smarthost=smtp.example.com:587 \
+            > /tmp/rendered-all.yaml
+          python3 -c "
+          import yaml, sys
+          docs = list(yaml.safe_load_all(open('/tmp/rendered-all.yaml')))
+          for doc in docs:
+              if doc and doc.get('kind') == 'ConfigMap' and 'alertmanager' in doc.get('metadata',{}).get('name',''):
+                  cfg = doc['data']['alertmanager.yml']
+                  with open('/tmp/am-all.yml', 'w') as f:
+                      f.write(cfg)
+                  sys.exit(0)
+          sys.exit(1)
+          "
+          amtool check-config /tmp/am-all.yml
+
   # ==================== Backend Tests ====================
   backend-test:
     name: Backend Tests
