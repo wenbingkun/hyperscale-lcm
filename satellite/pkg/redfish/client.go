@@ -31,8 +31,17 @@ func NewCollector() *Collector {
 		return &Collector{adapter: MockAdapter{}}
 	}
 
+	return newCollectorForTest(config, config.AuthMode)
+}
+
+func newCollectorForTest(config Config, authMode AuthMode) *Collector {
+	if authMode == "" {
+		authMode = config.AuthMode
+	}
+
 	transport := NewTransport(config, TransportOptions{
-		AuthMode: AuthModeBasicOnly,
+		AuthMode:             authMode,
+		SessionTTLSecondsMax: config.SessionTTLSecondsMax,
 	}, nil)
 	registry, err := NewAdapterRegistry(config, transport)
 	if err != nil {
