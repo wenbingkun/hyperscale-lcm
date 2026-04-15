@@ -41,6 +41,9 @@ jobs:
         with:
           version: 'v3.14.0'
 
+      - name: helm dependency build
+        run: helm dependency build helm/hyperscale-lcm
+
       - name: helm lint
         run: helm lint helm/hyperscale-lcm
 
