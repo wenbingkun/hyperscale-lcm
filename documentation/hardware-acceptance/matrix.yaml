@@ -13,3 +13,16 @@ schema:
   owner: Engineer or team accountable for this row
   notes: Reference to per-machine markdown or quirks worth highlighting
 machines: []
+pending:
+  - vendor: Dell
+    model: iDRAC (TBD)
+    ref: dell-idrac-reference.md
+    owner: TBD
+  - vendor: HPE
+    model: iLO (TBD)
+    ref: hpe-ilo-reference.md
+    owner: TBD
+  - vendor: Lenovo
+    model: XCC (TBD)
+    ref: lenovo-xcc-reference.md
+    owner: TBD
