@@ -180,6 +180,11 @@ start_core() {
 }
 
 start_satellite() {
+  if [[ -n "${LCM_DEMO_SKIP_SATELLITE:-}" ]]; then
+    log "LCM_DEMO_SKIP_SATELLITE set — assuming satellite managed externally"
+    return
+  fi
+
   if docker ps --format '{{.Names}}' | grep -Fxq "$SATELLITE_CONTAINER_NAME"; then
     log "Demo satellite container already running as ${SATELLITE_CONTAINER_NAME}"
     return
@@ -540,6 +545,7 @@ Environment overrides:
   LCM_DEMO_CORE_URL      Core REST base URL
   LCM_DEMO_GRPC_TARGET   Core gRPC target used by grpcurl and satellite
   LCM_DEMO_REDFISH_PROFILE  Mock Redfish fixture profile (openbmc-baseline, dell-idrac, hpe-ilo, lenovo-xcc)
+  LCM_DEMO_SKIP_SATELLITE   If non-empty, skip start_satellite (caller manages the satellite lifecycle)
 EOF
 }
 
