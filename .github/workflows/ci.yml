@@ -387,7 +387,7 @@ jobs:
         
       - name: Build Core (Fast-JAR)
         working-directory: core
-        run: ./gradlew build -Dquarkus.package.type=fast-jar -x test
+        run: ./gradlew quarkusBuild -Dquarkus.package.type=fast-jar --no-daemon
 
       - name: Build LoadGen tool
         working-directory: satellite
@@ -483,6 +483,81 @@ jobs:
         run: |
           # Fail the step if Core crashed or is unhealthy after load test
           curl -sf http://localhost:8080/health/live
+
+  # ==================== Demo Smoke ====================
+  demo-smoke:
+    name: Demo Smoke (real backend)
+    runs-on: ubuntu-latest
+    needs: [ci-contract-guard, backend-test, satellite-build]
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: satellite/go.sum
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CLI deps (grpcurl, websocat, jq, nc)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq netcat-openbsd
+          if ! command -v docker-compose >/dev/null 2>&1; then
+            sudo apt-get install -y docker-compose
+          fi
+
+          curl -fsSL -o /tmp/grpcurl.tar.gz \
+            https://github.com/fullstorydev/grpcurl/releases/download/v1.9.1/grpcurl_1.9.1_linux_x86_64.tar.gz
+          tar -xzf /tmp/grpcurl.tar.gz -C /tmp grpcurl
+          sudo install -m 0755 /tmp/grpcurl /usr/local/bin/grpcurl
+
+          curl -fsSL -o /tmp/websocat \
+            https://github.com/vi/websocat/releases/download/v1.13.0/websocat.x86_64-unknown-linux-musl
+          sudo install -m 0755 /tmp/websocat /usr/local/bin/websocat
+
+          docker-compose version
+          grpcurl --version
+          websocat --version
+
+      - name: Generate dummy TLS keys
+        run: chmod +x scripts/generate_keys.sh && ./scripts/generate_keys.sh
+
+      - name: Build Core (Fast-JAR)
+        working-directory: core
+        run: ./gradlew quarkusBuild -Dquarkus.package.type=fast-jar --no-daemon
+
+      - name: Build Satellite binary
+        working-directory: satellite
+        run: go build -o satellite ./cmd/satellite
+
+      - name: Run demo smoke
+        env:
+          LCM_DEMO_CLUSTER: ci-smoke-${{ github.run_id }}
+          QUARKUS_OTEL_SDK_DISABLED: "true"
+        run: ./scripts/ci_demo_smoke.sh
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-smoke-artifacts
+          path: |
+            /tmp/hyperscale-lcm-demo/
+          retention-days: 7
 
   # ==================== Docker Images ====================
   docker-build:
