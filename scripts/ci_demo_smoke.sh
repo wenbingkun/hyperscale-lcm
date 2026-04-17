@@ -163,9 +163,9 @@ start_core() {
   (
     cd "$ROOT_DIR/core"
     env \
-      QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm \
-      QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm \
-      QUARKUS_DATASOURCE_USERNAME=lcm \
+      QUARKUS_DATASOURCE_REACTIVE_URL=postgresql://localhost:5432/lcm_db \
+      QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://localhost:5432/lcm_db \
+      QUARKUS_DATASOURCE_USERNAME=lcm_user \
       QUARKUS_DATASOURCE_PASSWORD=lcm_password \
       QUARKUS_HTTP_INSECURE_REQUESTS=enabled \
       QUARKUS_HTTP_AUTH_PERMISSION_PUBLIC_PATHS=/api/auth/* \
