@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-04-14 (Phase 7 Core 管理面与前端闭环落地)
+> 最后更新: 2026-04-18 (Phase 8 Satellite / AlertManager / Demo-Smoke + Playwright 齐活)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -114,10 +114,54 @@
     *   [x] 引入受控 `power-actions`（白名单 + `Idempotency-Key` + 显式 `systemId`）、`AuditLog` BMC 事件类型与 `lcm_bmc_power_action_total` / `lcm_bmc_session_reauth_total` 指标。
     *   [x] 前端 `DiscoveryPage` 接入 BMC 能力快照、凭据轮换、`dry-run` 预演与 ADMIN 角色强校验。
 *   **采集与验收扩展**:
-    *   [ ] Satellite 补齐 `session-aware` 只读采集能力（**延后到 Phase 8**，Core 侧 `RedfishMockServer.withSessionService()` 已覆盖协议路径）。
+    *   [x] Satellite 补齐 `session-aware` 只读采集能力（**Phase 8 已交付，见下节**，Core 侧 `RedfishMockServer.withSessionService()` 已覆盖协议路径）。
     *   [ ] 扩展真实硬件准入矩阵，覆盖 OpenBMC 与至少一种商业 BMC（框架与样板已就绪，等待实验台数据填入）。
 *   **参考文档**:
     *   [x] 详细方案见 `documentation/REDFISH_BMC_PHASE7_PLAN.md`。
+
+---
+
+## 📅 阶段八：Satellite session-aware 只读采集与 BMC 会话治理 ✅ 已完成
+**目标**: 把 Phase 7 在 Core 侧落成的 session-aware 协议路径延伸到 Satellite 采集侧，构建统一的 BMC 会话治理能力。
+*   **协议与认证**:
+    *   [x] 新增 session-aware `RedfishTransport` 核心（最初 unwired），并以此重写 `OpenBMCAdapter`，移除 gofish 依赖。
+    *   [x] 统一 `TemplateAdapter` 与 registry，全部承接 session-aware transport。
+    *   [x] 引入 `LCM_BMC_AUTH_MODE` + `LCM_BMC_SESSION_TTL_SECONDS` 环境开关，支持 BASIC / SESSION / SESSION_PREFERRED 切换与 TTL 上限。
+*   **会话治理与验证**:
+    *   [x] 优雅退出时触发 best-effort Redfish session `DELETE` cleanup，避免 BMC 侧悬挂 session。
+    *   [x] 共享 vendor fixture 扩展为 BASIC/SESSION 双路径回归，覆盖 OpenBMC / iDRAC / iLO / XCC。
+    *   [x] 硬件准入矩阵骨架：`documentation/hardware-acceptance/` 新增 Dell iDRAC / HPE iLO / Lenovo XCC per-machine 样板 + `matrix.yaml` `pending:` 追踪。
+*   **参考文档**:
+    *   [x] 详细方案见 `documentation/REDFISH_BMC_PHASE8_PLAN.md`。
+
+---
+
+## 📅 阶段 AlertManager Productionization ✅ 已完成
+**目标**: 把 Phase 6 已接入的 AlertManager 从"默认 disabled 的代码骨架"推进到"生产就绪、可冒烟、CI 守卫"。
+*   **配置与部署**:
+    *   [x] Helm values 外置 AlertManager receiver，并用 K8s Secret 模板承接 Slack / PagerDuty / 邮件凭据。
+    *   [x] `configmap` 改走 `tpl` 渲染，支持值驱动 receivers 拼装。
+    *   [x] `docker-compose.dev` + `prometheus.yml` 串接本地 AlertManager，本地可复现路由。
+*   **冒烟与守卫**:
+    *   [x] `scripts/verify_alertmanager.sh` — 开发侧路由冒烟脚本，直接触发测试告警验证 receiver 路由。
+    *   [x] `documentation/runbooks/alertmanager.md` — 注入真实 secret 的 runbook。
+    *   [x] CI 新增 `helm-chart-lint` job：helm dependency build + helm lint + helm template + `amtool check-config`。
+*   **参考文档**:
+    *   [x] 详细方案见 `documentation/ALERTMANAGER_PHASE_PLAN.md`。
+
+---
+
+## 📅 阶段 Demo Smoke + Playwright E2E ✅ 已完成
+**目标**: 补齐"浏览器级回归"与"真实后端端到端冒烟"两层门禁，把 Demo 脚本从演示工具升级为 CI 守卫。
+*   **Playwright 浏览器级回归**:
+    *   [x] `frontend/playwright.config.ts` + `frontend/e2e/fixtures/*` 共享 API mock 基座。
+    *   [x] 6 个 spec 覆盖主流程：login / dashboard / discovery / jobs / topology-satellites / credential-profiles。
+    *   [x] CI 新增 `frontend-e2e` job（Chromium，API-mock 级别）。
+*   **真实后端端到端冒烟**:
+    *   [x] `scripts/ci_demo_smoke.sh` + CI `demo-smoke` job — 拉起真实 Postgres + Redis + Kafka + Core + Satellite + Loadgen，覆盖 gRPC + Kafka + WebSocket 端到端链路。
+    *   [x] 2026-04-17 修复 datasource 默认值（commit `58f1ba7`），`demo-smoke` job 持续绿。
+*   **参考文档**:
+    *   [x] 详细方案见 `documentation/PLAYWRIGHT_E2E_PHASE_PLAN.md` 与 `documentation/DEMO_SMOKE_PHASE_PLAN.md`。
 
 ---
 
@@ -130,17 +174,18 @@
 *   **Redfish/BMC 当前专项计划**: 统一见 `documentation/REDFISH_BMC_PHASE7_PLAN.md`
 
 当前仍在推进或待完成的高优先级事项：
-*   [ ] 真实硬件 Redfish / BMC 验收扩面（OpenBMC + 至少一种商业 BMC）
-*   [ ] AlertManager 外部通知通道（邮件 / Slack / PagerDuty）
-*   [ ] Satellite session-aware 只读采集（延后自 Phase 7）
+*   [ ] 真实硬件 Redfish / BMC 验收扩面（OpenBMC + 至少一种商业 BMC，骨架已就绪）
+*   [ ] AlertManager 真实 channel 接入与冒烟（Slack / PagerDuty / 邮件；代码就绪，需注入 prod secret）
 *   [ ] PXE / iPXE 生产硬化与真实环境验证
-*   [ ] Demo smoke 扩展与 Playwright 浏览器级回归
+*   [ ] 覆盖率门槛从 50% 渐进提升至 70%
+*   [ ] 负载测试回归阈值与趋势基线
+*   [ ] 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调）
 
 ---
 
 ## 📈 项目历程回顾 (Project History)
 
-> 基于 git 提交历史整理，共 119 commits（main 分支），2026-01-16 ~ 2026-04-09。
+> 基于 git 提交历史整理，共约 155 commits（main 分支），2026-01-16 ~ 2026-04-17。
 
 ### 2026-01 — 项目启动与基础框架搭建
 
@@ -171,17 +216,26 @@
 *   **Sprint 15** — AlertManager 部署集成、Helm NetworkPolicy / PDB / ServiceAccount / RBAC 模板、前端覆盖率报告与组件测试
 *   **Sprint 16** — PXE 全链路闭环（DHCP Proxy → TFTP → iPXE → kickstart + 镜像管理）、大组件拆分、端到端 Demo 脚本、JaCoCo 基线 → 50%
 
+### 2026-04 下旬 — Phase 7 / Phase 8 / 阶段化产品化收敛
+
+*   **文档治理基建** (04-11) — `AGENTS.md` 正式入库与 CI 契约口径刷新、文档角色整合、governance 骨架
+*   **Phase 7 Core 管理面** (04-11 ~ 04-13) — `RedfishTransport + RedfishSessionManager` 统一 Redfish 传输层；`/api/bmc/devices/{id}/...` 管理接口、受控 `power-actions`、审计 / 指标；前端 `DiscoveryPage` 接入 BMC 能力快照、凭据轮换、dry-run 与 ADMIN 强校验
+*   **Phase 8 Satellite session-aware** (04-15) — session-aware Redfish transport 核心落地、`OpenBMCAdapter` 重写、TemplateAdapter/registry 统一、`LCM_BMC_AUTH_MODE` / TTL 开关、共享 vendor fixture BASIC/SESSION 双路径、优雅退出 session cleanup、硬件准入矩阵骨架
+*   **AlertManager Productionization** (04-15) — helm values 外置 receiver、K8s Secret 模板、`tpl` 渲染、dev 本地 Prometheus 串接、`scripts/verify_alertmanager.sh` 冒烟、runbook、CI `helm-chart-lint` + `amtool check-config`
+*   **Playwright 浏览器级回归** (04-15) — `playwright.config.ts` + 6 个 spec（login / dashboard / discovery / jobs / topology-satellites / credential-profiles）+ CI `frontend-e2e` job
+*   **Demo Smoke 真实后端冒烟** (04-17) — `scripts/ci_demo_smoke.sh` + CI `demo-smoke` job，覆盖 Core + Satellite + gRPC + Kafka + WebSocket 真实链路；datasource 默认值修复后持续绿
+
 ### 关键数据
 
 | 指标 | 数值 |
 |------|------|
-| 总提交数 (main) | 119 |
-| 开发周期 | 约 12 周（2026-01-16 ~ 2026-04-09） |
-| 已完成 Sprint | 16 |
-| Flyway 迁移版本 | V1.0.0 ~ V2.6.0（16 个脚本） |
-| Core 测试类 | 32 个（Service 20 + API Resource 12） |
-| Satellite 测试文件 | 11 个 |
-| Frontend 测试文件 | 12 个 / 21 个用例 |
-| CI 工作流 Job | 6 个（contract-guard / backend / frontend / satellite / load-test / docker-build） |
+| 总提交数 (main) | 166 |
+| 开发周期 | 约 13 周（2026-01-16 ~ 2026-04-17） |
+| 已完成 Sprint / Phase | 16 Sprint + 5 Phase（Phase 7 / Phase 8 / AlertManager / Demo Smoke / Playwright） |
+| Flyway 迁移版本 | V1.0.0 ~ V2.7.0（17 个脚本） |
+| Core 测试类 | 46 个 |
+| Satellite 测试文件 | 16 个 |
+| Frontend 测试文件 | 13 个单元测试 + 6 个 Playwright spec |
+| CI 工作流 Job | 9 个（contract-guard / helm-chart-lint / backend / frontend-build / frontend-e2e / satellite / load-test / demo-smoke / docker-build） |
 | Core JaCoCo 指令覆盖率 | 58.08%（基线门槛 50%） |
 | Frontend Istanbul Statements | 65.23%（Lines 65.24%） |

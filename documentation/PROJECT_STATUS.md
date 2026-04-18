@@ -1,6 +1,6 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-04-16 (Phase Demo Smoke landed)
+> **Last Updated:** 2026-04-18 (roadmap refresh; demo-smoke datasource fix landed 2026-04-17)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
@@ -18,7 +18,7 @@
 | JaCoCo 覆盖率门禁 | ✅ 已落地 | 当前基线 50%，最近一次文档化本地验证为 58.08% |
 | OpenTelemetry 全链路追踪 | ✅ 已打通 | Satellite → Kafka → Core 状态回调已续接，有回归测试 |
 | CI 质量门禁（CodeQL / gradle check / npm / go test） | ✅ 已落地 | |
-| 集成测试（Testcontainers / DevServices / E2EIntegrationTest） | 🟡 主链路覆盖 | Playwright E2E（API mock 级）覆盖登录、Dashboard、发现、作业、拓扑、卫星、凭据主流程；CI `demo-smoke` job 补齐真实 Core + Satellite + gRPC + Kafka + WebSocket 端到端链路，断连恢复和压力级故障场景仍不充分 |
+| 集成测试（Testcontainers / DevServices / E2EIntegrationTest） | 🟡 主链路覆盖 | Playwright E2E（API mock 级）覆盖登录、Dashboard、发现、作业、拓扑、卫星、凭据主流程；CI `demo-smoke` job 补齐真实 Core + Satellite + gRPC + Kafka + WebSocket 端到端链路（2026-04-17 修复 datasource 默认值后持续绿），断连恢复和压力级故障场景仍不充分 |
 | Prometheus / Grafana 仪表盘与告警规则 | ✅ 已落地 | 仪表盘、规则、AlertManager receiver 链路已就绪（默认 disabled，需按 [runbook](runbooks/alertmanager.md) 注入真实 secret 生效） |
 
 ### 1.2 功能深化与自动化
@@ -42,7 +42,7 @@
 | 多集群管理（clusterId 隔离、集群汇总 API） | 🟡 80% | 字段、调度隔离、查询 API 已具备；生命周期管理与联邦能力未完成 |
 | 真实硬件 Redfish/BMC 验收 | 🟡 骨架齐备 | `documentation/hardware-acceptance/` 已有 OpenBMC / iDRAC / iLO / XCC 四份 per-machine 样板 + `matrix.yaml` `pending:` 追踪，待填充真实实验台数据 |
 | Demo 脚本 | ✅ 已落地 | `scripts/demo.sh` 本地闭环已接入 CI `demo-smoke` job 的真实后端门禁；实施方案见 [DEMO_SMOKE_PHASE_PLAN.md](DEMO_SMOKE_PHASE_PLAN.md) |
-| Playwright 浏览器级回归 | ✅ 已落地 | 已建立基于 API mock 的 Chromium 回归套件，覆盖登录、Dashboard、发现、作业、拓扑、卫星详情、凭据配置等 7 类主流程，并接入 CI `frontend-e2e` job；真实后端链路由 `demo-smoke` job 补齐 |
+| Playwright 浏览器级回归 | ✅ 已落地 | 已建立基于 API mock 的 Chromium 回归套件（6 个 spec），覆盖登录、Dashboard、发现、作业、拓扑与卫星详情、凭据配置主流程，并接入 CI `frontend-e2e` job；真实后端链路由 `demo-smoke` job 补齐 |
 
 ---
 
