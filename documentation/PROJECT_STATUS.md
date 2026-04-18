@@ -1,6 +1,6 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-04-18 (Software Closure Phase Plan approved; 下阶段重点按 Round 2 可执行项 / 外部条件门控 / 长期收敛项三层重排)
+> **Last Updated:** 2026-04-18 (Software Closure Round 2 doc deliverables landed; PXE runbook + recent 5 green load-test baselines recorded)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
@@ -32,14 +32,14 @@
 | 多执行模式（Docker / Shell / Ansible / SSH） | ✅ 已落地 | `EXEC_*` 全量 + 单元/E2E 覆盖 |
 | 模拟 Redfish / BMC 验收矩阵 | ✅ 已落地 | OpenBMC / iDRAC / iLO / XCC 共享 fixture + HTTPS mock 已接入 |
 | Redfish / BMC Phase 7 + Phase 8 深化 | ✅ 已落地 | Core 统一 `RedfishTransport + RedfishSessionManager`、`/api/bmc/devices/{id}/...` 管理面、受控 `power-actions`、审计/指标、前端 ADMIN 闭环、Satellite session-aware 只读 + fixture BASIC/SESSION 回归 + 优雅退出 session cleanup 均已落地；真实硬件准入矩阵扩面骨架见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)，真实机型验收数据仍待填充 |
-| PXE / iPXE 裸金属装机 | 🟡 软件闭环已具备 | 生产硬化和真实环境验证仍待收敛 |
+| PXE / iPXE 裸金属装机 | 🟡 软件闭环已具备 | [runbooks/pxe.md](runbooks/pxe.md) 已补齐生产硬化前提、网络要求、镜像准备与失败回退；真实环境验证仍待裸机节点到位 |
 
 ### 1.3 生产运营能力
 
 | 能力 | 状态 | 备注 |
 |------|------|------|
 | AlertManager 外部通知（邮件/Slack/PagerDuty） | ✅ 代码就绪 | Helm values 参数化 + Secret 模板 + CI guard 已落地；默认 disabled，需按 [runbook](runbooks/alertmanager.md) 注入真实 secret 才生效。详见 [ALERTMANAGER_PHASE_PLAN.md](ALERTMANAGER_PHASE_PLAN.md) |
-| 负载测试自动化（loadgen + CI load-test） | 🟡 95% | 缺明确的回归阈值与趋势基线 |
+| 负载测试自动化（loadgen + CI load-test） | 🟡 95% | CI 阈值已固化，[LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) 已记录最近 5 次绿色主线运行；后续转入滚动维护窗口 |
 | 多集群管理（clusterId 隔离、集群汇总 API） | 🟡 80% | 字段、调度隔离、查询 API 已具备；生命周期管理与联邦能力未完成 |
 | 真实硬件 Redfish/BMC 验收 | 🟡 骨架齐备 | `documentation/hardware-acceptance/` 已有 OpenBMC / iDRAC / iLO / XCC 四份 per-machine 样板 + `matrix.yaml` `pending:` 追踪，待填充真实实验台数据 |
 | Demo 脚本 | ✅ 已落地 | `scripts/demo.sh` 本地闭环已接入 CI `demo-smoke` job 的真实后端门禁；实施方案见 [DEMO_SMOKE_PHASE_PLAN.md](DEMO_SMOKE_PHASE_PLAN.md) |
@@ -89,12 +89,12 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 
 > **当前阶段：Software Closure Round 2**。在真实 BMC / 裸机设备与真实 AlertManager secret 到位前，近期主线为"软件收口 + readiness 保温"；阶段主计划与明确不做项见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)。
 
-### 3.1 Round 2 可执行项（无外部依赖）
+### 3.1 Round 2 已落地产物（无外部依赖）
 
-| 优先级 | 事项 | 对应计划 | 预期效果 |
+| 优先级 | 事项 | 对应计划 | 当前状态 |
 |--------|------|---------|---------|
-| 🔴 P0 | 新建 `documentation/runbooks/pxe.md` — 沉淀前置条件、网络要求、镜像准备、失败回退、验收步骤 | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 2](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 真实裸机到位后可按 runbook 执行 |
-| 🔴 P0 | 新建 `documentation/LOAD_TEST_BASELINES.md` + 首条基线入库（run ID / commit / satellites / duration / registration & heartbeat success rate / heartbeat failures） | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 3](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-3--load-test从静态门槛升级为趋势基线) | load-test 从"一次通过"走向"多次可比较" |
+| 🔴 P0 | [runbooks/pxe.md](runbooks/pxe.md) — PXE 生产硬化 runbook | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 2](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 已落地；真实裸机到位后可按 runbook 执行 |
+| 🔴 P0 | [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) — load-test 趋势基线单一入口 | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 3](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-3--load-test从静态门槛升级为趋势基线) | 已落地；最近 5 次绿色主线 run 已入库 |
 
 ### 3.2 受外部条件门控
 
@@ -112,8 +112,9 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 | 🟠 P2 | 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调） | 规模化运营 | 跨数据中心统一运营 |
 
 **建议执行顺序：**
-- **近期 1-2 周（Round 2 核心）：** §3.1 两项——PXE runbook 起草 + LOAD_TEST_BASELINES 初始化；若真实 secret 到位则同步做 AlertManager 真实送达冒烟。
-- **中期 3-4 周：** 真实硬件 Redfish/BMC 实验台数据填入（等硬件到位）；覆盖率渐进提升。
+- **近期 1-2 周（Round 2 核心，无外部依赖）：** 维持 [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) 的最近 5 次绿色运行窗口；以 [runbooks/pxe.md](runbooks/pxe.md) 作为现场准备与运维评审口径。
+- **外部条件一旦具备即触发（与上一项并行、不阻塞 Round 2 核心）：** 真实 secret 到位 → AlertManager 真实送达冒烟；裸机 / 商业 BMC 到位 → PXE 真实环境验证 + `hardware-acceptance/matrix.yaml` 扩面。
+- **中期 3-4 周：** 覆盖率渐进提升。
 - **远期 5-8 周：** 多集群联邦增强。
 
 ---

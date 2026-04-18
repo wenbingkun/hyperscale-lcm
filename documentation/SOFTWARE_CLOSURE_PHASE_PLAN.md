@@ -1,6 +1,6 @@
 # Phase Software Closure：无真实设备条件下的近期收口计划
 
-> Updated: 2026-04-18
+> Updated: 2026-04-18 (Round 2 doc deliverables landed: PXE runbook + recent 5 green load-test baselines)
 > Status: **Approved** — 经 Round 2 + Round 3 评审定稿；作为 Software Closure 阶段实施的核心指导文件。
 > 由 Codex 编写，由 Claude Opus 4.7 审核。
 > 约束前提：当前无真实 BMC / 裸机设备、无真实 AlertManager secret；在真实设备与真实 secret 到位前，本计划以"软件收口"替代"真实环境验收"。
@@ -44,7 +44,7 @@
 
 - 支持矩阵先收窄为 `UEFI + iPXE + kickstart/cloud-init` 单一路径，不在本阶段讨论 legacy BIOS、多发行版模板分叉或更多引导模式。
 - 以 [satellite/pkg/pxe/](../satellite/pkg/pxe/) 现有实现为基础，收敛运行前提、网络要求、DHCP option `66/67`、镜像准备、失败回退与运维说明。
-- 当前 [documentation/runbooks/](runbooks/) 下**没有** PXE 专项 runbook；Round 2 的明确 deliverable 固定为新增 `documentation/runbooks/pxe.md`，用于沉淀前置条件、网络要求、镜像准备、失败回退与验收步骤。
+- 定稿时 [documentation/runbooks/](runbooks/) 下**没有** PXE 专项 runbook；Round 2 已新增 [runbooks/pxe.md](runbooks/pxe.md)，用于沉淀前置条件、网络要求、镜像准备、失败回退与验收步骤。
 - 本阶段强调"生产硬化准备"而非"真实环境验证已完成"；一切真实装机验证都等设备可用后再执行。
 - 不新增 PXE 功能，不引入新的装机编排层，不改现有 Core / Satellite 协议契约。
 
@@ -111,14 +111,14 @@
 - 近期目标是降低未来接入风险、提升文档与验证准备度，而不是扩展新的业务能力或提前进入多集群联邦开发。
 - 本文件是阶段实施指导主稿；它不替代 [PROJECT_STATUS.md](PROJECT_STATUS.md) 的现状快照角色，也不替代 [DEVELOPMENT_ROADMAP.md](../DEVELOPMENT_ROADMAP.md) 的阶段历史角色。
 
-## Round 2 实施清单（下一步任务的执行入口）
+## Round 2 实施清单（已落地产物 + 后续阻塞项）
 
-| 项 | 目标产物 | 所在 Step | 前置条件 |
-|----|----------|-----------|----------|
-| PXE 生产硬化 runbook | 新建 `documentation/runbooks/pxe.md`，沉淀前置条件、网络要求、镜像准备、失败回退、验收步骤 | [Step 2](#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 无（纯文档） |
-| load-test 基线入口 | 新建 `documentation/LOAD_TEST_BASELINES.md` 并写入首条基线 | [Step 3](#step-3--load-test从静态门槛升级为趋势基线) | 最近一次 CI `load-test` job 绿 |
-| AlertManager 真实送达验证 | 按 [runbooks/alertmanager.md](runbooks/alertmanager.md) 完成 Slack / PagerDuty / Email 冒烟，并回写 [PROJECT_STATUS.md](PROJECT_STATUS.md) | [Step 1](#step-1--alertmanager从真实通道验证切到部署与本地路由就绪) | 真实 Slack / PagerDuty / SMTP secret 到位 |
-| 真实硬件 BMC 准入扩面 | 按 [hardware-acceptance/README.md](hardware-acceptance/README.md) 的 reporting workflow 填充 `matrix.yaml` | [Step 4](#step-4--redfish--bmc保持-readiness不新增功能开发) | 实验台 OpenBMC + 商业 BMC 硬件到位 |
+| 项 | 状态 | 目标产物 | 所在 Step | 前置条件 |
+|----|------|----------|-----------|----------|
+| PXE 生产硬化 runbook | 已完成（2026-04-18） | [runbooks/pxe.md](runbooks/pxe.md)，沉淀前置条件、网络要求、镜像准备、失败回退、验收步骤 | [Step 2](#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 无（纯文档） |
+| load-test 基线入口 | 已完成（2026-04-18） | [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) 已建立，并补齐最近 5 次绿色主线基线 | [Step 3](#step-3--load-test从静态门槛升级为趋势基线) | 最近一次 CI `load-test` job 绿 |
+| AlertManager 真实送达验证 | 待外部条件 | 按 [runbooks/alertmanager.md](runbooks/alertmanager.md) 完成 Slack / PagerDuty / Email 冒烟，并回写 [PROJECT_STATUS.md](PROJECT_STATUS.md) | [Step 1](#step-1--alertmanager从真实通道验证切到部署与本地路由就绪) | 真实 Slack / PagerDuty / SMTP secret 到位 |
+| 真实硬件 BMC 准入扩面 | 待外部条件 | 按 [hardware-acceptance/README.md](hardware-acceptance/README.md) 的 reporting workflow 填充 `matrix.yaml` | [Step 4](#step-4--redfish--bmc保持-readiness不新增功能开发) | 实验台 OpenBMC + 商业 BMC 硬件到位 |
 
 ## 关键文件清单
 
@@ -133,6 +133,6 @@
   - [documentation/REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)
   - [documentation/hardware-acceptance/README.md](hardware-acceptance/README.md)
   - [documentation/CI_CONTRACT.md](CI_CONTRACT.md)
-- **Round 2 起拟新增**（本阶段尚不存在）：
-  - `documentation/runbooks/pxe.md`
-  - `documentation/LOAD_TEST_BASELINES.md`
+- **Round 2 已新增**：
+  - [documentation/runbooks/pxe.md](runbooks/pxe.md)
+  - [documentation/LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md)

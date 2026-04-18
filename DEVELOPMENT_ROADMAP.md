@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-04-18 (Software Closure Phase Plan approved; Current Focus 按 Round 2 可执行项 / 外部条件门控 / 长期收敛项三层重排)
+> 最后更新: 2026-04-18 (Software Closure Round 2 doc deliverables landed; Current Focus 已同步 PXE runbook 与最近 5 次绿色 load-test baselines)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -174,9 +174,9 @@
 *   **文档入口导航**: 统一见 `README.md`
 *   **Redfish/BMC 专项计划**: `documentation/REDFISH_BMC_PHASE7_PLAN.md` / `REDFISH_BMC_PHASE8_PLAN.md`
 
-**Round 2 可执行项（无外部依赖）：**
-*   [ ] 新建 `documentation/runbooks/pxe.md` — PXE 生产硬化 runbook（前置条件、网络要求、镜像准备、失败回退、验收步骤）
-*   [ ] 新建 `documentation/LOAD_TEST_BASELINES.md` — load-test 趋势基线单一入口，首条基线入库
+**Round 2 已落地产物（无外部依赖）：**
+*   [x] 新建 `documentation/runbooks/pxe.md` — PXE 生产硬化 runbook（前置条件、网络要求、镜像准备、失败回退、验收步骤）
+*   [x] 新建 `documentation/LOAD_TEST_BASELINES.md` — load-test 趋势基线单一入口，最近 5 次绿色主线 run 已入库
 
 **受外部条件门控（等硬件 / secret 到位）：**
 *   [ ] 真实硬件 Redfish / BMC 验收扩面（OpenBMC + 至少一种商业 BMC，骨架已就绪）
@@ -185,7 +185,7 @@
 
 **长期收敛项：**
 *   [ ] 覆盖率门槛从 50% 渐进提升至 70%
-*   [ ] 负载测试回归阈值与趋势基线（首轮基线由 Round 2 的 `LOAD_TEST_BASELINES.md` 建立）
+*   [ ] 负载测试趋势基线滚动维护（按 `documentation/LOAD_TEST_BASELINES.md` 持续保留最近 5 次绿色运行）
 *   [ ] 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调）
 
 ---
@@ -234,14 +234,16 @@
 
 ### 关键数据
 
+> 下表为 2026-04-18 的近似快照，数值随后续提交自然漂移；精确核验以仓库实测为准（`git rev-list --count main`、`**/*Test.java`、`satellite/**/*_test.go`、`frontend/src/**/*.test.*`、`frontend/e2e/**/*.spec.ts`、`core/src/main/resources/db/migration/*.sql`）。
+
 | 指标 | 数值 |
 |------|------|
-| 总提交数 (main) | 166 |
-| 开发周期 | 约 13 周（2026-01-16 ~ 2026-04-17） |
+| 总提交数 (main) | ~168 |
+| 开发周期 | 约 13 周（2026-01-16 ~ 2026-04-18） |
 | 已完成 Sprint / Phase | 16 Sprint + 5 Phase（Phase 7 / Phase 8 / AlertManager / Demo Smoke / Playwright） |
 | Flyway 迁移版本 | V1.0.0 ~ V2.7.0（17 个脚本） |
 | Core 测试类 | 46 个 |
-| Satellite 测试文件 | 16 个 |
+| Satellite 测试文件 | 18 个 |
 | Frontend 测试文件 | 13 个单元测试 + 6 个 Playwright spec |
 | CI 工作流 Job | 9 个（contract-guard / helm-chart-lint / backend / frontend-build / frontend-e2e / satellite / load-test / demo-smoke / docker-build） |
 | Core JaCoCo 指令覆盖率 | 58.08%（基线门槛 50%） |
