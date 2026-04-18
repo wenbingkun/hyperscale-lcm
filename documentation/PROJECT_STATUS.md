@@ -1,11 +1,12 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-04-18 (roadmap refresh; demo-smoke datasource fix landed 2026-04-17)
+> **Last Updated:** 2026-04-18 (Software Closure Phase Plan approved; 下阶段重点按 Round 2 可执行项 / 外部条件门控 / 长期收敛项三层重排)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
 > - `DEVELOPMENT_ROADMAP.md` 记录**路线图与阶段历史**（Phase 1..N 规划、目标、历史节奏）
 > - 本文件记录**当前能力矩阵、架构现状、已知缺口、下阶段重点**，是给新成员或 AI agent 快速建立认知的入口
+> - 当前阶段主计划见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)（Software Closure Round 2 实施指导）
 
 ---
 
@@ -86,19 +87,34 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 
 ## 3. 已知缺口与下阶段重点
 
+> **当前阶段：Software Closure Round 2**。在真实 BMC / 裸机设备与真实 AlertManager secret 到位前，近期主线为"软件收口 + readiness 保温"；阶段主计划与明确不做项见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)。
+
+### 3.1 Round 2 可执行项（无外部依赖）
+
+| 优先级 | 事项 | 对应计划 | 预期效果 |
+|--------|------|---------|---------|
+| 🔴 P0 | 新建 `documentation/runbooks/pxe.md` — 沉淀前置条件、网络要求、镜像准备、失败回退、验收步骤 | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 2](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 真实裸机到位后可按 runbook 执行 |
+| 🔴 P0 | 新建 `documentation/LOAD_TEST_BASELINES.md` + 首条基线入库（run ID / commit / satellites / duration / registration & heartbeat success rate / heartbeat failures） | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 3](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-3--load-test从静态门槛升级为趋势基线) | load-test 从"一次通过"走向"多次可比较" |
+
+### 3.2 受外部条件门控
+
+| 优先级 | 事项 | 阻塞 | 解除条件 |
+|--------|------|------|----------|
+| 🔴 P0 | 真实硬件 Redfish / BMC 验收数据填充（`hardware-acceptance/matrix.yaml` `pending:` 骨架已就位，见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)） | 无真实 Dell iDRAC / HPE iLO / Lenovo XCC 设备 | 实验台硬件到位 |
+| 🟡 P1 | AlertManager 真实 channel 接入与冒烟（代码与路由已就绪，需 prod secret 注入） | 无真实 Slack / PagerDuty / 邮件 secret | 按 [runbooks/alertmanager.md](runbooks/alertmanager.md) 完成真实送达；External Secrets / Vault / SOPS 选型延至 secret 可用前再决策 |
+| 🟡 P1 | PXE / iPXE 真实环境验证（代码闭环已具备；runbook 见 §3.1） | 无真实裸机节点 | 裸机节点可用 |
+
+### 3.3 长期收敛项
+
 | 优先级 | 事项 | 阻塞类别 | 预期效果 |
 |--------|------|---------|---------|
-| 🟡 P1 | AlertManager 真实 channel 接入与冒烟（代码已就绪，需 prod secret 注入） | 可运维性 | 按 [runbook](runbooks/alertmanager.md) 完成 Slack/PagerDuty/邮件真实验证 |
-| 🔴 P0 | 真实硬件 Redfish / BMC 验收数据填充（Dell iDRAC / HPE iLO / Lenovo XCC 骨架已就位，见 [REDFISH_BMC_PHASE8_PLAN.md](REDFISH_BMC_PHASE8_PLAN.md)） | 生产接入 | 降低硬件接入风险 |
-| 🟡 P1 | PXE / iPXE 生产硬化与真实环境验证 | 自动化交付 | 降低裸机交付落地风险 |
 | 🟠 P2 | 覆盖率门槛从 50% 渐进提升至 70% | 工程质量 | 长期目标收敛 |
-| 🟠 P2 | 负载测试回归阈值与趋势基线 | 可比较性 | 性能验证从"能跑"到"可比较" |
 | 🟠 P2 | 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调） | 规模化运营 | 跨数据中心统一运营 |
 
 **建议执行顺序：**
-- **近期 1-2 周：** AlertManager 真实 channel 冒烟验证 + 真实硬件 Redfish/BMC 验收数据填充（骨架已齐）
-- **中期 3-4 周：** PXE 生产硬化、负载基线
-- **远期 5-8 周：** 多集群联邦增强
+- **近期 1-2 周（Round 2 核心）：** §3.1 两项——PXE runbook 起草 + LOAD_TEST_BASELINES 初始化；若真实 secret 到位则同步做 AlertManager 真实送达冒烟。
+- **中期 3-4 周：** 真实硬件 Redfish/BMC 实验台数据填入（等硬件到位）；覆盖率渐进提升。
+- **远期 5-8 周：** 多集群联邦增强。
 
 ---
 
