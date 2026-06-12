@@ -6,7 +6,7 @@ services:
     container_name: lcm-postgres
     environment:
       POSTGRES_USER: lcm_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-O1b2M3x4P5!}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_DB: lcm_db
     ports:
       - "5432:5432"
@@ -89,7 +89,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD is required}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning
@@ -100,7 +100,7 @@ services:
     restart: unless-stopped
 
   lcm-core:
-    image: ${DOCKER_NAMESPACE:-example}/lcm-core:${DOCKER_TAG:-latest}
+    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-core:${DOCKER_TAG:-v0.1.0}
     container_name: lcm-core
     depends_on:
       postgres:
@@ -111,23 +111,54 @@ services:
         condition: service_started
     ports:
       - "8080:8080" # REST API
-      - "9000:9000" # gRPC
     environment:
+      - QUARKUS_PROFILE=prod
       - DB_USERNAME=lcm_user
-      - DB_PASSWORD=${DB_PASSWORD:-O1b2M3x4P5!}
+      - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - DB_REACTIVE_URL=postgresql://postgres:5432/lcm_db
       - DB_URL=jdbc:postgresql://postgres:5432/lcm_db
       - REDIS_URL=redis://redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - OTEL_EXPORTER_ENDPOINT=http://jaeger:4317
+      - GRPC_CERT_PATH=/app/certs/server.pem
+      - GRPC_KEY_PATH=/app/certs/server-pkcs8.key
+      - GRPC_TRUSTSTORE_PATH=/app/certs/truststore.jks
+      - GRPC_TRUSTSTORE_PASSWORD=${GRPC_TRUSTSTORE_PASSWORD:?GRPC_TRUSTSTORE_PASSWORD is required}
+    volumes:
+      - ./certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/health/ready >/dev/null 2>&1 || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  lcm-satellite:
+    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-satellite:${DOCKER_TAG:-v0.1.0}
+    container_name: lcm-satellite
+    depends_on:
+      lcm-core:
+        condition: service_healthy
+    environment:
+      - LCM_CORE_ADDR=lcm-core:8080
+      - LCM_CERTS_DIR=/app/certs
+      - LCM_GRPC_PLAINTEXT=false
+      - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
+    volumes:
+      - ./certs:/app/certs:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
 
   lcm-frontend:
-    image: ${DOCKER_NAMESPACE:-example}/lcm-frontend:${DOCKER_TAG:-latest}
+    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-frontend:${DOCKER_TAG:-v0.1.0}
     container_name: lcm-frontend
     depends_on:
-      - lcm-core
+      lcm-core:
+        condition: service_healthy
     ports:
       - "5173:80"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
