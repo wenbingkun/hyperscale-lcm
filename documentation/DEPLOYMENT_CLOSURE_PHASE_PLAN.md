@@ -1,7 +1,7 @@
 # Phase Deployment Closure：把"作者能跑通"收口为"他人能部署运维"
 
 > Updated: 2026-06-12 (Step 3 扩为部署链路修复四工作项；Step 5 验收升级为含重启恢复的硬 checklist)
-> Status: **Draft** — 待评审；定稿后按 Step 6 节奏回写 PROJECT_STATUS 与 ROADMAP。
+> Status: **In Progress** — 按本方案推进；完成后按 Step 6 节奏回写 PROJECT_STATUS 与 ROADMAP。
 > 由 Claude Code (Fable 5) 编写。
 > 约束前提：与 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md) 一致 —— 无真实 BMC / 裸机设备、无真实 AlertManager secret。本阶段全部工作不依赖外部条件。
 
@@ -30,6 +30,8 @@
 - Satellite `go test ./... -count=1` ✅ 全绿
 - Frontend `npm test`（13 文件 / 29 用例）+ `npm run lint` + `npm run build` ✅ 全绿
 - Core `./gradlew check`：155 个测试通过，3 个失败 —— 全部为上述 testcontainers × Docker 29 环境不兼容，**非代码回归**（已用 CI 等价的外部 PG/Redis/Kafka 服务复现确认）
+
+**受限网络本地验证注意事项（2026-06-12 补充）**：testcontainers 1.20.x 依赖 `testcontainers/ryuk:0.11.0` 镜像；在 registry 不可达的内网/离线主机上跑 `./gradlew check` 需设置 `TESTCONTAINERS_RYUK_DISABLED=true` 并预先缓存 DevServices 所需镜像（`postgres:14`）。CI runner 不受影响。
 
 **依赖审计结论（2026-06-11，只记录不动手）**：
 
@@ -74,7 +76,7 @@
 1. **Satellite 生产 env 口径**：盘点并文档化 Satellite 全部环境变量（现状：`LCM_CORE_ADDR` / `LCM_CERTS_DIR` / `LCM_GRPC_PLAINTEXT` / `LCM_DISCOVERY_IFACE` / `LCM_MOCK_HOSTNAME`），明确每项的必填性与生产默认值；生产路径默认 mTLS，`LCM_GRPC_PLAINTEXT=true` 仅限 demo/CI，不允许静默回退；helm `values.satellite.env` 给出与文档一致的默认结构。
 2. **mTLS 证书 Secret 挂载**：helm 侧新增证书 Secret 模板与 volumeMount——[core.yaml](../helm/hyperscale-lcm/templates/core.yaml) 挂载 server 证书并设置 `GRPC_CERT_PATH` / `GRPC_KEY_PATH` / `GRPC_TRUSTSTORE_PATH` / `GRPC_TRUSTSTORE_PASSWORD` 指向挂载点，[satellite.yaml](../helm/hyperscale-lcm/templates/satellite.yaml) 挂载 client 证书并设置 `LCM_CERTS_DIR`；compose 侧给 lcm-core 与 satellite 服务挂载 `certs/` 目录。Secret 创建步骤（基于 `generate_keys.sh` 产物清单）写入 runbook。
 3. **Kafka 与 Core 必填配置收口**：明确 lcm-core 容器的必填 env 清单（`KAFKA_BOOTSTRAP_SERVERS`、`DB_*`、`REDIS_URL`、`GRPC_*`），缺失时 fail-fast 而非静默使用编译期默认值；compose 内 `kafka:29092` 与 helm 内的 bootstrap 地址口径在 runbook 中显式说明，杜绝"只有作者知道的隐式约定"。
-4. **compose satellite 启动方式**：[docker-compose.prod.yml](../docker-compose.prod.yml) 新增 satellite 服务（镜像、证书挂载、`LCM_CORE_ADDR=lcm-core:9000`、docker.sock 挂载与权限说明），并在 runbook 中说明其定位：单机全栈演示形态；真实生产中 satellite 部署在被管节点侧（k8s DaemonSet）。
+4. **compose satellite 启动方式**：[docker-compose.prod.yml](../docker-compose.prod.yml) 新增 satellite 服务（镜像、证书挂载、`LCM_CORE_ADDR=lcm-core:8080`、docker.sock 挂载与权限说明），并在 runbook 中说明其定位：单机全栈演示形态；真实生产中 satellite 部署在被管节点侧（k8s DaemonSet）。
 
 **runbooks/deployment.md 结构**：compose 单机路径（前置条件 → `generate_keys.sh` → secret 注入规范 → up → 健康检查点）+ helm 路径（values 必填项清单、Secret 创建、`helm install` 到可登录的完整步骤）+ 上述四项的口径沉淀。
 

@@ -112,10 +112,13 @@ For Core validation, follow the environment-specific commands in `documentation/
 |----------|---------|
 | `DEVELOPMENT_ROADMAP.md` | Roadmap, phase history, sprint log |
 | `documentation/PROJECT_STATUS.md` | Rolling current-state snapshot and next-step priorities |
+| `CHANGELOG.md` | Versioned release notes |
 | `documentation/ENTERPRISE_LCM_ARCHITECTURE.md` | Layered architecture and communication topology |
 | `documentation/RESOURCE_SCHEDULING_DESIGN.md` | Scheduling engine design (Timefold, zone partitioning, GPU topology) |
 | `documentation/CI_CONTRACT.md` | CI/test source of truth |
 | `documentation/CI_FAILURE_PATTERNS.md` | CI troubleshooting patterns |
+| `documentation/runbooks/deployment.md` | Production deployment runbook for compose and Helm |
+| `documentation/runbooks/upgrade-and-backup.md` | Upgrade, backup, restore, and certificate rotation runbook |
 | `documentation/REDFISH_BMC_PHASE7_PLAN.md` | Phase 7 Redfish/BMC hardening plan |
 | `documentation/hardware-acceptance/` | Real hardware Redfish/BMC acceptance matrix |
 | `documentation/DEMO_GUIDE.md` | Demo script and prerequisites |

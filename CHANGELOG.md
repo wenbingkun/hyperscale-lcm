@@ -1,0 +1,30 @@
+# Changelog
+
+All notable changes to Hyperscale LCM are documented in this file.
+
+The format follows Keep a Changelog, and this project uses semver-style release tags.
+
+## [v0.1.0] - 2026-06-12
+
+### Added
+
+- Core, Satellite, and Frontend release images are published with semver tags.
+- Production deployment runbook for docker-compose and Helm.
+- Upgrade, backup, restore, mTLS rotation, and JWT key rotation runbook.
+- Helm mTLS Secret wiring for Core and Satellite.
+- Production compose Satellite service with mTLS cert mounts.
+
+### Changed
+
+- Helm and raw Kubernetes manifests use fixed `v0.1.0` image tags by default.
+- Core/Satellite deployment manifests use `LCM_CORE_ADDR` on port `8080`, matching the shared Quarkus HTTP/gRPC server.
+- Production compose now fails fast when required secrets are missing.
+- Core prod profile now requires explicit datasource, Redis, Kafka, and gRPC certificate settings.
+
+### Fixed
+
+- Testcontainers and docker-java dependency drift against Docker Engine 29+.
+- Helm Satellite environment variable mismatch that previously caused it to ignore the Core service address.
+- Missing mTLS certificate mounts in production deployment manifests.
+- Frontend `react-router-dom` dependency range now includes the patched 7.14.x line.
+

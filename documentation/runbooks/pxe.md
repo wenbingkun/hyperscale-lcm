@@ -133,7 +133,7 @@ export LCM_PXE_BOOT_INITRD_URL=http://mirror.local/rocky/9/BaseOS/x86_64/os/imag
 
 ```bash
 env \
-  LCM_CORE_ADDR=core.example.internal:9000 \
+  LCM_CORE_ADDR=core.example.internal:8080 \
   LCM_CERTS_DIR=/etc/lcm/certs \
   LCM_PXE_BOOT_SERVER_HOST=10.0.0.15 \
   LCM_PXE_DHCP_BOOTFILE=ipxe.efi \
