@@ -31,15 +31,17 @@ spec:
           image: {{ include "hyperscale-lcm.image" (dict "image" .Values.satellite.image "global" .Values.global) }}
           imagePullPolicy: {{ .Values.satellite.image.pullPolicy }}
           env:
-            - name: CORE_HOST
-              value: {{ .Release.Name }}-core
-            - name: CORE_GRPC_PORT
-              value: {{ .Values.core.service.grpcPort | quote }}
+            - name: LCM_CORE_ADDR
+              value: {{ printf "%s:%v" (default (printf "%s-core" .Release.Name) .Values.satellite.core.host) .Values.satellite.core.grpcPort | quote }}
+            {{- if .Values.security.mtls.enabled }}
+            - name: LCM_CERTS_DIR
+              value: {{ .Values.security.mtls.mountPath | quote }}
+            {{- end }}
             - name: NODE_IP
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: HOSTNAME
+            - name: LCM_MOCK_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
@@ -54,6 +56,11 @@ spec:
           securityContext:
             privileged: true
           volumeMounts:
+            {{- if .Values.security.mtls.enabled }}
+            - name: mtls-certs
+              mountPath: {{ .Values.security.mtls.mountPath | quote }}
+              readOnly: true
+            {{- end }}
             - name: docker-sock
               mountPath: /var/run/docker.sock
             - name: host-proc
@@ -62,6 +69,11 @@ spec:
       hostNetwork: true
       hostPID: true
       volumes:
+        {{- if .Values.security.mtls.enabled }}
+        - name: mtls-certs
+          secret:
+            secretName: {{ .Values.security.mtls.secretName }}
+        {{- end }}
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock

@@ -2,8 +2,8 @@ apiVersion: v2
 name: hyperscale-lcm
 description: Hyperscale Lifecycle Management - GPU 集群作业调度与容器编排平台
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 0.1.0
+appVersion: "v0.1.0"
 
 keywords:
   - gpu
