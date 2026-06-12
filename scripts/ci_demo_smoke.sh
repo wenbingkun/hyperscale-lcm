@@ -175,6 +175,7 @@ start_core() {
       GRPC_CERT_PATH="$ROOT_DIR/certs/server.pem" \
       GRPC_KEY_PATH="$ROOT_DIR/certs/server-pkcs8.key" \
       GRPC_TRUSTSTORE_PATH="$ROOT_DIR/certs/truststore.jks" \
+      GRPC_TRUSTSTORE_PASSWORD="${GRPC_TRUSTSTORE_PASSWORD:-changeit}" \
       LCM_DISCOVERY_REQUIRE_APPROVAL=false \
       QUARKUS_OTEL_SDK_DISABLED="${QUARKUS_OTEL_SDK_DISABLED:-true}" \
       java \
