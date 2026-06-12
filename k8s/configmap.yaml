@@ -11,8 +11,8 @@ data:
   # Kafka 连接
   kafka-bootstrap-servers: "kafka.default.svc.cluster.local:9092"
   
-  # Core gRPC 地址 (供 Satellite 使用)
-  core-grpc-address: "hyperscale-lcm-core.default.svc.cluster.local:9000"
+  # Core gRPC 地址 (供 Satellite 使用；gRPC 与 HTTP 共用 8080)
+  core-grpc-address: "hyperscale-lcm-core.default.svc.cluster.local:8080"
   
   # OpenTelemetry 导出器
   otel-exporter-endpoint: "http://jaeger-collector.observability.svc.cluster.local:4317"

@@ -20,17 +20,19 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: satellite
-          image: example/lcm-satellite:latest
+          image: lcm-satellite:v0.1.0
           imagePullPolicy: IfNotPresent
           env:
-            - name: CORE_ADDRESS
+            - name: LCM_CORE_ADDR
               valueFrom:
                 configMapKeyRef:
                   name: hyperscale-lcm-config
                   key: core-grpc-address
-            - name: CERT_DIR
+            - name: LCM_CERTS_DIR
               value: "/app/certs"
-            - name: NODE_NAME
+            - name: LCM_GRPC_PLAINTEXT
+              value: "false"
+            - name: LCM_MOCK_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
