@@ -1,7 +1,7 @@
 # Phase Stability Closure：把断连恢复从"代码里有"收口为"测试里证"
 
 > Updated: 2026-06-12
-> Status: **In Progress** — Deployment Closure 落地后的下一阶段；完成后按惯例回写 PROJECT_STATUS 与 ROADMAP。
+> Status: **Landed** — 见文末落地记录。
 > 由 Claude Code (Fable 5) 编写。
 > 约束前提：与前两阶段一致——无真实 BMC / 裸机 / 真实 AlertManager secret；不依赖外部条件。
 
@@ -75,3 +75,9 @@
 - bufconn 进程内 gRPC server 足以真实复现 stream 断开语义（grpc-go 标准测试手法）。
 - E2EIntegrationTest 的 KafkaCompanion 基建可直接复用于 DLQ topic 消费。
 - 本阶段不阻塞 Deployment Closure 的 Step 5 验收走查（两者独立，后者等外部环境）。
+
+## 落地记录（2026-06-12）
+
+- **commit 序列**：`e0c7cbe`（本主稿）、`f722dbe`（satellite `pkg/stream` 提取 + 3 个 bufconn 回归用例：断流重连重握手、连接失败持续重试、ctx 取消即时退出）、`3e94056`（Core E2E DLQ 真实 broker 断言）、`768cdb1`（顺手修复 CI 暴露的 SatelliteTable 既有测试竞态 flake——断言改 `findByText` 等待 fetch 后重渲染）。
+- **验证**：satellite 全套件绿（6 包）；core `gradlew check` 绿（159 测试，新增 DLQ 用例在真实 Kafka 上通过）；frontend 29/29 + lint + build；CI contract guard 通过；main CI run `27407588407` 全绿（首推 run `27407153946` 因上述既有 frontend flake 翻红，已修复）。
+- **行为差异声明**：satellite 重连重试等待改为 ctx 感知，优雅关闭不再额外等待最多一个重试间隔；其余运行时行为不变。

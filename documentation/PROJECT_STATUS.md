@@ -1,6 +1,6 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-06-12 (Phase Deployment Closure landed: v0.1.0 versioned release, deployment/upgrade runbooks, mTLS deployment wiring, prod fail-fast config, Docker Engine 29 test compatibility)
+> **Last Updated:** 2026-06-12 (Phase Stability Closure landed: satellite stream reconnection extracted to pkg/stream with regression tests, DLQ routing proven on a real broker. Same day: Phase Deployment Closure landed with v0.1.0 release)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
@@ -19,7 +19,7 @@
 | JaCoCo 覆盖率门禁 | ✅ 已落地 | 当前基线 50%，最近一次文档化本地验证为 58.08% |
 | OpenTelemetry 全链路追踪 | ✅ 已打通 | Satellite → Kafka → Core 状态回调已续接，有回归测试 |
 | CI 质量门禁（CodeQL / gradle check / npm / go test） | ✅ 已落地 | |
-| 集成测试（Testcontainers / DevServices / E2EIntegrationTest） | 🟡 主链路覆盖 | Playwright E2E（API mock 级）覆盖登录、Dashboard、发现、作业、拓扑、卫星、凭据主流程；CI `demo-smoke` job 补齐真实 Core + Satellite + gRPC + Kafka + WebSocket 端到端链路（2026-04-17 修复 datasource 默认值后持续绿），断连恢复和压力级故障场景仍不充分 |
+| 集成测试（Testcontainers / DevServices / E2EIntegrationTest） | ✅ 主链路 + 断连恢复覆盖 | Playwright E2E（API mock 级）覆盖七大前端主流程；CI `demo-smoke` job 补齐真实 Core + Satellite + gRPC + Kafka + WebSocket 端到端链路；Satellite 命令流断连重连由 `satellite/pkg/stream` 单测回归覆盖、DLQ 路由有真实 broker E2E 断言（2026-06-12 [STABILITY_CLOSURE_PHASE_PLAN.md](STABILITY_CLOSURE_PHASE_PLAN.md)）；压力级故障注入与进程级重启恢复由 [deployment.md §5](runbooks/deployment.md) 人工 checklist 承接 |
 | Prometheus / Grafana 仪表盘与告警规则 | ✅ 已落地 | 仪表盘、规则、AlertManager receiver 链路已就绪（默认 disabled，需按 [runbook](runbooks/alertmanager.md) 注入真实 secret 生效） |
 
 ### 1.2 功能深化与自动化
@@ -88,12 +88,13 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 
 ## 3. 已知缺口与下阶段重点
 
-> **当前阶段：Deployment Closure 已落地（2026-06-12）**。v0.1.0 版本化发布、部署/升级 runbook、mTLS 部署链路与 prod fail-fast 配置均已进入 main；阶段主计划、落地记录与明确不做项见 [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md)。上一阶段（Software Closure Round 2）见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)。
+> **当前阶段：Stability Closure 已落地（2026-06-12）**，同日 Deployment Closure 落地并发布 v0.1.0。阶段主计划与落地记录分别见 [STABILITY_CLOSURE_PHASE_PLAN.md](STABILITY_CLOSURE_PHASE_PLAN.md)、[DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md)；更早阶段见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)。
 
 ### 3.1 已落地产物（无外部依赖）
 
 | 优先级 | 事项 | 对应计划 | 当前状态 |
 |--------|------|---------|---------|
+| 🔴 P0 | 断连恢复测试收口（satellite `pkg/stream` 重连回归 + DLQ 真实 broker E2E 断言） | [STABILITY_CLOSURE_PHASE_PLAN.md](STABILITY_CLOSURE_PHASE_PLAN.md) | 已落地（2026-06-12） |
 | 🔴 P0 | v0.1.0 版本化发布 + 部署链路修复（mTLS Secret 挂载、satellite env 契约、compose satellite 服务、prod fail-fast） | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地（2026-06-12）；唯 Step 5 干净环境验收走查待有 registry 访问的主机执行 |
 | 🔴 P0 | [runbooks/deployment.md](runbooks/deployment.md) + [runbooks/upgrade-and-backup.md](runbooks/upgrade-and-backup.md) | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md §Step 3/4](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地 |
 | 🔴 P0 | [runbooks/pxe.md](runbooks/pxe.md) — PXE 生产硬化 runbook | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 2](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 已落地；真实裸机到位后可按 runbook 执行 |
@@ -117,8 +118,8 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 **建议执行顺序：**
 - **近期（条件具备即做）：** 在任一有 registry 访问的干净主机/k8s namespace 上执行 [deployment.md §5](runbooks/deployment.md) 验收走查（含三级重启恢复 checklist），回填验收记录，关闭 Deployment Closure 最后一项。
 - **外部条件一旦具备即触发：** 真实 secret 到位 → AlertManager 真实送达冒烟；裸机 / 商业 BMC 到位 → PXE 真实环境验证 + `hardware-acceptance/matrix.yaml` 扩面。
-- **中期 3-4 周：** Stability Closure（断连恢复 / Kafka 中断 + DLQ 回放 / Core 重启场景固化进测试）；覆盖率渐进提升。
-- **远期 5-8 周：** 多集群联邦与生命周期管理（Cluster CRUD）。
+- **中期 3-4 周：** 覆盖率门槛渐进提升（50% → 55% → 60%）。
+- **远期 5-8 周：** 多集群联邦与生命周期管理（Cluster CRUD）；如需 DLQ 回放机制，独立立项。
 
 ---
 
