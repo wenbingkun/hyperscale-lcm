@@ -25,6 +25,7 @@ import (
 	"github.com/sc-lcm/satellite/pkg/docker"
 	pb "github.com/sc-lcm/satellite/pkg/grpc"
 	"github.com/sc-lcm/satellite/pkg/pxe"
+	"github.com/sc-lcm/satellite/pkg/stream"
 )
 
 const (
@@ -118,61 +119,12 @@ func main() {
 		bgCtx, bgCancel := context.WithCancel(context.Background())
 		defer bgCancel()
 
-		// Start Stream Connection in background
-		go func() {
-			// Reconnection Loop
-			for {
-				select {
-				case <-bgCtx.Done():
-					return
-				default:
-				}
-
-				log.Println("🔌 Connecting to Command Stream...")
-				stream, err := client.ConnectStream(bgCtx)
-				if err != nil {
-					if bgCtx.Err() != nil {
-						return
-					}
-					log.Printf("❌ Failed to connect stream: %v. Retrying in 5s...", err)
-					time.Sleep(5 * time.Second)
-					continue
-				}
-
-				// Send initial handshake
-				if err := stream.Send(&pb.StreamRequest{
-					SatelliteId: satelliteId,
-					Payload:     &pb.StreamRequest_Init{Init: true},
-				}); err != nil {
-					log.Printf("❌ Failed to send handshake: %v. Retrying...", err)
-					stream.CloseSend()
-					time.Sleep(5 * time.Second)
-					continue
-				}
-
-				log.Println("✅ Command Stream Connected")
-
-				// Listen for commands
-				for {
-					resp, err := stream.Recv()
-					if err != nil {
-						if bgCtx.Err() != nil {
-							return
-						}
-						log.Printf("❌ Stream disconnected: %v", err)
-						break // Break inner loop to reconnect
-					}
-
-					log.Printf("⚡ Received Command [%s]: %s %s", resp.CommandId, resp.CommandType, resp.Payload)
-
-					// Execute Command logic (Refactored or inline)
-					handleCommand(resp, satelliteId, dockerExec, stream)
-				}
-
-				// Stream disconnected, wait before retry
-				time.Sleep(5 * time.Second)
-			}
-		}()
+		// Start Stream Connection in background (reconnection loop lives in pkg/stream)
+		go stream.RunCommandStreamLoop(bgCtx, client,
+			stream.Config{SatelliteID: satelliteId},
+			func(resp *pb.StreamResponse, s pb.LcmService_ConnectStreamClient) {
+				handleCommand(resp, satelliteId, dockerExec, s)
+			})
 
 		// Start Discovery Manager (DHCP listener + ARP scanner)
 		discoveryIface := os.Getenv("LCM_DISCOVERY_IFACE") // e.g. "eth0", empty = auto-detect
