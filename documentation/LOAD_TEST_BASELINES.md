@@ -1,6 +1,6 @@
 # Load Test Baselines
 
-> **Last Updated:** 2026-06-11 (rolled window forward with the post-dormancy rewarm run)
+> **Last Updated:** 2026-06-12 (recorded Deployment Closure landing run; prod-profile fail-fast config in effect)
 > **Scope:** 本文件是 `CI/CD Pipeline` 中 `Core Load Test` 的单一趋势基线入口。只记录最近 5 次绿色运行的标准化摘要；CI 日志与 artifact 是原始证据，但不是长期趋势事实源。
 
 ---
@@ -35,21 +35,21 @@
 
 | 时间 (UTC) | Run ID | Commit SHA | Job | 规模 | 时长 | Registration | Heartbeat | Heartbeat Failures | 备注 |
 |------------|--------|------------|-----|------|------|--------------|-----------|--------------------|------|
+| 2026-06-12 07:53 | `27402365077` | `8ba3685a8791b9ed0d2b0dd429fad9d8ff549cf5` | `80983710904` (`Core Load Test`) | `10 x 20 = 200` | `30s` | `200/200 (100%)` | `5301/5302 (99.981%)` | `1` | Deployment Closure 落地 run（9 commits：testcontainers/mTLS/compose/CI tag 链路）；Core 以 prod fail-fast 配置启动 |
 | 2026-06-11 05:48 | `27326603058` | `643522f854a767222643268388e8a363f9a2c28c` | `80729374418` (`Core Load Test`) | `10 x 20 = 200` | `30s` | `200/200 (100%)` | `5483/5484 (99.982%)` | `1` | 8 周休眠后回温 run；Deployment Closure 阶段主稿推送触发，全流水线绿 |
 | 2026-04-18 10:24 | `24602586038` | `73ac293a805c12b6769c07f250ab91abea6febcc` | `71943727340` (`Core Load Test`) | `10 x 20 = 200` | `30s` | `200/200 (100%)` | `5364/5364 (100%)` | `0` | 绿色 push run；Software Closure Round 2 文档同步后再次验证通过 |
 | 2026-04-18 09:36 | `24601816322` | `b50f78c2c39498f3828745d8fc25dd90c8f28626` | `71941779435` (`Core Load Test`) | `10 x 20 = 200` | `30s` | `200/200 (100%)` | `5540/5540 (100%)` | `0` | 绿色 push run；文档刷新后基线稳定 |
 | 2026-04-17 02:13 | `24544092198` | `58f1ba7f3d9abcc91abf46fb7f784ae1a9d8f25a` | `71756066679` (`Core Load Test`) | `10 x 20 = 200` | `30s` | `200/200 (100%)` | `5350/5355 (99.907%)` | `5` | 达到当前阈值上限 `max(5, 1%)` |
-| 2026-04-15 12:45 | `24455026576` | `4325229ddcdc7f34960b28a873780a2e9600e467` | `71453757049` (`Core Load Test`) | `10 x 20 = 200` | `30s` | `200/200 (100%)` | `5325/5325 (100%)` | `0` | Playwright E2E 上线后的绿色 push run |
 
 ---
 
 ## 3. 原始证据索引
 
+- `2026-06-12 07:53 UTC` — workflow run: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/27402365077`；job: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/27402365077/job/80983710904`；`LOADGEN_SUMMARY {"durationSeconds":30,"connections":10,"satellitesPerConnection":20,"totalSatellites":200,"activeSatellites":0,"registrationSuccessRate":1,"heartbeatSuccessRate":0.9998113919275745,"registrationAttempts":200,"registrationSuccess":200,"registrationFailures":0,"heartbeatAttempts":5302,"heartbeatSuccess":5301,"heartbeatFailures":1}`
 - `2026-06-11 05:48 UTC` — workflow run: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/27326603058`；job: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/27326603058/job/80729374418`；`LOADGEN_SUMMARY {"durationSeconds":30,"connections":10,"satellitesPerConnection":20,"totalSatellites":200,"activeSatellites":0,"registrationSuccessRate":1,"heartbeatSuccessRate":0.99981765134938,"registrationAttempts":200,"registrationSuccess":200,"registrationFailures":0,"heartbeatAttempts":5484,"heartbeatSuccess":5483,"heartbeatFailures":1}`
 - `2026-04-18 10:24 UTC` — workflow run: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24602586038`；job: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24602586038/job/71943727340`；`LOADGEN_SUMMARY {"durationSeconds":30,"connections":10,"satellitesPerConnection":20,"totalSatellites":200,"activeSatellites":0,"registrationSuccessRate":1,"heartbeatSuccessRate":1,"registrationAttempts":200,"registrationSuccess":200,"registrationFailures":0,"heartbeatAttempts":5364,"heartbeatSuccess":5364,"heartbeatFailures":0}`
 - `2026-04-18 09:36 UTC` — workflow run: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24601816322`；job: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24601816322/job/71941779435`；`LOADGEN_SUMMARY {"durationSeconds":30,"connections":10,"satellitesPerConnection":20,"totalSatellites":200,"activeSatellites":0,"registrationSuccessRate":1,"heartbeatSuccessRate":1,"registrationAttempts":200,"registrationSuccess":200,"registrationFailures":0,"heartbeatAttempts":5540,"heartbeatSuccess":5540,"heartbeatFailures":0}`
 - `2026-04-17 02:13 UTC` — workflow run: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24544092198`；job: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24544092198/job/71756066679`；`LOADGEN_SUMMARY {"durationSeconds":30,"connections":10,"satellitesPerConnection":20,"totalSatellites":200,"activeSatellites":0,"registrationSuccessRate":1,"heartbeatSuccessRate":0.9990662931839402,"registrationAttempts":200,"registrationSuccess":200,"registrationFailures":0,"heartbeatAttempts":5355,"heartbeatSuccess":5350,"heartbeatFailures":5}`
-- `2026-04-15 12:45 UTC` — workflow run: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24455026576`；job: `https://github.com/wenbingkun/hyperscale-lcm/actions/runs/24455026576/job/71453757049`；`LOADGEN_SUMMARY {"durationSeconds":30,"connections":10,"satellitesPerConnection":20,"totalSatellites":200,"activeSatellites":0,"registrationSuccessRate":1,"heartbeatSuccessRate":1,"registrationAttempts":200,"registrationSuccess":200,"registrationFailures":0,"heartbeatAttempts":5325,"heartbeatSuccess":5325,"heartbeatFailures":0}`
 
 ---
 

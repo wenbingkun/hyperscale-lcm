@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-04-18 (Software Closure Round 2 doc deliverables landed; Current Focus 已同步 PXE runbook 与最近 5 次绿色 load-test baselines)
+> 最后更新: 2026-06-12 (Phase Deployment Closure landed: v0.1.0 发布链路、部署/升级 runbook、mTLS 部署链路、prod fail-fast、Docker Engine 29 测试兼容)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -169,14 +169,22 @@
 
 本路线图现在只保留“阶段目标、阶段完成情况、项目历程”三类信息，滚动现状不再在此重复维护。
 
-*   **当前阶段主计划**: `documentation/SOFTWARE_CLOSURE_PHASE_PLAN.md` — **Software Closure Round 2** 实施指导（已于 2026-04-18 定稿）
+*   **当前阶段主计划**: `documentation/DEPLOYMENT_CLOSURE_PHASE_PLAN.md` — **Deployment Closure**（2026-06-12 落地，含落地记录；Step 5 干净环境验收走查待执行）
+*   **上一阶段**: `documentation/SOFTWARE_CLOSURE_PHASE_PLAN.md` — Software Closure Round 2（2026-04-18 落地）
 *   **滚动现状快照**: 统一见 `documentation/PROJECT_STATUS.md`
 *   **文档入口导航**: 统一见 `README.md`
 *   **Redfish/BMC 专项计划**: `documentation/REDFISH_BMC_PHASE7_PLAN.md` / `REDFISH_BMC_PHASE8_PLAN.md`
 
-**Round 2 已落地产物（无外部依赖）：**
+**Deployment Closure 已落地产物（2026-06-12）：**
+*   [x] v0.1.0 版本化发布：annotated tag + CI semver 镜像发布链路 + `CHANGELOG.md`，helm/k8s/compose 镜像引用统一
+*   [x] 部署链路修复：helm/k8s/compose mTLS 证书挂载、satellite env 契约对齐（gRPC 与 HTTP 共用 8080）、compose satellite 服务、prod profile 必填配置 fail-fast
+*   [x] 新建 `documentation/runbooks/deployment.md` 与 `documentation/runbooks/upgrade-and-backup.md`
+*   [x] testcontainers/docker-java 强制升级兼容 Docker Engine ≥ 29；frontend react-router 安全修复
+*   [ ] Step 5 干净环境验收走查（含三级重启恢复硬 checklist）——待有 registry 访问的主机
+
+**Round 2 已落地产物（2026-04-18）：**
 *   [x] 新建 `documentation/runbooks/pxe.md` — PXE 生产硬化 runbook（前置条件、网络要求、镜像准备、失败回退、验收步骤）
-*   [x] 新建 `documentation/LOAD_TEST_BASELINES.md` — load-test 趋势基线单一入口，最近 5 次绿色主线 run 已入库
+*   [x] 新建 `documentation/LOAD_TEST_BASELINES.md` — load-test 趋势基线单一入口，滚动保留最近 5 次绿色主线 run
 
 **受外部条件门控（等硬件 / secret 到位）：**
 *   [ ] 真实硬件 Redfish / BMC 验收扩面（OpenBMC + 至少一种商业 BMC，骨架已就绪）

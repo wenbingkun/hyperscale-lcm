@@ -1,12 +1,12 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-04-18 (Software Closure Round 2 doc deliverables landed; PXE runbook + recent 5 green load-test baselines recorded)
+> **Last Updated:** 2026-06-12 (Phase Deployment Closure landed: v0.1.0 versioned release, deployment/upgrade runbooks, mTLS deployment wiring, prod fail-fast config, Docker Engine 29 test compatibility)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
 > - `DEVELOPMENT_ROADMAP.md` 记录**路线图与阶段历史**（Phase 1..N 规划、目标、历史节奏）
 > - 本文件记录**当前能力矩阵、架构现状、已知缺口、下阶段重点**，是给新成员或 AI agent 快速建立认知的入口
-> - 当前阶段主计划见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)（Software Closure Round 2 实施指导）
+> - 当前阶段主计划见 [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md)（Deployment Closure，2026-06-12 落地，Step 5 验收走查待执行）；上一阶段见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)
 
 ---
 
@@ -44,6 +44,7 @@
 | 真实硬件 Redfish/BMC 验收 | 🟡 骨架齐备 | `documentation/hardware-acceptance/` 已有 OpenBMC / iDRAC / iLO / XCC 四份 per-machine 样板 + `matrix.yaml` `pending:` 追踪，待填充真实实验台数据 |
 | Demo 脚本 | ✅ 已落地 | `scripts/demo.sh` 本地闭环已接入 CI `demo-smoke` job 的真实后端门禁；实施方案见 [DEMO_SMOKE_PHASE_PLAN.md](DEMO_SMOKE_PHASE_PLAN.md) |
 | Playwright 浏览器级回归 | ✅ 已落地 | 已建立基于 API mock 的 Chromium 回归套件（6 个 spec），覆盖登录、Dashboard、发现、作业、拓扑与卫星详情、凭据配置主流程，并接入 CI `frontend-e2e` job；真实后端链路由 `demo-smoke` job 补齐 |
+| 版本化发布与部署 runbook | ✅ 已落地 | v0.1.0 tag + semver 镜像发布链路、[runbooks/deployment.md](runbooks/deployment.md)（compose/Helm 双轨 + mTLS Secret + 必填 env 契约）、[runbooks/upgrade-and-backup.md](runbooks/upgrade-and-backup.md)、CHANGELOG；helm/k8s/compose 的 mTLS 部署链路已修通，prod profile 缺失必填配置时 fail-fast。干净环境验收走查（[deployment.md §5](runbooks/deployment.md)）待有 registry 访问的主机执行 |
 
 ---
 
@@ -87,14 +88,16 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 
 ## 3. 已知缺口与下阶段重点
 
-> **当前阶段：Software Closure Round 2**。在真实 BMC / 裸机设备与真实 AlertManager secret 到位前，近期主线为"软件收口 + readiness 保温"；阶段主计划与明确不做项见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)。
+> **当前阶段：Deployment Closure 已落地（2026-06-12）**。v0.1.0 版本化发布、部署/升级 runbook、mTLS 部署链路与 prod fail-fast 配置均已进入 main；阶段主计划、落地记录与明确不做项见 [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md)。上一阶段（Software Closure Round 2）见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)。
 
-### 3.1 Round 2 已落地产物（无外部依赖）
+### 3.1 已落地产物（无外部依赖）
 
 | 优先级 | 事项 | 对应计划 | 当前状态 |
 |--------|------|---------|---------|
+| 🔴 P0 | v0.1.0 版本化发布 + 部署链路修复（mTLS Secret 挂载、satellite env 契约、compose satellite 服务、prod fail-fast） | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地（2026-06-12）；唯 Step 5 干净环境验收走查待有 registry 访问的主机执行 |
+| 🔴 P0 | [runbooks/deployment.md](runbooks/deployment.md) + [runbooks/upgrade-and-backup.md](runbooks/upgrade-and-backup.md) | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md §Step 3/4](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地 |
 | 🔴 P0 | [runbooks/pxe.md](runbooks/pxe.md) — PXE 生产硬化 runbook | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 2](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 已落地；真实裸机到位后可按 runbook 执行 |
-| 🔴 P0 | [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) — load-test 趋势基线单一入口 | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 3](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-3--load-test从静态门槛升级为趋势基线) | 已落地；最近 5 次绿色主线 run 已入库 |
+| 🔴 P0 | [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) — load-test 趋势基线单一入口 | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 3](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-3--load-test从静态门槛升级为趋势基线) | 已落地；滚动维护中，最近 5 次绿色主线 run 已入库 |
 
 ### 3.2 受外部条件门控
 
@@ -112,10 +115,10 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 | 🟠 P2 | 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调） | 规模化运营 | 跨数据中心统一运营 |
 
 **建议执行顺序：**
-- **近期 1-2 周（Round 2 核心，无外部依赖）：** 维持 [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) 的最近 5 次绿色运行窗口；以 [runbooks/pxe.md](runbooks/pxe.md) 作为现场准备与运维评审口径。
-- **外部条件一旦具备即触发（与上一项并行、不阻塞 Round 2 核心）：** 真实 secret 到位 → AlertManager 真实送达冒烟；裸机 / 商业 BMC 到位 → PXE 真实环境验证 + `hardware-acceptance/matrix.yaml` 扩面。
-- **中期 3-4 周：** 覆盖率渐进提升。
-- **远期 5-8 周：** 多集群联邦增强。
+- **近期（条件具备即做）：** 在任一有 registry 访问的干净主机/k8s namespace 上执行 [deployment.md §5](runbooks/deployment.md) 验收走查（含三级重启恢复 checklist），回填验收记录，关闭 Deployment Closure 最后一项。
+- **外部条件一旦具备即触发：** 真实 secret 到位 → AlertManager 真实送达冒烟；裸机 / 商业 BMC 到位 → PXE 真实环境验证 + `hardware-acceptance/matrix.yaml` 扩面。
+- **中期 3-4 周：** Stability Closure（断连恢复 / Kafka 中断 + DLQ 回放 / Core 重启场景固化进测试）；覆盖率渐进提升。
+- **远期 5-8 周：** 多集群联邦与生命周期管理（Cluster CRUD）。
 
 ---
 

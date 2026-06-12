@@ -1,7 +1,7 @@
 # Phase Deployment Closure：把"作者能跑通"收口为"他人能部署运维"
 
-> Updated: 2026-06-12 (Step 3 扩为部署链路修复四工作项；Step 5 验收升级为含重启恢复的硬 checklist)
-> Status: **In Progress** — 按本方案推进；完成后按 Step 6 节奏回写 PROJECT_STATUS 与 ROADMAP。
+> Updated: 2026-06-12 (Steps 0-4 与 Step 6 已落地；Step 5 干净环境验收走查待有 registry 访问的主机执行)
+> Status: **Landed**（Step 5 除外，见文末落地记录）。
 > 由 Claude Code (Fable 5) 编写。
 > 约束前提：与 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md) 一致 —— 无真实 BMC / 裸机设备、无真实 AlertManager secret。本阶段全部工作不依赖外部条件。
 
@@ -171,3 +171,11 @@
 **修改**：[core/build.gradle](../core/build.gradle)（Step 1）、[.github/workflows/ci.yml](../.github/workflows/ci.yml)（Step 2，仅 docker-build tag 集合）、[helm/hyperscale-lcm/values.yaml](../helm/hyperscale-lcm/values.yaml) / [helm README](../helm/hyperscale-lcm/README.md) / [k8s/*.yaml](../k8s/)（Step 2，镜像引用统一）、[helm templates core.yaml / satellite.yaml](../helm/hyperscale-lcm/templates/)（Step 3，证书 Secret volume + env；可能新增 cert secret 模板文件）、[docker-compose.prod.yml](../docker-compose.prod.yml)（Step 3，satellite 服务 + certs 挂载 + 删默认密码）、[PROJECT_STATUS.md](PROJECT_STATUS.md) / [DEVELOPMENT_ROADMAP.md](../DEVELOPMENT_ROADMAP.md)（Step 6）
 
 **不得触碰**：`lcm.proto` 及 gRPC 生成物、Core/Satellite/Frontend 业务代码、load-test / demo-smoke / frontend-e2e job 逻辑、JaCoCo 门禁、AlertManager chart 逻辑、Playwright 资产
+
+## 落地记录（2026-06-12）
+
+- **commit 序列**：`f233899..8ba3685`（9 个 commit，由 Codex 起草、Claude Code 审查补全后落地），覆盖 Step 1（testcontainers 1.20.6 / docker-java 3.4.1 强制版本）、Step 2（tag 触发 + semver 镜像、CHANGELOG、镜像引用统一）、Step 3（helm/k8s/compose mTLS 链路修复、satellite env 契约对齐、prod fail-fast、compose satellite 服务）、Step 4（deployment / upgrade-and-backup 双 runbook）。
+- **审查补全项**：修复 helm core.yaml readinessProbe 字段缩进回归；补齐 load-test job 与 `ci_demo_smoke.sh` 的 `GRPC_TRUSTSTORE_PASSWORD` 注入（prod fail-fast 取消默认值后两条 CI 启动路径会失败）。
+- **验证**：本地全量矩阵绿（core 158 测试 0 失败 0 跳过，Docker Engine 29 + `TESTCONTAINERS_RYUK_DISABLED=true`；satellite；frontend 含新 lockfile；helm lint/template；compose 两态；CI contract guard）；main CI run `27402365077` 全绿（9/9 job，Core 在 load-test 与 demo-smoke 中均以 prod fail-fast 配置启动）。
+- **发布**：annotated tag `v0.1.0`（指向 `8ba3685`）已推送，tag 流水线发布 `lcm-{core,satellite,frontend}:v0.1.0` 镜像。
+- **Step 5 遗留**：干净环境验收走查（含三级重启恢复 checklist）尚未执行——实施机 Docker registry 不可达，无法构建或拉取镜像；待任一有 registry 访问的干净 Linux 主机或 k8s namespace 可用时，按 [runbooks/deployment.md §5](runbooks/deployment.md) 执行并回填验收记录。
