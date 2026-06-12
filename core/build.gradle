@@ -10,6 +10,23 @@ repositories {
     mavenLocal()
 }
 
+def testcontainersVersion = '1.20.6'
+def dockerJavaVersion = '3.4.1'
+def dockerApiVersion = (findProperty('dockerApiVersion') ?: System.getProperty('api.version') ?: '1.44').toString()
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.testcontainers') {
+            details.useVersion testcontainersVersion
+            details.because 'Docker Engine 29 rejects the API level used by the Quarkus 3.6.4 BOM testcontainers baseline'
+        }
+        if (details.requested.group == 'com.github.docker-java') {
+            details.useVersion dockerJavaVersion
+            details.because 'Keep docker-java aligned with the forced testcontainers version for Docker Engine 29 compatibility'
+        }
+    }
+}
+
 dependencies {
     implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
     
@@ -84,6 +101,7 @@ java {
 
 test {
     systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
+    systemProperty "api.version", dockerApiVersion
     jacoco {
         excludeClassLoaders = ['*QuarkusClassLoader']
         destinationFile = layout.buildDirectory.file('jacoco-quarkus.exec').get().asFile
