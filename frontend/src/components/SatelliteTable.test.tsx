@@ -52,7 +52,7 @@ describe('SatelliteTable', () => {
 
         await waitFor(() => expect(mockedFetchSatellites).toHaveBeenCalledTimes(1));
 
-        expect(screen.getByText('gpu-worker-01')).toBeInTheDocument();
+        expect(await screen.findByText('gpu-worker-01')).toBeInTheDocument();
         expect(screen.getByText('10.0.0.11')).toBeInTheDocument();
         expect(screen.getByText('On')).toBeInTheDocument();
         expect(screen.getByText('54°C')).toBeInTheDocument();
@@ -70,6 +70,6 @@ describe('SatelliteTable', () => {
 
         await waitFor(() => expect(mockedFetchSatellites).toHaveBeenCalledTimes(1));
 
-        expect(screen.getByText('No satellites discovered yet.')).toBeInTheDocument();
+        expect(await screen.findByText('No satellites discovered yet.')).toBeInTheDocument();
     });
 });
