@@ -3,6 +3,7 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -564,7 +565,7 @@ jobs:
     name: Build Docker Images
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-build, satellite-build]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     
     steps:
       - uses: actions/checkout@v4
@@ -587,8 +588,8 @@ jobs:
           context: ./core
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/lcm-core:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/lcm-core:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('{0}/lcm-core:latest', secrets.DOCKERHUB_USERNAME) || format('{0}/lcm-core:{1}', secrets.DOCKERHUB_USERNAME, github.ref_name) }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
@@ -598,8 +599,8 @@ jobs:
           context: ./satellite
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/lcm-satellite:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/lcm-satellite:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('{0}/lcm-satellite:latest', secrets.DOCKERHUB_USERNAME) || format('{0}/lcm-satellite:{1}', secrets.DOCKERHUB_USERNAME, github.ref_name) }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           
@@ -609,7 +610,7 @@ jobs:
           context: ./frontend
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/lcm-frontend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/lcm-frontend:${{ github.sha }}
+            ${{ github.ref == 'refs/heads/main' && format('{0}/lcm-frontend:latest', secrets.DOCKERHUB_USERNAME) || format('{0}/lcm-frontend:{1}', secrets.DOCKERHUB_USERNAME, github.ref_name) }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
