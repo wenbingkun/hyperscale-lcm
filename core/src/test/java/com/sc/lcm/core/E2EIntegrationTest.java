@@ -15,6 +15,7 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import io.smallrye.mutiny.subscription.MultiEmitter;
 import io.smallrye.reactive.messaging.kafka.companion.KafkaCompanion;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.Test;
 
@@ -308,24 +309,54 @@ public class E2EIntegrationTest {
         return latestStatus;
     }
 
+    /**
+     * Stability scenario: a job status callback that cannot be parsed must be
+     * routed to the jobs.status.dlq topic with its payload intact, proving the
+     * DLQ connector wiring end to end on a real broker.
+     */
+    @Test
+    public void testMalformedJobStatusCallbackIsRoutedToDlq() throws Exception {
+        try (KafkaCompanion companion = new KafkaCompanion(kafkaBrokers)) {
+            String marker = "dlq-e2e-" + System.nanoTime();
+            // Truncated JSON: fails JobStatusCallback parsing and must hit the DLQ path.
+            String malformedPayload = "{\"marker\":\"" + marker + "\",\"status\":";
+
+            companion.produceStrings()
+                    .fromRecords(new ProducerRecord<>("jobs.status", malformedPayload))
+                    .awaitCompletion();
+
+            ConsumerRecord<String, String> dlqRecord = awaitRecordOnTopic(
+                    companion, "jobs.status.dlq", marker, Duration.ofSeconds(60));
+            assertNotNull(dlqRecord);
+            assertEquals(malformedPayload, dlqRecord.value(),
+                    "DLQ must receive the original malformed payload unchanged");
+        }
+    }
+
     private ConsumerRecord<String, String> awaitStatusRecord(KafkaCompanion companion, String jobId, Duration timeout)
+            throws InterruptedException {
+        return awaitRecordOnTopic(companion, "jobs.status", jobId, timeout);
+    }
+
+    private ConsumerRecord<String, String> awaitRecordOnTopic(
+            KafkaCompanion companion, String topic, String marker, Duration timeout)
             throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
 
-        try (var statusTask = companion.consumeStrings().fromTopics("jobs.status")) {
+        try (var consumeTask = companion.consumeStrings().fromTopics(topic)) {
             int inspectedRecords = 0;
 
             while (System.nanoTime() < deadline) {
                 try {
-                    statusTask.awaitNextRecord(Duration.ofMillis(500));
+                    consumeTask.awaitNextRecord(Duration.ofMillis(500));
                 } catch (AssertionError ignored) {
                     // Keep polling until timeout so unrelated quiet periods do not fail the test early.
                 }
 
-                var records = statusTask.getRecords();
+                var records = consumeTask.getRecords();
                 for (int i = inspectedRecords; i < records.size(); i++) {
                     ConsumerRecord<String, String> record = records.get(i);
-                    if (record.value() != null && record.value().contains(jobId)) {
+                    if (record.value() != null && record.value().contains(marker)) {
                         return record;
                     }
                 }
@@ -334,7 +365,7 @@ public class E2EIntegrationTest {
             }
         }
 
-        fail("Timed out waiting for Kafka status message for job " + jobId);
+        fail("Timed out waiting for Kafka message containing " + marker + " on topic " + topic);
         return null;
     }
 }
