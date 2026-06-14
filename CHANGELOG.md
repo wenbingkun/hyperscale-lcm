@@ -4,6 +4,19 @@ All notable changes to Hyperscale LCM are documented in this file.
 
 The format follows Keep a Changelog, and this project uses semver-style release tags.
 
+## [Unreleased]
+
+### Added
+
+- Offline/restricted-network deployment bundle runbook and helper script.
+- Non-destructive compose deployment preflight script for Step 5 acceptance readiness.
+
+### Changed
+
+- Docker build contexts now exclude generated artifacts and local dependency/report directories.
+- Local image build helper now defaults to a fixed release tag and rejects `latest` unless explicitly allowed for dev-only experiments.
+- Production compose Prometheus image is pinned to `prom/prometheus:v2.53.5` instead of `latest`.
+
 ## [v0.1.0] - 2026-06-12
 
 ### Added
@@ -27,4 +40,3 @@ The format follows Keep a Changelog, and this project uses semver-style release 
 - Helm Satellite environment variable mismatch that previously caused it to ignore the Core service address.
 - Missing mTLS certificate mounts in production deployment manifests.
 - Frontend `react-router-dom` dependency range now includes the patched 7.14.x line.
-

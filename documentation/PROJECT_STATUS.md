@@ -1,12 +1,12 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-06-12 (Phase Stability Closure landed: satellite stream reconnection extracted to pkg/stream with regression tests, DLQ routing proven on a real broker. Same day: Phase Deployment Closure landed with v0.1.0 release)
+> **Last Updated:** 2026-06-14 (Offline/restricted-network release bundle runbook and helper script added to reduce the remaining Deployment Closure Step 5 registry-access blocker)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
 > - `DEVELOPMENT_ROADMAP.md` 记录**路线图与阶段历史**（Phase 1..N 规划、目标、历史节奏）
 > - 本文件记录**当前能力矩阵、架构现状、已知缺口、下阶段重点**，是给新成员或 AI agent 快速建立认知的入口
-> - 当前阶段主计划见 [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md)（Deployment Closure，2026-06-12 落地，Step 5 验收走查待执行）；上一阶段见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)
+> - 当前阶段主计划见 [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md)（Deployment Closure，2026-06-12 落地，Step 5 验收走查待执行；registry 受限时可先走 offline bundle）；上一阶段见 [SOFTWARE_CLOSURE_PHASE_PLAN.md](SOFTWARE_CLOSURE_PHASE_PLAN.md)
 
 ---
 
@@ -44,7 +44,7 @@
 | 真实硬件 Redfish/BMC 验收 | 🟡 骨架齐备 | `documentation/hardware-acceptance/` 已有 OpenBMC / iDRAC / iLO / XCC 四份 per-machine 样板 + `matrix.yaml` `pending:` 追踪，待填充真实实验台数据 |
 | Demo 脚本 | ✅ 已落地 | `scripts/demo.sh` 本地闭环已接入 CI `demo-smoke` job 的真实后端门禁；实施方案见 [DEMO_SMOKE_PHASE_PLAN.md](DEMO_SMOKE_PHASE_PLAN.md) |
 | Playwright 浏览器级回归 | ✅ 已落地 | 已建立基于 API mock 的 Chromium 回归套件（6 个 spec），覆盖登录、Dashboard、发现、作业、拓扑与卫星详情、凭据配置主流程，并接入 CI `frontend-e2e` job；真实后端链路由 `demo-smoke` job 补齐 |
-| 版本化发布与部署 runbook | ✅ 已落地 | v0.1.0 tag + semver 镜像发布链路、[runbooks/deployment.md](runbooks/deployment.md)（compose/Helm 双轨 + mTLS Secret + 必填 env 契约）、[runbooks/upgrade-and-backup.md](runbooks/upgrade-and-backup.md)、CHANGELOG；helm/k8s/compose 的 mTLS 部署链路已修通，prod profile 缺失必填配置时 fail-fast。干净环境验收走查（[deployment.md §5](runbooks/deployment.md)）待有 registry 访问的主机执行 |
+| 版本化发布与部署 runbook | ✅ 已落地 | v0.1.0 tag + semver 镜像发布链路、[runbooks/deployment.md](runbooks/deployment.md)（compose/Helm 双轨 + mTLS Secret + 必填 env 契约）、[runbooks/offline-deployment.md](runbooks/offline-deployment.md)（离线/受限网络 release bundle + dry-run + `manifest.env`）、[runbooks/upgrade-and-backup.md](runbooks/upgrade-and-backup.md)、CHANGELOG；helm/k8s/compose 的 mTLS 部署链路已修通，prod profile 缺失必填配置时 fail-fast，prod compose 依赖镜像已避免 `latest`，compose preflight 脚本可提前暴露缺镜像/缺证书/变量缺失。干净环境验收走查（[deployment.md §5](runbooks/deployment.md)）待执行 |
 
 ---
 
@@ -95,7 +95,7 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 | 优先级 | 事项 | 对应计划 | 当前状态 |
 |--------|------|---------|---------|
 | 🔴 P0 | 断连恢复测试收口（satellite `pkg/stream` 重连回归 + DLQ 真实 broker E2E 断言） | [STABILITY_CLOSURE_PHASE_PLAN.md](STABILITY_CLOSURE_PHASE_PLAN.md) | 已落地（2026-06-12） |
-| 🔴 P0 | v0.1.0 版本化发布 + 部署链路修复（mTLS Secret 挂载、satellite env 契约、compose satellite 服务、prod fail-fast） | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地（2026-06-12）；唯 Step 5 干净环境验收走查待有 registry 访问的主机执行 |
+| 🔴 P0 | v0.1.0 版本化发布 + 部署链路修复（mTLS Secret 挂载、satellite env 契约、compose satellite 服务、prod fail-fast） | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地（2026-06-12）；唯 Step 5 干净环境验收走查待执行，registry 受限时先用 [runbooks/offline-deployment.md](runbooks/offline-deployment.md) dry-run 校验后制包导入 |
 | 🔴 P0 | [runbooks/deployment.md](runbooks/deployment.md) + [runbooks/upgrade-and-backup.md](runbooks/upgrade-and-backup.md) | [DEPLOYMENT_CLOSURE_PHASE_PLAN.md §Step 3/4](DEPLOYMENT_CLOSURE_PHASE_PLAN.md) | 已落地 |
 | 🔴 P0 | [runbooks/pxe.md](runbooks/pxe.md) — PXE 生产硬化 runbook | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 2](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-2--pxe--ipxe聚焦单一路径的生产硬化准备) | 已落地；真实裸机到位后可按 runbook 执行 |
 | 🔴 P0 | [LOAD_TEST_BASELINES.md](LOAD_TEST_BASELINES.md) — load-test 趋势基线单一入口 | [SOFTWARE_CLOSURE_PHASE_PLAN.md §Step 3](SOFTWARE_CLOSURE_PHASE_PLAN.md#step-3--load-test从静态门槛升级为趋势基线) | 已落地；滚动维护中，最近 5 次绿色主线 run 已入库 |
@@ -116,7 +116,7 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 | 🟠 P2 | 多集群联邦与生命周期管理（Cluster CRUD、多 Core 协调） | 规模化运营 | 跨数据中心统一运营 |
 
 **建议执行顺序：**
-- **近期（条件具备即做）：** 在任一有 registry 访问的干净主机/k8s namespace 上执行 [deployment.md §5](runbooks/deployment.md) 验收走查（含三级重启恢复 checklist），回填验收记录，关闭 Deployment Closure 最后一项。
+- **近期（条件具备即做）：** 在任一干净主机/k8s namespace 上执行 [deployment.md §5](runbooks/deployment.md) 验收走查（含三级重启恢复 checklist）；若目标环境 registry/Bitnami 访问受限，先按 [offline-deployment.md](runbooks/offline-deployment.md) 在联网制包机生成 release bundle 并导入目标环境。验收结果回填后关闭 Deployment Closure 最后一项。
 - **外部条件一旦具备即触发：** 真实 secret 到位 → AlertManager 真实送达冒烟；裸机 / 商业 BMC 到位 → PXE 真实环境验证 + `hardware-acceptance/matrix.yaml` 扩面。
 - **中期 3-4 周：** 覆盖率门槛渐进提升（50% → 55% → 60%）。
 - **远期 5-8 周：** 多集群联邦与生命周期管理（Cluster CRUD）；如需 DLQ 回放机制，独立立项。

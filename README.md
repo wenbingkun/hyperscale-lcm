@@ -23,11 +23,11 @@ The authoritative rolling status snapshot lives in `documentation/PROJECT_STATUS
 
 ### Still In Progress
 
-- AlertManager external notification channels
-- Real hardware Redfish / BMC acceptance validation
-- Phase 7 Redfish/BMC management hardening (`session` capability expansion, BMC management API, power actions)
-- PXE / iPXE production hardening and real-environment validation
-- Broader demo smoke coverage and Playwright browser-level regression coverage
+- Deployment Closure Step 5 clean-environment acceptance walkthrough for compose or Kubernetes.
+- Real hardware Redfish / BMC acceptance validation once lab hardware is available.
+- AlertManager external notification smoke once real Slack / PagerDuty / email secrets are available.
+- PXE / iPXE real-environment validation once bare-metal nodes are available.
+- Longer-term coverage-gate tightening and multi-cluster lifecycle management.
 
 ## Architecture
 
@@ -118,6 +118,7 @@ For Core validation, follow the environment-specific commands in `documentation/
 | `documentation/CI_CONTRACT.md` | CI/test source of truth |
 | `documentation/CI_FAILURE_PATTERNS.md` | CI troubleshooting patterns |
 | `documentation/runbooks/deployment.md` | Production deployment runbook for compose and Helm |
+| `documentation/runbooks/offline-deployment.md` | Offline/restricted-network release bundle preparation and import |
 | `documentation/runbooks/upgrade-and-backup.md` | Upgrade, backup, restore, and certificate rotation runbook |
 | `documentation/REDFISH_BMC_PHASE7_PLAN.md` | Phase 7 Redfish/BMC hardening plan |
 | `documentation/hardware-acceptance/` | Real hardware Redfish/BMC acceptance matrix |

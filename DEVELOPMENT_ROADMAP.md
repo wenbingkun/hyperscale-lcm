@@ -2,7 +2,7 @@
 
 本路线图旨在将 `hyperscale-lcm` 从原型构建为可管理数万台服务器的企业级平台。
 
-> 最后更新: 2026-06-12 (Phase Stability Closure landed: satellite 重连回归测试 + DLQ 真实 broker 断言；同日 Deployment Closure 落地并发布 v0.1.0)
+> 最后更新: 2026-06-14 (补齐离线/受限网络 release bundle 准备流程，降低 Deployment Closure Step 5 的 registry 访问门槛)
 
 ## 📅 阶段一：地基与连接 (Foundation & Connectivity) ✅ 已完成
 **目标**: 打通 Core 与 Satellite 的通信，实现基础资产数据上报。
@@ -170,7 +170,7 @@
 本路线图现在只保留“阶段目标、阶段完成情况、项目历程”三类信息，滚动现状不再在此重复维护。
 
 *   **当前阶段主计划**: `documentation/STABILITY_CLOSURE_PHASE_PLAN.md` — **Stability Closure**（2026-06-12 落地）
-*   **前序阶段**: `documentation/DEPLOYMENT_CLOSURE_PHASE_PLAN.md` — Deployment Closure（2026-06-12 落地；Step 5 干净环境验收走查待执行）、`documentation/SOFTWARE_CLOSURE_PHASE_PLAN.md` — Software Closure Round 2（2026-04-18 落地）
+*   **前序阶段**: `documentation/DEPLOYMENT_CLOSURE_PHASE_PLAN.md` — Deployment Closure（2026-06-12 落地；Step 5 干净环境验收走查待执行，registry 受限时可先走 offline bundle）、`documentation/SOFTWARE_CLOSURE_PHASE_PLAN.md` — Software Closure Round 2（2026-04-18 落地）
 *   **滚动现状快照**: 统一见 `documentation/PROJECT_STATUS.md`
 *   **文档入口导航**: 统一见 `README.md`
 *   **Redfish/BMC 专项计划**: `documentation/REDFISH_BMC_PHASE7_PLAN.md` / `REDFISH_BMC_PHASE8_PLAN.md`
@@ -183,8 +183,10 @@
 *   [x] v0.1.0 版本化发布：annotated tag + CI semver 镜像发布链路 + `CHANGELOG.md`，helm/k8s/compose 镜像引用统一
 *   [x] 部署链路修复：helm/k8s/compose mTLS 证书挂载、satellite env 契约对齐（gRPC 与 HTTP 共用 8080）、compose satellite 服务、prod profile 必填配置 fail-fast
 *   [x] 新建 `documentation/runbooks/deployment.md` 与 `documentation/runbooks/upgrade-and-backup.md`
+*   [x] 新建 `documentation/runbooks/offline-deployment.md` + `scripts/prepare_offline_release_bundle.sh`，支持联网制包机导出镜像与 Helm 依赖后导入受限环境，并提供 dry-run / `manifest.env` 复用发布参数
+*   [x] 新建 `scripts/check_compose_deployment_preflight.sh`，在正式执行 Step 5 前非破坏性检查 compose 配置、证书、固定镜像 tag 与本地镜像齐备性
 *   [x] testcontainers/docker-java 强制升级兼容 Docker Engine ≥ 29；frontend react-router 安全修复
-*   [ ] Step 5 干净环境验收走查（含三级重启恢复硬 checklist）——待有 registry 访问的主机
+*   [ ] Step 5 干净环境验收走查（含三级重启恢复硬 checklist）——待干净主机/k8s namespace；registry 受限时先用 offline bundle 导入
 
 **Round 2 已落地产物（2026-04-18）：**
 *   [x] 新建 `documentation/runbooks/pxe.md` — PXE 生产硬化 runbook（前置条件、网络要求、镜像准备、失败回退、验收步骤）
