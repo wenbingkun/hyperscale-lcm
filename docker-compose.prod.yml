@@ -59,7 +59,7 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.5
     container_name: lcm-prometheus
     ports:
       - "9090:9090"
