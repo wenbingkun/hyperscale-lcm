@@ -1,7 +1,7 @@
 # Deployment 运维手册 (Runbook)
 
 > **Last Updated:** 2026-06-12
-> **Scope:** 从固定版本镜像部署 Hyperscale LCM 的 Core、Satellite、Frontend 与基础依赖；覆盖 docker-compose 单机路径、Helm 路径、mTLS Secret、必填环境变量、健康检查与验收记录。
+> **Scope:** 从固定版本镜像部署 Hyperscale LCM 的 Core、Satellite、Frontend 与基础依赖；覆盖 docker-compose 单机路径、Helm 路径、mTLS Secret、必填环境变量、健康检查与验收记录。离线或受限网络环境先按 [offline-deployment.md](offline-deployment.md) 准备 release bundle。
 
 ---
 
@@ -56,6 +56,9 @@ Core 与 Satellite 共用同一个证书目录或 Kubernetes Secret，必须包�
   - `<dockerhub-user>/lcm-core:v0.1.0`
   - `<dockerhub-user>/lcm-satellite:v0.1.0`
   - `<dockerhub-user>/lcm-frontend:v0.1.0`
+- 如需在本机为验收临时构建应用镜像，使用 `DOCKER_NAMESPACE=<dockerhub-user> scripts/build.sh v0.1.0`；该路径仍需要访问基础镜像与构建依赖 registry。
+- compose 基础依赖镜像使用固定 tag；受限网络环境应通过离线包导入，不依赖 `latest` 漂移。
+- 若目标主机无法直接访问 Docker Hub，先在联网制包机上执行 [offline-deployment.md](offline-deployment.md)，并在目标主机导入 bundle 镜像。
 - 当前目录是仓库根目录，且 `certs/` 已包含第 2 节证书文件。
 
 ### 3.2 必填环境变量
@@ -81,6 +84,18 @@ env -u DB_PASSWORD -u GRAFANA_PASSWORD -u GRPC_TRUSTSTORE_PASSWORD -u DOCKER_NAM
 ```
 
 ### 3.3 启动
+
+启动前先执行非破坏性 preflight；该脚本只校验配置、证书、固定镜像 tag 与本地镜像存在性，不会启动或停止容器：
+
+```bash
+scripts/check_compose_deployment_preflight.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG"
+```
+
+如果当前主机可访问 registry、尚未预拉取镜像，且只想先验证配置契约，可临时跳过本地镜像检查：
+
+```bash
+scripts/check_compose_deployment_preflight.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG" --skip-image-check
+```
 
 ```bash
 docker-compose -f docker-compose.prod.yml config
@@ -116,6 +131,7 @@ docker logs --tail 100 lcm-satellite
 - `helm` 可访问 Bitnami chart repository。
 - 已准备发布镜像，并知道 Docker Hub namespace。
 - 已创建目标 namespace。
+- 若目标环境无法访问 Bitnami chart repository 或镜像 registry，先按 [offline-deployment.md](offline-deployment.md) 准备 Helm chart 依赖与镜像包。
 
 ```bash
 kubectl create namespace lcm
