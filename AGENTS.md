@@ -128,7 +128,7 @@
 
 - Claude Code 负责开发：探索、实现、跑测试。主会话用 sonnet，检索交给 haiku 的 Explore 子代理；opus advisor 只在 Claude 自行判断的决策点给按需建议（子代理也会继承），不算审核关卡。
 - Codex 负责提交前审核，这是唯一的审核关卡。审核期间只读，只出意见，不改代码；需要的修改交回 Claude 完成。常规审核用 `codex --profile review`；涉及凭据、证书、部署和回滚、权限、CI 安全的改动用 `codex --profile review-deep`。两个 profile 都是只读沙箱，升权由用户确认（前提是 `~/.codex/rules/` 中没有 allow 规则，所以审批时不要选“永久允许”）：需要联网的检查经批准后运行，需要写入的验证放隔离副本。
-- 上述 profile 是个人配置，定义在各自的 `~/.codex/config.toml`，不在本仓库中（也不要把凭据写进仓库）。审核前先确认两个 profile 都已定义且为只读沙箱（如 `codex --profile review --help` 无报错，并核对 `config.toml` 中 `sandbox_mode = "read-only"`）；缺失时先告知用户补配置，不要退回到默认的可写 profile 审核。
+- 上述 profile 是个人配置，是各自机器上的独立文件 `~/.codex/review.config.toml` 与 `~/.codex/review-deep.config.toml`（叠加在 `~/.codex/config.toml` 之上），不在本仓库中（也不要把凭据写进仓库）。审核前先确认两个 profile 都已定义且为只读沙箱（如 `codex --profile review --help` 无报错，并核对两个文件中的 `sandbox_mode = "read-only"`）；缺失时先告知用户补配置，不要退回到默认的可写 profile 审核。
 - 同一仓库同一时间只让一个代理写代码；需要并行时用 git worktree。
 - agy 不参与本仓库的开发和审核。
 - 本仓库的说明文件不写具体模型版本号。
