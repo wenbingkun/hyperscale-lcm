@@ -1,6 +1,6 @@
 # Agent Execution Contract
 
-本文适用于 Codex 以及其他会读取仓库级 agent 说明的工具。规则面向**所有** agent，不只针对某一个工具。
+本文是本仓库给所有 AI 编码代理（Claude Code、Codex 等）的唯一项目说明；`CLAUDE.md` 只做引用（`@AGENTS.md`），不单独维护内容。规则面向**所有** agent，仅 §9 只适用于 Claude Code。
 
 ## 0. 快速入口
 
@@ -9,6 +9,22 @@
 - **项目现状与下阶段重点**：[documentation/PROJECT_STATUS.md](documentation/PROJECT_STATUS.md) — 滚动更新的能力矩阵、架构概览、已知缺口
 - **路线图与阶段历史**：[DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md)
 - **架构设计**：[documentation/ENTERPRISE_LCM_ARCHITECTURE.md](documentation/ENTERPRISE_LCM_ARCHITECTURE.md) · [documentation/RESOURCE_SCHEDULING_DESIGN.md](documentation/RESOURCE_SCHEDULING_DESIGN.md)
+
+### 仓库结构
+
+多语言 Monorepo，一级目录：
+
+- `core/` — Java 21 / Quarkus 后端（业务逻辑、REST API、gRPC、Kafka、Timefold 调度）
+- `satellite/` — Go 卫星代理（BMC/Redfish 采集、PXE、Docker/Shell/Ansible/SSH 执行）
+- `frontend/` — TypeScript / React 前端（Vite 构建，Vitest 测试）
+- `documentation/` — 设计文档、CI 契约、Redfish 模板样例、硬件验收矩阵
+- `scripts/` — 构建、验证、演示与 CI guard 脚本（`check_ci_contract.sh`、`generate_keys.sh`、`demo.sh`）
+- `helm/`、`k8s/`、`infra/` — 部署资产
+- `certs/` — 本地 TLS/mTLS 证书（被 .gitignore 排除，通过脚本生成）
+- `.github/` — CI 工作流、PR 模板、CODEOWNERS
+- `.local/` — 本地专属目录（被 .gitignore 排除），放个人 TODO / 草稿 / agent 实验记录，见 [.local/README.md](.local/README.md)
+
+搜索问题时先明确目标子系统和文件类型，避免跨语言混淆。
 
 ## 1. 单一事实来源
 
@@ -28,7 +44,7 @@
 | `PROJECT_STANDARDS.md` | 工程规范 | 技术栈、代码风格、DDD 架构、API 约定 |
 | `PROJECT_STATUS.md` | 现状快照 | 建立项目认知的入口 |
 
-优先级：`CI_CONTRACT` > `AGENTS` > `PROJECT_STANDARDS`。冲突时以高优先级为准。
+优先级：`CI_CONTRACT` > `AGENTS` > `PROJECT_STANDARDS`。冲突时以高优先级为准。`CLAUDE.md` 仅引用本文件，不参与优先级。
 
 ## 2. CI 故障处理硬规则
 
@@ -79,16 +95,22 @@
 | Frontend | `npm test && npm run lint && npm run build` | `frontend/` |
 | CI Contract guard | `./scripts/check_ci_contract.sh` | 仓库根 |
 
-批量修改多个子系统时，三个都要跑一遍。
+批量修改多个子系统时，三个都要跑一遍。修复 CI/测试失败后，推送前在本地跑完整套件，确认无连锁故障。
+
+### 环境说明
+
+- CI 需要 PostgreSQL / Kafka / Redis；本地复现 Backend Tests 时尽量与 CI 保持一致
+- `E2EIntegrationTest` 不应默认视为"本地必然失败"；复现 CI 问题时先准备数据库、Redis、Kafka 及对应环境变量
+- BMC 厂商兼容性：OpenBMC、iDRAC、iLO、XCC 的脱敏响应夹具回归（`satellite/pkg/redfish/vendor_fixture_test.go`）随 Satellite 的 `go test ./...` 纳入日常 CI；真实硬件验收不在日常 CI 范围内
 
 ## 5. 变更策略
 
 - 修 CI 优先做最小闭环修复，不顺手改无关业务
 - 区分主故障和日志噪音，例如 OTel exporter `localhost:4317` 不能默认视为主失败因
 - 修改 load-test 基线前，必须给出 runner 容量依据
-- **默认目标分支是 `main`**，未经用户指定不要切换
+- **默认目标分支是 `main`**，提交前确认目标分支，未经用户指定不要切换
 - 禁止未经授权 `push --force` / `reset --hard` / `commit --amend` 已发布提交
-- 提交信息遵循 Conventional Commits（`feat:` / `fix:` / `docs:` / `refactor:` / `chore:` / `ci:`）
+- 提交信息遵循 Conventional Commits（`feat:` / `fix:` / `docs:` / `refactor:` / `chore:` / `ci:`），末尾附 `Co-Authored-By: Claude <noreply@anthropic.com>`（不写具体型号）
 
 ## 6. PR 与协作
 
@@ -110,3 +132,12 @@
 - 同一仓库同一时间只让一个代理写代码；需要并行时用 git worktree。
 - agy 不参与本仓库的开发和审核。
 - 本仓库的说明文件不写具体模型版本号。
+
+## 9. Claude Code 专用
+
+本节只适用于 Claude Code，其他 agent 可忽略。
+
+- **Plan mode**：涉及多文件、跨子系统、架构调整或文档大规模整理的任务，先进入 Plan mode 出计划（目标与背景、任务清单、关键文件、验证方式、不做的事），通过计划审批流程请求确认；不要用提问工具问"计划是否可以"。提问工具只用于在分岔点选择方向。trivial 改动（单行修复、重命名、typo）可直接动手。
+- **子代理**：多点探索、跨子系统检索时用 Explore，可并行至多 3 个，各负责独立的搜索焦点；需要第二意见时用 Plan，默认 1 个。单文件已知路径的修改不起子代理。
+- **Skill**：`/review` 走 [.claude/commands/review.md](.claude/commands/review.md) 的标准审查流程；`/simplify` 检查最近变更的冗余。
+- **待办清单**：≥3 步的任务开始时建立待办清单，完成一项立即标记，不批量更新；单步任务不用。
