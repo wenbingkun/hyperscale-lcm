@@ -158,7 +158,7 @@ demo-smoke:
 - `needs: [ci-contract-guard, backend-test, satellite-build]`：核心测试绿了才跑 smoke（节省 runner 预算）；不依赖 `load-test` 以便 smoke 和 load-test 可并行。
 - `timeout-minutes: 25`：覆盖 gradle build (~3min) + docker-compose 启动 (~30s) + Core 启动 (~15s) + demo.sh 完整链路 (~3-5min)，留充足缓冲。对 smoke 主动加 timeout 是因为它涉及真实网络 / 容器操作，挂起风险比 unit test 高。
 - `LCM_DEMO_CLUSTER: ci-smoke-${{ github.run_id }}`：并发 run 隔离。
-- `QUARKUS_OTEL_SDK_DISABLED: "true"`：和 load-test 一致，避免 OTel exporter `localhost:4317 Connection refused` 噪音（[CLAUDE.md](../CLAUDE.md) 明确列为已知噪音）。
+- `QUARKUS_OTEL_SDK_DISABLED: "true"`：和 load-test 一致，避免 OTel exporter `localhost:4317 Connection refused` 噪音（[AGENTS.md](../AGENTS.md) §5 明确列为已知噪音）。
 - `if: always()` 上传 artifact，失败时必有日志。
 
 **grpcurl / websocat 安装**（CLI 工具固定版本）：
@@ -222,7 +222,7 @@ demo-smoke:
 2. 开发机完整跑一次 `./scripts/ci_demo_smoke.sh`（需要 Docker daemon + Java 21 + Go 1.24），预期 exit 0 且末尾打印 `print_summary` JSON
 3. `cd core && ./gradlew check --no-daemon`（Core 生产代码未改，但 guard 回归）
 4. `cd satellite && go test ./... -count=1`（Satellite 生产代码未改，但 guard 回归）
-5. `cd frontend && npm test && npm run build`（前端完全未触碰，但 [CLAUDE.md](../CLAUDE.md) 要求批量改动三子系统都要回归）
+5. `cd frontend && npm test && npm run lint && npm run build`（前端完全未触碰，但 [AGENTS.md](../AGENTS.md) §4 要求批量改动三子系统都要回归）
 6. 开 PR，`gh pr merge --squash` 风格；等新增 `demo-smoke` job 连续 2-3 次绿灯后再合并，观察 flaky 行为
 
 **commit** 的时机：每个 Step 完成且自审通过后**立即 commit 并推送到 feature 分支**，不攒堆。CI 会在每次 push 上跑，早暴露问题。

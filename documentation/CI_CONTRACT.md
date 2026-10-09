@@ -99,7 +99,7 @@ go test ./... -count=1
 
 ```bash
 cd frontend
-npm run build
+npm test && npm run lint && npm run build
 ```
 
 ### 4.4 改动 load-test / prod profile / health / gRPC / TLS
@@ -185,8 +185,8 @@ String value;
 
 说明：
 
-- 本地 `CLAUDE.md`、`AGENTS.md` 或其他 agent 提示文件如果存在，应遵循本文
-- 仓库级规范不依赖这些本地文件是否被提交
+- `AGENTS.md`（`CLAUDE.md` 仅引用它）及其他 agent 提示文件应遵循本文
+- 仓库级规范不依赖各 agent 工具的私有配置
 
 ## 8. 推荐的 MCP / Skills
 
