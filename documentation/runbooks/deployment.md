@@ -123,6 +123,19 @@ docker logs --tail 100 lcm-satellite
 
 预期看到 `Registration Successful` 和周期性 heartbeat。
 
+### 3.5 SSH 只读任务（实验，Satellite 侧）
+
+Satellite 镜像包含 `bash` 与 `openssh-client`。SSH 任务（payload 含 `task`）只在 Satellite 本地取凭据，不经 Core：
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `LCM_SSH_KEYS_DIR` | `/app/ssh/keys` | 私钥目录（只读挂载）；任务里的 `keyRef` 只能是该目录下的文件名 |
+| `LCM_SSH_KNOWN_HOSTS` | `/app/ssh/known_hosts` | known_hosts 文件；缺失或主机密钥不符即失败（`StrictHostKeyChecking=yes`） |
+| `LCM_SSH_TIMEOUT` | `60s` | 超时/取消只终止本端 ssh 客户端，输出管道排空最多再等 1s；远端命令状态视为未知 |
+| `LCM_SSH_ALLOW_INLINE` | 未设置 | 仅 dev/test：允许旧的内联口令/私钥 payload；默认拒绝 |
+
+目前任务目录只有 `SYSTEM_INFO`（`uname -a && uptime && df -h / && free -m`，任一步失败即停止并返回非零），命令固定在 Satellite 内，输出上限 64KiB。Core 侧下发入口随后续 PR 提供。
+
 ---
 
 ## 4. Helm 路径

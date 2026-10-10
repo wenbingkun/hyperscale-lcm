@@ -8,15 +8,35 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 var (
 	sshBinary     = "ssh"
 	sshpassBinary = "sshpass"
 )
+
+const (
+	envSSHKeysDir     = "LCM_SSH_KEYS_DIR"
+	envSSHKnownHosts  = "LCM_SSH_KNOWN_HOSTS"
+	envSSHTimeout     = "LCM_SSH_TIMEOUT"
+	envSSHAllowInline = "LCM_SSH_ALLOW_INLINE"
+
+	defaultSSHKeysDir    = "/app/ssh/keys"
+	defaultSSHKnownHosts = "/app/ssh/known_hosts"
+	defaultSSHTimeout    = 60 * time.Second
+	maxSSHOutputBytes    = 64 * 1024
+)
+
+// sshTasks is the fixed catalog of read-only tasks. Commands live on the Satellite so that
+// neither Core nor the API caller can inject an arbitrary remote command through a task job.
+var sshTasks = map[string]string{
+	"SYSTEM_INFO": "uname -a && uptime && df -h / && free -m",
+}
 
 // SSHRequest describes the remote SSH execution payload sent by Core.
 type SSHRequest struct {
@@ -25,37 +45,66 @@ type SSHRequest struct {
 	User                  string `json:"user"`
 	Password              string `json:"password,omitempty"`
 	PrivateKey            string `json:"privateKey,omitempty"`
-	Command               string `json:"command"`
+	Command               string `json:"command,omitempty"`
+	KeyRef                string `json:"keyRef,omitempty"`
+	Task                  string `json:"task,omitempty"`
 	KnownHosts            string `json:"knownHosts,omitempty"`
 	InsecureIgnoreHostKey bool   `json:"insecureIgnoreHostKey,omitempty"`
 }
 
 // RunSSH executes a remote command via the local OpenSSH client using a JSON payload.
+//
+// A payload with a "task" runs one of the fixed read-only tasks with a key and known_hosts
+// file that live on the Satellite. A payload with an inline "command" and credentials is the
+// legacy path and is refused unless LCM_SSH_ALLOW_INLINE=true.
 func RunSSH(ctx context.Context, rawPayload string) (string, int, error) {
 	request, err := parseSSHRequest(rawPayload)
 	if err != nil {
 		return "", -1, err
 	}
 
-	commandName, args, cleanup, err := buildSSHInvocation(request)
+	var commandName string
+	var args []string
+	var cleanup func()
+	if request.Task != "" {
+		commandName, args, cleanup, err = buildSSHTaskInvocation(request)
+	} else {
+		if !strings.EqualFold(os.Getenv(envSSHAllowInline), "true") {
+			return "", -1, errors.New("inline SSH payloads are disabled; submit a task job (set " + envSSHAllowInline + "=true for dev/test only)")
+		}
+		commandName, args, cleanup, err = buildSSHInvocation(request)
+	}
 	if err != nil {
 		return "", -1, err
 	}
 	defer cleanup()
 
+	timeout := sshTimeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	cmd := exec.CommandContext(ctx, commandName, args...)
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	// Descendants can retain stdout/stderr after the client is killed. Bound pipe draining too.
+	cmd.WaitDelay = time.Second
 
-	var outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &outBuf
+	outBuf := &limitedBuffer{limit: maxSSHOutputBytes}
+	cmd.Stdout = outBuf
+	cmd.Stderr = outBuf
 
 	err = cmd.Run()
 	output := outBuf.String()
 	exitCode := 0
 
 	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// The local ssh client was killed; the remote command may still be running.
+			exitCode = -1
+			err = fmt.Errorf("ssh timed out after %s; remote command state is unknown: %w", timeout, err)
+		} else if errors.Is(ctx.Err(), context.Canceled) {
+			exitCode = -1
+			err = fmt.Errorf("ssh canceled; remote command state is unknown: %w", err)
+		} else if exitError, ok := err.(*exec.ExitError); ok {
 			ws := exitError.Sys().(syscall.WaitStatus)
 			exitCode = ws.ExitStatus()
 		} else {
@@ -64,6 +113,43 @@ func RunSSH(ctx context.Context, rawPayload string) (string, int, error) {
 	}
 
 	return output, exitCode, err
+}
+
+func sshTimeout() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv(envSSHTimeout)); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultSSHTimeout
+}
+
+// limitedBuffer keeps at most limit bytes and records that the rest was dropped.
+type limitedBuffer struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if remaining := b.limit - b.buf.Len(); remaining > 0 {
+		if len(p) > remaining {
+			b.buf.Write(p[:remaining])
+			b.truncated = true
+		} else {
+			b.buf.Write(p)
+		}
+	} else if len(p) > 0 {
+		b.truncated = true
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	if b.truncated {
+		return b.buf.String() + fmt.Sprintf("\n[output truncated at %d bytes]", b.limit)
+	}
+	return b.buf.String()
 }
 
 func parseSSHRequest(rawPayload string) (SSHRequest, error) {
@@ -85,6 +171,25 @@ func parseSSHRequest(rawPayload string) (SSHRequest, error) {
 	if request.User == "" {
 		return SSHRequest{}, errors.New("ssh user is required")
 	}
+	// A leading '-' would let the value be parsed as an ssh option.
+	if strings.HasPrefix(request.Host, "-") || strings.HasPrefix(request.User, "-") ||
+		strings.ContainsAny(request.Host, " \t\r\n") || strings.ContainsAny(request.User, " \t\r\n@") {
+		return SSHRequest{}, errors.New("ssh host or user contains invalid characters")
+	}
+
+	if request.Task != "" {
+		if _, ok := sshTasks[request.Task]; !ok {
+			return SSHRequest{}, fmt.Errorf("unknown ssh task %q", request.Task)
+		}
+		if request.KeyRef == "" {
+			return SSHRequest{}, errors.New("ssh keyRef is required for task jobs")
+		}
+		if request.Password != "" || request.PrivateKey != "" || request.Command != "" {
+			return SSHRequest{}, errors.New("task jobs must not carry inline credentials or commands")
+		}
+		return request, nil
+	}
+
 	if request.Command == "" {
 		return SSHRequest{}, errors.New("ssh command is required")
 	}
@@ -93,6 +198,45 @@ func parseSSHRequest(rawPayload string) (SSHRequest, error) {
 	}
 
 	return request, nil
+}
+
+// buildSSHTaskInvocation builds a strict-host-key, key-only, non-interactive ssh call for a fixed task.
+func buildSSHTaskInvocation(request SSHRequest) (string, []string, func(), error) {
+	noop := func() {}
+
+	if request.KeyRef != filepath.Base(request.KeyRef) || request.KeyRef == "." || request.KeyRef == ".." ||
+		strings.ContainsRune(request.KeyRef, 0) {
+		return "", nil, noop, errors.New("ssh keyRef must be a plain file name")
+	}
+	keyPath := filepath.Join(envOrDefault(envSSHKeysDir, defaultSSHKeysDir), request.KeyRef)
+	if info, err := os.Stat(keyPath); err != nil || !info.Mode().IsRegular() {
+		return "", nil, noop, fmt.Errorf("ssh key %q is not available on this satellite", request.KeyRef)
+	}
+
+	knownHostsPath := envOrDefault(envSSHKnownHosts, defaultSSHKnownHosts)
+	if info, err := os.Stat(knownHostsPath); err != nil || !info.Mode().IsRegular() {
+		return "", nil, noop, errors.New("ssh known_hosts file is not available on this satellite")
+	}
+
+	args := []string{
+		"-p", strconv.Itoa(request.Port),
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=yes",
+		"-o", "UserKnownHostsFile=" + knownHostsPath,
+		"-o", "IdentitiesOnly=yes",
+		"-o", "ConnectTimeout=10",
+		"-i", keyPath,
+		request.User + "@" + request.Host,
+		sshTasks[request.Task],
+	}
+	return sshBinary, args, noop, nil
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func buildSSHInvocation(request SSHRequest) (string, []string, func(), error) {
