@@ -100,7 +100,7 @@ services:
     restart: unless-stopped
 
   lcm-core:
-    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-core:${DOCKER_TAG:-v0.1.0}
+    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-core:${DOCKER_TAG:-v0.1.1}
     container_name: lcm-core
     depends_on:
       postgres:
@@ -110,7 +110,8 @@ services:
       redis:
         condition: service_started
     ports:
-      - "8080:8080" # REST API
+      - "127.0.0.1:8080:8080" # REST API / health / metrics (plaintext, loopback only; gRPC rejected without TLS)
+      - "8443:8443" # HTTPS + mTLS (Satellite gRPC)
     environment:
       - QUARKUS_PROFILE=prod
       - DB_USERNAME=lcm_user
@@ -135,13 +136,13 @@ services:
     restart: unless-stopped
 
   lcm-satellite:
-    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-satellite:${DOCKER_TAG:-v0.1.0}
+    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-satellite:${DOCKER_TAG:-v0.1.1}
     container_name: lcm-satellite
     depends_on:
       lcm-core:
         condition: service_healthy
     environment:
-      - LCM_CORE_ADDR=lcm-core:8080
+      - LCM_CORE_ADDR=lcm-core:8443
       - LCM_CERTS_DIR=/app/certs
       - LCM_GRPC_PLAINTEXT=false
       - OTEL_EXPORTER_OTLP_ENDPOINT=jaeger:4317
@@ -151,7 +152,7 @@ services:
     restart: unless-stopped
 
   lcm-frontend:
-    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-frontend:${DOCKER_TAG:-v0.1.0}
+    image: ${DOCKER_NAMESPACE:?DOCKER_NAMESPACE is required}/lcm-frontend:${DOCKER_TAG:-v0.1.1}
     container_name: lcm-frontend
     depends_on:
       lcm-core:

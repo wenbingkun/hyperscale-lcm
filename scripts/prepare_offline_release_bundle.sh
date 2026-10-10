@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 DOCKER_NAMESPACE="${DOCKER_NAMESPACE:-}"
-DOCKER_TAG="${DOCKER_TAG:-v0.1.0}"
+DOCKER_TAG="${DOCKER_TAG:-v0.1.1}"
 OUTPUT_ROOT="$ROOT_DIR/.local/release-bundles"
 PULL_IMAGES=true
 INCLUDE_HELM=true
@@ -18,7 +18,7 @@ Usage:
 
 Options:
   --namespace <name>  Docker namespace that owns lcm-core/lcm-satellite/lcm-frontend.
-  --tag <tag>         Release image tag to bundle. Defaults to DOCKER_TAG or v0.1.0.
+  --tag <tag>         Release image tag to bundle. Defaults to DOCKER_TAG or v0.1.1.
   --output <dir>      Output parent directory. Defaults to .local/release-bundles.
   --no-pull           Do not pull images; require all images to exist locally.
   --skip-helm         Do not package the Helm chart and dependency archives.
@@ -27,7 +27,7 @@ Options:
 
 Examples:
   DOCKER_NAMESPACE=my-dockerhub-user scripts/prepare_offline_release_bundle.sh
-  scripts/prepare_offline_release_bundle.sh --namespace my-dockerhub-user --tag v0.1.0
+  scripts/prepare_offline_release_bundle.sh --namespace my-dockerhub-user --tag v0.1.1
 
 The bundle is intended for a restricted target host:
   1. Copy the generated directory to the target host.

@@ -9,7 +9,7 @@ Usage:
   DOCKER_NAMESPACE=<dockerhub-user> scripts/build.sh [tag]
 
 Arguments:
-  tag                 Image tag to build. Defaults to DOCKER_TAG or v0.1.0.
+  tag                 Image tag to build. Defaults to DOCKER_TAG or v0.1.1.
 
 Environment:
   DOCKER_NAMESPACE    Required image namespace.
@@ -17,8 +17,8 @@ Environment:
   ALLOW_LATEST=true   Allow building latest for dev-only local experiments.
 
 Examples:
-  DOCKER_NAMESPACE=my-dockerhub-user scripts/build.sh v0.1.0
-  DOCKER_NAMESPACE=demo DOCKER_TAG=v0.1.0 scripts/build.sh
+  DOCKER_NAMESPACE=my-dockerhub-user scripts/build.sh v0.1.1
+  DOCKER_NAMESPACE=demo DOCKER_TAG=v0.1.1 scripts/build.sh
 USAGE
 }
 
@@ -28,7 +28,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 # 获取版本和命名空间
-VERSION="${1:-${DOCKER_TAG:-v0.1.0}}"
+VERSION="${1:-${DOCKER_TAG:-v0.1.1}}"
 NAMESPACE="${DOCKER_NAMESPACE:-}"
 
 if [[ -z "$NAMESPACE" ]]; then
@@ -68,5 +68,5 @@ echo "📋 Built images:"
 docker images --format '{{.Repository}}:{{.Tag}}' | grep -F "$NAMESPACE/lcm-"
 
 echo ""
-echo "🚀 To run with docker-compose:"
-echo "  DOCKER_NAMESPACE=$NAMESPACE DOCKER_TAG=$VERSION docker-compose -f docker-compose.prod.yml up -d"
+echo "🚀 To run with docker compose:"
+echo "  DOCKER_NAMESPACE=$NAMESPACE DOCKER_TAG=$VERSION docker compose -f docker-compose.prod.yml up -d"
