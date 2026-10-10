@@ -35,7 +35,7 @@ const (
 // sshTasks is the fixed catalog of read-only tasks. Commands live on the Satellite so that
 // neither Core nor the API caller can inject an arbitrary remote command through a task job.
 var sshTasks = map[string]string{
-	"SYSTEM_INFO": "uname -a; uptime; df -h /; free -m",
+	"SYSTEM_INFO": "uname -a && uptime && df -h / && free -m",
 }
 
 // SSHRequest describes the remote SSH execution payload sent by Core.
@@ -85,6 +85,8 @@ func RunSSH(ctx context.Context, rawPayload string) (string, int, error) {
 
 	cmd := exec.CommandContext(ctx, commandName, args...)
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	// Descendants can retain stdout/stderr after the client is killed. Bound pipe draining too.
+	cmd.WaitDelay = time.Second
 
 	outBuf := &limitedBuffer{limit: maxSSHOutputBytes}
 	cmd.Stdout = outBuf
@@ -99,6 +101,9 @@ func RunSSH(ctx context.Context, rawPayload string) (string, int, error) {
 			// The local ssh client was killed; the remote command may still be running.
 			exitCode = -1
 			err = fmt.Errorf("ssh timed out after %s; remote command state is unknown: %w", timeout, err)
+		} else if errors.Is(ctx.Err(), context.Canceled) {
+			exitCode = -1
+			err = fmt.Errorf("ssh canceled; remote command state is unknown: %w", err)
 		} else if exitError, ok := err.(*exec.ExitError); ok {
 			ws := exitError.Sys().(syscall.WaitStatus)
 			exitCode = ws.ExitStatus()

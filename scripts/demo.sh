@@ -135,7 +135,7 @@ start_mock_redfish() {
 }
 
 start_mock_ssh() {
-  if nc -z "$SSH_HOST" "$SSH_PORT" >/dev/null 2>&1; then
+  if nc -z -w 2 "$SSH_HOST" "$SSH_PORT" >/dev/null 2>&1; then
     log "Mock SSH server already reachable at ${SSH_HOST}:${SSH_PORT}"
     return
   fi
@@ -251,7 +251,7 @@ wait_for_redfish() {
 
 wait_for_ssh() {
   local deadline=$((SECONDS + 30))
-  until nc -z "$SSH_HOST" "$SSH_PORT" >/dev/null 2>&1; do
+  until nc -z -w 2 "$SSH_HOST" "$SSH_PORT" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
       die "Timed out waiting for mock SSH server"
     fi

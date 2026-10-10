@@ -95,9 +95,27 @@ wait_for_port() {
   local timeout="${3:-120}"
   local deadline=$((SECONDS + timeout))
 
-  until nc -z "$host" "$port" >/dev/null 2>&1; do
+  until nc -z -w 2 "$host" "$port" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
       die "timed out waiting for ${host}:${port}"
+    fi
+    sleep 2
+  done
+}
+
+wait_for_postgres() {
+  local deadline=$((SECONDS + 180))
+
+  # Docker can publish the port before Postgres finishes initialization. Probe
+  # authenticated TCP SQL; the entrypoint's temporary server only uses a socket.
+  until (
+    cd "$ROOT_DIR"
+    docker-compose exec -T postgres sh -c \
+      'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atqc "SELECT 1"'
+  ) >/dev/null 2>&1; do
+    if (( SECONDS >= deadline )); then
+      (cd "$ROOT_DIR" && docker-compose logs --tail=80 postgres) >&2 || true
+      die "timed out waiting for Postgres TCP SQL readiness"
     fi
     sleep 2
   done
@@ -111,6 +129,7 @@ start_infra() {
   )
 
   wait_for_port 127.0.0.1 5432 180
+  wait_for_postgres
   wait_for_port 127.0.0.1 6379 120
   wait_for_port 127.0.0.1 9092 180
   ok "Demo infrastructure is ready"

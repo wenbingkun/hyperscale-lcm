@@ -194,7 +194,7 @@ printf 'ARGS:%s\n' "$*"
 	if err != nil || exitCode != 0 {
 		t.Fatalf("expected success, got exit=%d err=%v", exitCode, err)
 	}
-	for _, want := range []string{"StrictHostKeyChecking=yes", "BatchMode=yes", "ops@10.0.0.5", "uname -a; uptime; df -h /; free -m"} {
+	for _, want := range []string{"StrictHostKeyChecking=yes", "BatchMode=yes", "ops@10.0.0.5", "uname -a && uptime && df -h / && free -m"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("expected %q in %q", want, output)
 		}
@@ -243,6 +243,7 @@ func TestRunSSHTaskRequiresKnownHostsFile(t *testing.T) {
 }
 
 func TestRunSSHInlinePayloadDisabledByDefault(t *testing.T) {
+	t.Setenv(envSSHAllowInline, "")
 	restore := stubSSHBinary(t, "#!/bin/bash\nexit 0\n")
 	defer restore()
 
@@ -279,5 +280,51 @@ func TestRunSSHTruncatesLargeOutput(t *testing.T) {
 	}
 	if len(output) > maxSSHOutputBytes+100 || !strings.Contains(output, "[output truncated at 65536 bytes]") {
 		t.Fatalf("expected truncated output, got %d bytes", len(output))
+	}
+}
+
+func TestRunSSHTimeoutWithInheritedOutputPipe(t *testing.T) {
+	setupSSHTaskEnv(t)
+	t.Setenv("LCM_SSH_TIMEOUT", "100ms")
+	restore := stubSSHBinary(t, "#!/bin/bash\nsleep 4 &\nwait\n")
+	defer restore()
+	start := time.Now()
+	_, exitCode, err := RunSSH(context.Background(), taskPayload(t, nil))
+	if err == nil || exitCode != -1 || !strings.Contains(err.Error(), "state is unknown") {
+		t.Fatalf("expected unknown remote state, got exit=%d err=%v", exitCode, err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("inherited output pipe defeated timeout: %s", elapsed)
+	}
+}
+
+func TestSystemInfoFailsWhenAnEarlierCommandFails(t *testing.T) {
+	setupSSHTaskEnv(t)
+	dir := t.TempDir()
+	for name, code := range map[string]string{"uname": "exit 42", "uptime": "exit 0", "df": "exit 0", "free": "exit 0"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/bash\n"+code+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	restore := stubSSHBinary(t, "#!/bin/bash\nexec /bin/bash -c \"${!#}\"\n")
+	defer restore()
+	_, exitCode, err := RunSSH(context.Background(), taskPayload(t, nil))
+	if err == nil || exitCode != 42 {
+		t.Fatalf("masked uname failure: exit=%d err=%v", exitCode, err)
+	}
+}
+
+func TestRunSSHCancelReportsUnknownRemoteState(t *testing.T) {
+	setupSSHTaskEnv(t)
+	restore := stubSSHBinary(t, "#!/bin/bash\nexec sleep 5\n")
+	defer restore()
+	ctx, cancel := context.WithCancel(context.Background())
+	timer := time.AfterFunc(100*time.Millisecond, cancel)
+	defer timer.Stop()
+	defer cancel()
+	_, exitCode, err := RunSSH(ctx, taskPayload(t, nil))
+	if err == nil || exitCode != -1 || !strings.Contains(err.Error(), "canceled; remote command state is unknown") {
+		t.Fatalf("expected cancellation with unknown state, got exit=%d err=%v", exitCode, err)
 	}
 }
