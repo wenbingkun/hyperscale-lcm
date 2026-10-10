@@ -402,6 +402,8 @@ jobs:
           QUARKUS_DATASOURCE_USERNAME: lcm
           QUARKUS_DATASOURCE_PASSWORD: lcm_password
           QUARKUS_HTTP_INSECURE_REQUESTS: enabled
+          # CI load test drives gRPC over plaintext 8080; prod default is TLS-only
+          LCM_GRPC_REQUIRE_TLS: "false"
           QUARKUS_REDIS_HOSTS: redis://localhost:6379
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
           GRPC_CERT_PATH: ../certs/server.pem
