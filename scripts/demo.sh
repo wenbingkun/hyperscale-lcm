@@ -210,6 +210,7 @@ start_satellite() {
     -e LCM_CORE_ADDR="${GRPC_TARGET}" \
     -e LCM_CERTS_DIR=/workspace/certs \
     -e LCM_GRPC_PLAINTEXT=true \
+    -e LCM_SSH_ALLOW_INLINE=true \
     -e LCM_PXE_TFTP_ADDR=:1069 \
     -e LCM_PXE_HTTP_ADDR=:18090 \
     -e LCM_PXE_DHCP_PROXY_ADDR=:14011 \

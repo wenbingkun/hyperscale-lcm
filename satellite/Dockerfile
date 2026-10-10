@@ -21,8 +21,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# Install CA certificates and Docker CLI
-RUN apk add --no-cache ca-certificates docker-cli
+# Install CA certificates, Docker CLI, and the bash/ssh clients used by the SHELL and SSH executors
+RUN apk add --no-cache ca-certificates docker-cli bash openssh-client
 
 # Copy binary
 COPY --from=build /app/satellite .
