@@ -1,12 +1,19 @@
 package com.sc.lcm.core.api;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sc.lcm.core.domain.AuditLog.AuditEventType;
+import com.sc.lcm.core.domain.DiscoveredDevice;
+import com.sc.lcm.core.domain.DiscoveredDevice.DiscoveryStatus;
 import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.Job.ExecutionType;
 import com.sc.lcm.core.domain.Job.JobStatus;
+import com.sc.lcm.core.service.AuditService;
 import com.sc.lcm.core.service.SchedulingService;
 import com.sc.lcm.core.service.PartitionedSchedulingService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.quarkus.hibernate.reactive.panache.Panache;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
 import jakarta.annotation.security.RolesAllowed;
@@ -17,7 +24,11 @@ import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -46,6 +57,28 @@ public class JobResource {
         @Inject
         Vertx vertx;
 
+        @Inject
+        SecurityIdentity identity;
+
+        @Inject
+        AuditService auditService;
+
+        @ConfigProperty(name = "lcm.ssh.inline-payload.enabled", defaultValue = "false")
+        boolean inlineSshPayloadEnabled;
+
+        @ConfigProperty(name = "lcm.ssh.default-user")
+        Optional<String> sshDefaultUser;
+
+        @ConfigProperty(name = "lcm.ssh.default-key-ref")
+        Optional<String> sshDefaultKeyRef;
+
+        @ConfigProperty(name = "lcm.ssh.default-port", defaultValue = "22")
+        int sshDefaultPort;
+
+        // Mirrors the fixed task catalog on the Satellite (satellite/pkg/executor/ssh.go).
+        private static final Set<String> SSH_TASKS = Set.of("SYSTEM_INFO");
+        private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
         /**
          * 提交新作业
          */
@@ -55,20 +88,89 @@ public class JobResource {
                 try {
                         executionType = parseExecutionType(request.executionType());
                 } catch (IllegalArgumentException error) {
-                        return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
-                                        .entity(new ErrorResponse(error.getMessage()))
-                                        .build());
+                        return badRequest(error.getMessage());
+                }
+
+                if (executionType == ExecutionType.SSH && hasText(request.task())) {
+                        return submitSshTaskJob(request);
+                }
+
+                if (executionType == ExecutionType.SSH && !inlineSshPayloadEnabled) {
+                        return badRequest("Inline SSH payloads are disabled. Submit an SSH task job with "
+                                        + "targetDeviceId and task instead.");
+                }
+                if (hasText(request.targetDeviceId())) {
+                        return badRequest("targetDeviceId is only supported for SSH task jobs");
                 }
 
                 String executionPayload;
                 try {
                         executionPayload = normalizeExecutionPayload(executionType, request.executionPayload());
                 } catch (IllegalArgumentException error) {
-                        return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
-                                        .entity(new ErrorResponse(error.getMessage()))
+                        return badRequest(error.getMessage());
+                }
+
+                return persistAndSchedule(request, executionType, executionPayload, null);
+        }
+
+        /**
+         * SSH 任务作业: 目标必须是已批准设备，命令来自 Satellite 的固定任务目录，
+         * payload 由服务端构造且不含任何凭据。
+         */
+        private Uni<Response> submitSshTaskJob(JobRequest request) {
+                if (!SSH_TASKS.contains(request.task())) {
+                        return badRequest("Unsupported SSH task: " + request.task());
+                }
+                if (!hasText(request.targetDeviceId())) {
+                        return badRequest("targetDeviceId is required for SSH task jobs");
+                }
+                if (hasText(request.executionPayload())) {
+                        return badRequest("executionPayload must not be set for SSH task jobs");
+                }
+                if (sshDefaultUser.isEmpty() || sshDefaultKeyRef.isEmpty()) {
+                        return Uni.createFrom().item(Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                                        .entity(new ErrorResponse("SSH task jobs are not configured "
+                                                        + "(lcm.ssh.default-user / lcm.ssh.default-key-ref)"))
                                         .build());
                 }
 
+                return DiscoveredDevice.<DiscoveredDevice>findById(request.targetDeviceId())
+                                .onItem().transformToUni(device -> {
+                                        if (device == null) {
+                                                return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND)
+                                                                .entity(new ErrorResponse("Target device not found: "
+                                                                                + request.targetDeviceId()))
+                                                                .build());
+                                        }
+                                        DiscoveryStatus status = device.getStatus();
+                                        if (status != DiscoveryStatus.APPROVED && status != DiscoveryStatus.MANAGED) {
+                                                return badRequest("Target device is not approved (status: " + status + ")");
+                                        }
+                                        if (!hasText(device.getIpAddress())) {
+                                                return badRequest("Target device has no IP address");
+                                        }
+
+                                        String payload = buildSshTaskPayload(device.getIpAddress(), request.task());
+                                        return persistAndSchedule(request, ExecutionType.SSH, payload, device);
+                                });
+        }
+
+        private String buildSshTaskPayload(String host, String task) {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("host", host);
+                payload.put("port", sshDefaultPort);
+                payload.put("user", sshDefaultUser.get());
+                payload.put("keyRef", sshDefaultKeyRef.get());
+                payload.put("task", task);
+                try {
+                        return OBJECT_MAPPER.writeValueAsString(payload);
+                } catch (JsonProcessingException error) {
+                        throw new IllegalStateException("Failed to build SSH task payload", error);
+                }
+        }
+
+        private Uni<Response> persistAndSchedule(JobRequest request, ExecutionType executionType,
+                        String executionPayload, DiscoveredDevice target) {
                 String jobId = UUID.randomUUID().toString();
 
                 Job job = new Job();
@@ -86,7 +188,28 @@ public class JobResource {
                 job.setStatus(JobStatus.PENDING);
                 job.setExecutionType(executionType);
                 job.setExecutionPayload(executionPayload);
+                if (target != null) {
+                        job.setTargetDeviceId(target.getId());
+                        job.setTargetHost(target.getIpAddress());
+                }
                 Job schedulingJob = copyJob(job);
+
+                String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
+                Map<String, Object> auditDetails = new LinkedHashMap<>();
+                auditDetails.put("action", "submitted");
+                auditDetails.put("executionType", executionType.name());
+                if (target != null) {
+                        auditDetails.put("task", request.task());
+                        auditDetails.put("targetDeviceId", target.getId());
+                        auditDetails.put("targetHost", target.getIpAddress());
+                }
+                String auditJson;
+                try {
+                        auditJson = OBJECT_MAPPER.writeValueAsString(auditDetails);
+                } catch (JsonProcessingException error) {
+                        auditJson = "{\"action\":\"submitted\"}";
+                }
+                String auditDetailsJson = auditJson;
 
                 log.info("📝 Submitting new job: {} ({})", request.name(), jobId);
 
@@ -95,7 +218,24 @@ public class JobResource {
                                                 .entity(new JobResponse(jobId, JobStatus.PENDING.name(),
                                                                 "Job submitted successfully"))
                                                 .build())
-                                .invoke(() -> vertx.getDelegate().runOnContext(ignored -> triggerScheduling(jobId, schedulingJob)));
+                                // Audit is written before the response so the record exists when the caller sees
+                                // 201; an audit failure is logged but must not fail the submission.
+                                .call(() -> auditService.logEvent(AuditEventType.JOB_SUBMITTED, "JOB", jobId, actor,
+                                                request.tenantId(), auditDetailsJson)
+                                                .onFailure().invoke(e -> log.error("Audit log failed", e))
+                                                .onFailure().recoverWithNull())
+                                .invoke(() -> vertx.getDelegate()
+                                                .runOnContext(ignored -> triggerScheduling(jobId, schedulingJob)));
+        }
+
+        private static Uni<Response> badRequest(String message) {
+                return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
+                                .entity(new ErrorResponse(message))
+                                .build());
+        }
+
+        private static boolean hasText(String value) {
+                return value != null && !value.isBlank();
         }
 
         private void triggerScheduling(String jobId, Job schedulingJob) {
@@ -127,6 +267,8 @@ public class JobResource {
                 copy.setStatus(original.getStatus());
                 copy.setExecutionType(original.getExecutionType());
                 copy.setExecutionPayload(original.getExecutionPayload());
+                copy.setTargetDeviceId(original.getTargetDeviceId());
+                copy.setTargetHost(original.getTargetHost());
                 return copy;
         }
 
@@ -276,7 +418,17 @@ public class JobResource {
                         String tenantId,
                         String clusterId,
                         String executionType,
-                        String executionPayload) {
+                        String executionPayload,
+                        String targetDeviceId,
+                        String task) {
+
+                public JobRequest(String name, String description, int cpuCores, long memoryGb, int gpuCount,
+                                String gpuModel, boolean requiresNvlink, int minNvlinkBandwidthGbps,
+                                String tenantId, String clusterId, String executionType, String executionPayload) {
+                        this(name, description, cpuCores, memoryGb, gpuCount, gpuModel, requiresNvlink,
+                                        minNvlinkBandwidthGbps, tenantId, clusterId, executionType, executionPayload,
+                                        null, null);
+                }
         }
 
         public record JobResponse(String id, String status, String message) {
