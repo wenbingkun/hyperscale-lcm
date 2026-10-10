@@ -119,4 +119,20 @@ class JobExecutionServiceTest {
             return Uni.createFrom().voidItem();
         }
     }
+
+    @Test
+    void sshOutputStaysOutOfErrorMessageUnlessFailed() {
+        assertEquals(null, JobExecutionService.sshErrorMessage(Job.JobStatus.COMPLETED, "Linux host"));
+        assertEquals("boom", JobExecutionService.sshErrorMessage(Job.JobStatus.FAILED, "boom"));
+        assertEquals(null, JobExecutionService.sshErrorMessage(Job.JobStatus.RUNNING, "Executing SSH command..."));
+    }
+
+    @Test
+    void boundedOutputTruncatesOversizedMessages() {
+        assertEquals("ok", JobExecutionService.boundedOutput("ok"));
+        assertEquals(null, JobExecutionService.boundedOutput(null));
+        String bounded = JobExecutionService.boundedOutput("x".repeat(JobExecutionService.MAX_RESULT_OUTPUT_CHARS + 500));
+        assertTrue(bounded.endsWith("[output truncated]"));
+        assertTrue(bounded.length() < JobExecutionService.MAX_RESULT_OUTPUT_CHARS + 50);
+    }
 }
