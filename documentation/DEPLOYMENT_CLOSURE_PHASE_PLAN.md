@@ -178,4 +178,5 @@
 - **审查补全项**：修复 helm core.yaml readinessProbe 字段缩进回归；补齐 load-test job 与 `ci_demo_smoke.sh` 的 `GRPC_TRUSTSTORE_PASSWORD` 注入（prod fail-fast 取消默认值后两条 CI 启动路径会失败）。
 - **验证**：本地全量矩阵绿（core 158 测试 0 失败 0 跳过，Docker Engine 29 + `TESTCONTAINERS_RYUK_DISABLED=true`；satellite；frontend 含新 lockfile；helm lint/template；compose 两态；CI contract guard）；main CI run `27402365077` 全绿（9/9 job，Core 在 load-test 与 demo-smoke 中均以 prod fail-fast 配置启动）。
 - **发布**：annotated tag `v0.1.0`（指向 `8ba3685`）已推送，tag 流水线发布 `lcm-{core,satellite,frontend}:v0.1.0` 镜像。
-- **Step 5 遗留**：干净环境验收走查（含三级重启恢复 checklist）尚未执行——实施机 Docker registry 不可达，无法构建或拉取镜像；待任一有 registry 访问的干净 Linux 主机或 k8s namespace 可用时，按 [runbooks/deployment.md §5](runbooks/deployment.md) 执行并回填验收记录。
+- **Step 5 走查（2026-10-10 部分执行）**：发现 prod 部署路径缺陷并修复（Core 无法启动与 gRPC mTLS 未生效改为 8080/8443 双端口、Grafana 重复数据源、frontend healthcheck），仍有未通过项，详见 [runbooks/deployment.md §5.3](runbooks/deployment.md)；Step 5 未关闭。
+- **Step 5 原遗留**：干净环境验收走查（含三级重启恢复 checklist）尚未执行——实施机 Docker registry 不可达，无法构建或拉取镜像；待任一有 registry 访问的干净 Linux 主机或 k8s namespace 可用时，按 [runbooks/deployment.md §5](runbooks/deployment.md) 执行并回填验收记录。

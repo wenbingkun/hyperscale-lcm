@@ -13,6 +13,7 @@ The format follows Keep a Changelog, and this project uses semver-style release 
 
 ### Changed
 
+- Production gRPC now uses a dual-port layout: plaintext 8080 for REST/health/metrics and HTTPS 8443 with required client certificates for Satellite gRPC; plaintext gRPC is rejected by `GrpcTlsEnforcer` (`lcm.grpc.require-tls`). Default deployment image tag moves to the unreleased `v0.1.1`; `v0.1.0` images carry the old contract.
 - Docker build contexts now exclude generated artifacts and local dependency/report directories.
 - Local image build helper now defaults to a fixed release tag and rejects `latest` unless explicitly allowed for dev-only experiments.
 - Production compose Prometheus image is pinned to `prom/prometheus:v2.53.5` instead of `latest`.

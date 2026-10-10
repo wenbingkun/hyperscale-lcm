@@ -29,7 +29,7 @@ helm install lcm ./helm/hyperscale-lcm \
 | `core.enabled` | 启用 Core 服务 | `true` |
 | `core.replicaCount` | 副本数 | `2` |
 | `core.image.repository` | 镜像地址 | `lcm-core` |
-| `core.image.tag` | 镜像版本 | `v0.1.0` |
+| `core.image.tag` | 镜像版本 | `v0.1.1` |
 | `core.resources.limits.memory` | 内存限制 | `4Gi` |
 | `core.autoscaling.enabled` | 启用 HPA | `true` |
 
@@ -40,7 +40,7 @@ helm install lcm ./helm/hyperscale-lcm \
 | `frontend.enabled` | 启用前端 | `true` |
 | `frontend.replicaCount` | 副本数 | `2` |
 | `frontend.image.repository` | 镜像地址 | `lcm-frontend` |
-| `frontend.image.tag` | 镜像版本 | `v0.1.0` |
+| `frontend.image.tag` | 镜像版本 | `v0.1.1` |
 
 ### Satellite
 
@@ -48,8 +48,8 @@ helm install lcm ./helm/hyperscale-lcm \
 |------|------|--------|
 | `satellite.enabled` | 启用 Satellite | `true` |
 | `satellite.image.repository` | 镜像地址 | `lcm-satellite` |
-| `satellite.image.tag` | 镜像版本 | `v0.1.0` |
-| `satellite.core.grpcPort` | Core gRPC 目标端口 | `8080` |
+| `satellite.image.tag` | 镜像版本 | `v0.1.1` |
+| `satellite.core.grpcPort` | Core gRPC 目标端口（prod 为 mTLS HTTPS 端口） | `8443` |
 | `satellite.tolerations` | GPU 节点容忍度 | `nvidia.com/gpu` |
 
 ### Ingress
@@ -120,7 +120,7 @@ helm install lcm ./helm/hyperscale-lcm \
 # production-values.yaml
 core:
   image:
-    tag: v0.1.0
+    tag: v0.1.1
   replicaCount: 3
   resources:
     limits:
