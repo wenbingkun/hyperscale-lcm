@@ -30,9 +30,32 @@
 
 ### 2.2 生成离线包
 
+> **v0.1.1 尚未发布**：registry 中没有对应应用镜像，制包时不得拉取。未发布阶段走下面的 A 分支；v0.1.1 正式发布后才用 B 分支。
+
+**A. 未发布（本地构建）分支**——在制包机上：
+
 ```bash
 export DOCKER_NAMESPACE=<dockerhub-user>
-export DOCKER_TAG=v0.1.0
+export DOCKER_TAG=v0.1.1
+
+# 1) 用本源码构建三个应用镜像（记录镜像 ID 与源码 commit/dirty diff）
+scripts/build.sh "$DOCKER_TAG"
+# 2) 预先准备固定版本基础依赖镜像（--no-pull 要求全部镜像已在本地）
+docker compose -f docker-compose.prod.yml config --no-interpolate --images
+#    应用镜像行保留变量表达式，以步骤 1 构建时的 namespace/tag 为准。
+#    其余固定版本基础依赖镜像逐个 docker pull，或从其他来源 docker load；列镜像无需部署 secrets。
+# 3) 制包：跳过拉取
+scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG" --no-pull --dry-run
+scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG" --no-pull
+```
+
+`--dry-run` 输出应包含 `pull_images=false`、正确的 `docker_tag` 与三个应用镜像；缺任一本地镜像时脚本会在制包阶段报错退出。
+
+**B. 已发布版本分支**（registry 中确有该 tag 时）：
+
+```bash
+export DOCKER_NAMESPACE=<dockerhub-user>
+export DOCKER_TAG=<已发布 tag>
 
 scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG" --dry-run
 scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG"
@@ -41,7 +64,7 @@ scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag 
 默认输出目录：
 
 ```text
-.local/release-bundles/hyperscale-lcm-v0.1.0-<timestamp>/
+.local/release-bundles/hyperscale-lcm-v0.1.1-<timestamp>/
 ```
 
 包内包含：
@@ -49,20 +72,13 @@ scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag 
 | 文件 / 目录 | 用途 |
 |-------------|------|
 | `images/*.tar` | compose 单机路径所需的应用镜像和固定版本基础依赖镜像 |
-| `helm-hyperscale-lcm-v0.1.0.tgz` | 含 `charts/` 依赖归档的 Helm chart 目录包 |
+| `helm-hyperscale-lcm-v0.1.1.tgz` | 含 `charts/` 依赖归档的 Helm chart 目录包 |
 | `manifest.txt` | 镜像 namespace、tag、清单 |
 | `manifest.env` | 目标主机可复用的 `DOCKER_NAMESPACE` / `DOCKER_TAG` |
 | `SHA256SUMS` | 包内文件校验 |
 | `load-images.sh` | 目标主机导入镜像脚本 |
 
-如果制包机已经预拉取全部镜像，可禁用拉取：
-
-```bash
-scripts/prepare_offline_release_bundle.sh \
-  --namespace "$DOCKER_NAMESPACE" \
-  --tag "$DOCKER_TAG" \
-  --no-pull
-```
+已发布分支下，如果制包机已经预拉取全部镜像，同样可加 `--no-pull` 禁用拉取。
 
 ---
 
@@ -71,7 +87,7 @@ scripts/prepare_offline_release_bundle.sh \
 把整个 bundle 目录复制到目标主机，例如：
 
 ```bash
-scp -r .local/release-bundles/hyperscale-lcm-v0.1.0-<timestamp> user@target:/opt/
+scp -r .local/release-bundles/hyperscale-lcm-v0.1.1-<timestamp> user@target:/opt/
 ```
 
 目标主机需要保留仓库工作目录，因为 compose 文件、证书脚本、Helm values 和 runbook 都来自仓库本身。
@@ -83,7 +99,7 @@ scp -r .local/release-bundles/hyperscale-lcm-v0.1.0-<timestamp> user@target:/opt
 在目标主机上执行：
 
 ```bash
-cd /opt/hyperscale-lcm-v0.1.0-<timestamp>
+cd /opt/hyperscale-lcm-v0.1.1-<timestamp>
 ./load-images.sh
 ```
 
@@ -104,7 +120,7 @@ docker images | grep 'lcm-'
 关键环境变量必须与制包时一致：
 
 ```bash
-source /opt/hyperscale-lcm-v0.1.0-<timestamp>/manifest.env
+source /opt/hyperscale-lcm-v0.1.1-<timestamp>/manifest.env
 export DB_PASSWORD='<strong-postgres-password>'
 export GRAFANA_PASSWORD='<strong-grafana-password>'
 export GRPC_TRUSTSTORE_PASSWORD='changeit'
@@ -119,9 +135,9 @@ scripts/check_compose_deployment_preflight.sh --namespace "$DOCKER_NAMESPACE" --
 然后执行：
 
 ```bash
-docker-compose -f docker-compose.prod.yml config
-docker-compose -f docker-compose.prod.yml up -d
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml config
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml ps
 ```
 
 后续主流程与重启恢复 checklist 继续使用 [deployment.md §5](deployment.md#5-主流程验收)。
@@ -134,7 +150,7 @@ docker-compose -f docker-compose.prod.yml ps
 
 ```bash
 mkdir -p /tmp/hyperscale-lcm-chart
-tar -xzf /opt/hyperscale-lcm-v0.1.0-<timestamp>/helm-hyperscale-lcm-v0.1.0.tgz \
+tar -xzf /opt/hyperscale-lcm-v0.1.1-<timestamp>/helm-hyperscale-lcm-v0.1.1.tgz \
   -C /tmp/hyperscale-lcm-chart
 ```
 
@@ -154,15 +170,15 @@ global:
 
 core:
   image:
-    tag: v0.1.0
+    tag: v0.1.1
 
 frontend:
   image:
-    tag: v0.1.0
+    tag: v0.1.1
 
 satellite:
   image:
-    tag: v0.1.0
+    tag: v0.1.1
 
 security:
   mtls:
@@ -178,11 +194,11 @@ security:
 
 | 现象 | 判断 | 处理 |
 |------|------|------|
-| `docker-compose ... config` 提示 `DOCKER_NAMESPACE is required` | 目标主机未设置 namespace | `source <bundle>/manifest.env`，或手工设置与制包一致的 `DOCKER_NAMESPACE` |
+| `docker compose ... config` 提示 `DOCKER_NAMESPACE is required` | 目标主机未设置 namespace | `source <bundle>/manifest.env`，或手工设置与制包一致的 `DOCKER_NAMESPACE` |
 | `pull access denied` 或 `manifest unknown` | 目标主机仍尝试远程拉镜像，或 tag 不一致 | 确认 `docker images` 中存在对应镜像，且 `DOCKER_TAG` 与制包 tag 一致 |
 | `helm dependency build` 仍尝试联网 | 目标主机使用了原 chart 目录而不是 bundle 中的 chart | 使用 bundle 里的 `helm-hyperscale-lcm-*.tgz` 解包目录 |
 | k8s Pod `ImagePullBackOff` | 集群节点拿不到镜像 | 将 bundle 镜像导入每个节点，或推送到集群可访问的私有 registry |
-| Satellite 无法注册 | mTLS 证书或 `LCM_CORE_ADDR` 不匹配 | 复核 [deployment.md §2](deployment.md#2-mtls-证书材料) 和 `LCM_CORE_ADDR=core-host:8080` |
+| Satellite 无法注册 | mTLS 证书或 `LCM_CORE_ADDR` 不匹配 | 复核 [deployment.md §2](deployment.md#2-mtls-证书材料) 和 `LCM_CORE_ADDR=core-host:8443` |
 
 ---
 

@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 DOCKER_NAMESPACE="${DOCKER_NAMESPACE:-}"
-DOCKER_TAG="${DOCKER_TAG:-v0.1.0}"
+DOCKER_TAG="${DOCKER_TAG:-v0.1.1}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-}"
 GRPC_TRUSTSTORE_PASSWORD="${GRPC_TRUSTSTORE_PASSWORD:-}"
@@ -18,7 +18,7 @@ Usage:
 
 Options:
   --namespace <name>    Docker namespace that owns lcm-core/lcm-satellite/lcm-frontend.
-  --tag <tag>           Release image tag to validate. Defaults to DOCKER_TAG or v0.1.0.
+  --tag <tag>           Release image tag to validate. Defaults to DOCKER_TAG or v0.1.1.
   --skip-image-check    Do not require docker images to exist locally.
   -h, --help            Show this help.
 
@@ -75,7 +75,16 @@ done
 [[ -n "$GRAFANA_PASSWORD" ]] || fail "GRAFANA_PASSWORD is required."
 [[ -n "$GRPC_TRUSTSTORE_PASSWORD" ]] || fail "GRPC_TRUSTSTORE_PASSWORD is required."
 
-for required in docker-compose awk grep mktemp sort; do
+# Prefer Compose v2 (`docker compose`); fall back to legacy `docker-compose`.
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  COMPOSE=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE=(docker-compose)
+else
+  fail "Required command not found: docker compose (v2) or docker-compose."
+fi
+
+for required in awk grep mktemp sort; do
   command -v "$required" >/dev/null 2>&1 || fail "Required command not found: $required"
 done
 
@@ -119,13 +128,13 @@ config_file="$tmp_dir/docker-compose.prod.rendered.yml"
 
 set +e
 env -u DOCKER_NAMESPACE -u DOCKER_TAG -u DB_PASSWORD -u GRAFANA_PASSWORD -u GRPC_TRUSTSTORE_PASSWORD \
-  docker-compose --env-file "$empty_env" -f "$ROOT_DIR/docker-compose.prod.yml" config \
+  "${COMPOSE[@]}" --env-file "$empty_env" -f "$ROOT_DIR/docker-compose.prod.yml" config \
   >"$negative_log" 2>&1
 negative_status=$?
 set -e
 
 if [[ "$negative_status" -eq 0 ]]; then
-  fail "docker-compose config succeeded without required secrets; fail-fast contract is broken."
+  fail "${COMPOSE[*]} config succeeded without required secrets; fail-fast contract is broken."
 fi
 
 if ! grep -Eq 'DB_PASSWORD|GRAFANA_PASSWORD|GRPC_TRUSTSTORE_PASSWORD|DOCKER_NAMESPACE' "$negative_log"; then
@@ -139,7 +148,7 @@ env \
   DB_PASSWORD="$DB_PASSWORD" \
   GRAFANA_PASSWORD="$GRAFANA_PASSWORD" \
   GRPC_TRUSTSTORE_PASSWORD="$GRPC_TRUSTSTORE_PASSWORD" \
-  docker-compose -f "$ROOT_DIR/docker-compose.prod.yml" config >"$config_file"
+  "${COMPOSE[@]}" -f "$ROOT_DIR/docker-compose.prod.yml" config >"$config_file"
 ok "docker-compose.prod.yml renders with provided env"
 
 if grep -Eq 'image: .*:latest($|[[:space:]])' "$config_file"; then
@@ -149,7 +158,7 @@ fi
 ok "rendered compose config uses fixed image tags"
 
 grep -Fq "prom/prometheus:v2.53.5" "$config_file" || fail "prometheus image is not pinned to prom/prometheus:v2.53.5."
-grep -Eq 'LCM_CORE_ADDR(:[[:space:]]+|=)lcm-core:8080' "$config_file" || fail "satellite LCM_CORE_ADDR does not target lcm-core:8080."
+grep -Eq 'LCM_CORE_ADDR(:[[:space:]]+|=)lcm-core:8443' "$config_file" || fail "satellite LCM_CORE_ADDR does not target lcm-core:8443."
 ok "deployment-specific compose invariants are present"
 
 if [[ "$REQUIRE_IMAGES" == true ]]; then

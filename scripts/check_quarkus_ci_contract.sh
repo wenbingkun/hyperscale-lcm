@@ -83,6 +83,19 @@ for key in "${cron_keys[@]}"; do
   done <<<"$matches"
 done
 
+PROD_PROPS="$ROOT_DIR/core/src/main/resources/application-prod.properties"
+# gRPC shares the HTTP server, so prod mTLS must be configured on quarkus.http.ssl.* (build-time client-auth).
+for expected in \
+  '^quarkus\.http\.insecure-requests=enabled$' \
+  '^quarkus\.http\.ssl-port=8443$' \
+  '^quarkus\.http\.ssl\.client-auth=required$' \
+  '^lcm\.grpc\.require-tls=true$'; do
+  grep -qE "$expected" "$PROD_PROPS" || fail "$PROD_PROPS -> missing prod mTLS setting matching '$expected'"
+done
+if grep -qE '^quarkus\.http\.insecure-requests=redirect' "$PROD_PROPS"; then
+  fail "$PROD_PROPS -> insecure-requests=redirect breaks prod startup without HTTP SSL certs"
+fi
+
 if [[ "$failures" -ne 0 ]]; then
   exit 1
 fi

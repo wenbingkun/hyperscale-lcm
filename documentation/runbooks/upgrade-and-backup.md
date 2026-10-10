@@ -18,7 +18,7 @@
 compose：
 
 ```bash
-docker-compose -f docker-compose.prod.yml config
+docker compose -f docker-compose.prod.yml config
 ```
 
 Helm：
@@ -49,13 +49,17 @@ quarkus.flyway.migrate-at-start=true
 
 compose：
 
+v0.1.1 尚未发布时，**不要执行 `pull`**（registry 无该 tag，且若存在同名其他镜像会覆盖本地构建对应关系）：先用本源码构建镜像（`scripts/build.sh v0.1.1`，见 [deployment.md §3.1](deployment.md)），再用 preflight 确认镜像与配置齐备：
+
 ```bash
-export DOCKER_TAG=v0.1.0
-docker-compose -f docker-compose.prod.yml pull lcm-core lcm-frontend lcm-satellite
-docker-compose -f docker-compose.prod.yml up -d
+export DOCKER_TAG=v0.1.1
+scripts/check_compose_deployment_preflight.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG"
+docker compose -f docker-compose.prod.yml up -d
 docker logs --tail 200 lcm-core
 curl -sf http://localhost:8080/health/ready
 ```
+
+已发布版本才使用 registry 分支：`docker compose -f docker-compose.prod.yml pull lcm-core lcm-frontend lcm-satellite` 后再 `up -d`。
 
 Helm：
 
@@ -122,12 +126,12 @@ ls -lh "./${BACKUP_FILE}"
 compose：
 
 ```bash
-docker-compose -f docker-compose.prod.yml stop lcm-core lcm-satellite lcm-frontend
+docker compose -f docker-compose.prod.yml stop lcm-core lcm-satellite lcm-frontend
 docker cp ./lcm-backup.dump lcm-postgres:/tmp/lcm-backup.dump
 docker exec lcm-postgres dropdb -U lcm_user --if-exists lcm_db
 docker exec lcm-postgres createdb -U lcm_user lcm_db
 docker exec lcm-postgres pg_restore -U lcm_user -d lcm_db /tmp/lcm-backup.dump
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 Helm：
@@ -161,8 +165,8 @@ curl -sf http://localhost:8080/health/ready
 3. 重启 Core，再重启 Satellite。
 
 ```bash
-docker-compose -f docker-compose.prod.yml restart lcm-core
-docker-compose -f docker-compose.prod.yml restart lcm-satellite
+docker compose -f docker-compose.prod.yml restart lcm-core
+docker compose -f docker-compose.prod.yml restart lcm-satellite
 docker logs --tail 100 lcm-satellite
 ```
 
