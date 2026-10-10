@@ -41,8 +41,9 @@ export DOCKER_TAG=v0.1.1
 # 1) 用本源码构建三个应用镜像（记录镜像 ID 与源码 commit/dirty diff）
 scripts/build.sh "$DOCKER_TAG"
 # 2) 预先准备固定版本基础依赖镜像（--no-pull 要求全部镜像已在本地）
-docker compose -f docker-compose.prod.yml config --images   # 列出清单需要的全部镜像
-#    其中 ${DOCKER_NAMESPACE}/lcm-* 以外的镜像逐个 docker pull，或从其他来源 docker load
+docker compose -f docker-compose.prod.yml config --no-interpolate --images
+#    应用镜像行保留变量表达式，以步骤 1 构建时的 namespace/tag 为准。
+#    其余固定版本基础依赖镜像逐个 docker pull，或从其他来源 docker load；列镜像无需部署 secrets。
 # 3) 制包：跳过拉取
 scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG" --no-pull --dry-run
 scripts/prepare_offline_release_bundle.sh --namespace "$DOCKER_NAMESPACE" --tag "$DOCKER_TAG" --no-pull
