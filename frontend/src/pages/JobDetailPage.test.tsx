@@ -89,4 +89,29 @@ describe('JobDetailPage', () => {
         expect(screen.getByText('Completed')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
     });
+
+    it('shows SSH target and result output as plain text', async () => {
+        mockedFetchJobs.mockResolvedValue([
+            {
+                id: 'job-ssh',
+                name: 'ssh-info',
+                status: 'COMPLETED',
+                executionType: 'SSH',
+                targetHost: '10.0.0.5',
+                resultOutput: 'Linux lab <b>x</b>',
+                exitCode: 0,
+            },
+        ]);
+
+        render(
+            <MemoryRouter initialEntries={['/jobs/job-ssh']}>
+                <Routes>
+                    <Route path="/jobs/:id" element={<JobDetailPage />} />
+                </Routes>
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByText('10.0.0.5')).toBeInTheDocument();
+        expect(screen.getByTestId('ssh-result-output')).toHaveTextContent('Linux lab <b>x</b>');
+    });
 });

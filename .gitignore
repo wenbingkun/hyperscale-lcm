@@ -110,3 +110,4 @@ certs/
 # Helm dependency build artifacts
 helm/*/charts/
 helm/*/Chart.lock
+frontend/test-results-real/

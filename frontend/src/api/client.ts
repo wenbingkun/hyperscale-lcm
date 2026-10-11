@@ -46,6 +46,11 @@ export interface Job {
     scheduledAt?: string;
     completedAt?: string;
     exitCode?: number;
+    executionType?: string;
+    targetDeviceId?: string;
+    targetHost?: string;
+    resultOutput?: string;
+    errorMessage?: string;
 }
 
 export interface JobStats {
@@ -272,6 +277,8 @@ export interface JobRequest {
     clusterId?: string;
     executionType?: string;
     executionPayload?: string;
+    targetDeviceId?: string;
+    task?: string;
 }
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
