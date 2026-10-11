@@ -207,23 +207,21 @@ public class JobResource {
                 try {
                         auditJson = OBJECT_MAPPER.writeValueAsString(auditDetails);
                 } catch (JsonProcessingException error) {
-                        auditJson = "{\"action\":\"submitted\"}";
+                        throw new IllegalStateException("Failed to serialize submission audit details", error);
                 }
                 String auditDetailsJson = auditJson;
 
                 log.info("📝 Submitting new job: {} ({})", request.name(), jobId);
 
-                return Panache.withTransaction(job::persist)
+                // Commit the job and its submission audit together; failures must roll back both
+                // before a response is returned or scheduling is triggered.
+                return Panache.withTransaction(() -> job.persist()
+                                .call(() -> auditService.logEvent(AuditEventType.JOB_SUBMITTED, "JOB", jobId, actor,
+                                                request.tenantId(), auditDetailsJson)))
                                 .replaceWith(Response.status(Response.Status.CREATED)
                                                 .entity(new JobResponse(jobId, JobStatus.PENDING.name(),
                                                                 "Job submitted successfully"))
                                                 .build())
-                                // Audit is written before the response so the record exists when the caller sees
-                                // 201; an audit failure is logged but must not fail the submission.
-                                .call(() -> auditService.logEvent(AuditEventType.JOB_SUBMITTED, "JOB", jobId, actor,
-                                                request.tenantId(), auditDetailsJson)
-                                                .onFailure().invoke(e -> log.error("Audit log failed", e))
-                                                .onFailure().recoverWithNull())
                                 .invoke(() -> vertx.getDelegate()
                                                 .runOnContext(ignored -> triggerScheduling(jobId, schedulingJob)));
         }
