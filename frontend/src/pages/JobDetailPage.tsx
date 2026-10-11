@@ -121,6 +121,18 @@ export const JobDetailPage: React.FC = () => {
                     </p>
                 </GlassCard>
 
+                {job.executionType === 'SSH' && (
+                    <GlassCard title="SSH Task Result" className="lg:col-span-2">
+                        <p className="text-gray-400 text-sm mb-2">
+                            Target: <span className="text-white font-mono">{job.targetHost || '—'}</span>
+                            {job.targetDeviceId && <span className="text-gray-500"> ({job.targetDeviceId})</span>}
+                        </p>
+                        <pre data-testid="ssh-result-output" className="bg-[#050507] rounded-lg p-4 font-mono text-xs sm:text-sm text-gray-300 max-h-72 overflow-auto whitespace-pre-wrap border border-white/10">
+                            {job.resultOutput || job.errorMessage || '(no output yet)'}
+                        </pre>
+                    </GlassCard>
+                )}
+
                 {/* Execution Log */}
                 <GlassCard title="Execution Log" className="lg:col-span-2">
                     <div className="bg-[#050507] rounded-lg p-4 font-mono text-xs sm:text-sm text-gray-300 h-72 overflow-auto border border-white/10 shadow-[inset_0_2px_15px_rgba(0,0,0,0.5)]">
