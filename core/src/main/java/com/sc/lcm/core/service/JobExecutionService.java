@@ -255,10 +255,14 @@ public class JobExecutionService {
                                 String effectiveNodeId = callback.nodeId() == null || callback.nodeId().isBlank()
                                         ? job.getAssignedNodeId()
                                         : callback.nodeId();
+                                boolean sshJob = job.getExecutionType() == Job.ExecutionType.SSH;
+                                String expectedErrorMessage = sshJob
+                                        ? sshErrorMessage(finalCallbackStatus, callback.errorMessage())
+                                        : callback.errorMessage();
                                 if (job.getStatus() == finalCallbackStatus
                                         && Objects.equals(job.getAssignedNodeId(), effectiveNodeId)
                                         && Objects.equals(job.getExitCode(), callback.exitCode())
-                                        && Objects.equals(job.getErrorMessage(), callback.errorMessage())
+                                        && Objects.equals(job.getErrorMessage(), expectedErrorMessage)
                                         && Objects.equals(job.getCompletedAt(), callback.completedAt())) {
                                     log.debug("Skipping duplicate status callback for job {}", callback.jobId());
                                     return Uni.createFrom().nullItem();
@@ -270,8 +274,11 @@ public class JobExecutionService {
                                     job.setAssignedNodeId(effectiveNodeId);
                                 }
                                 job.setExitCode(callback.exitCode());
-                                job.setErrorMessage(callback.errorMessage());
+                                job.setErrorMessage(expectedErrorMessage);
                                 job.setCompletedAt(callback.completedAt());
+                                if (sshJob && isTerminal(finalCallbackStatus)) {
+                                    job.setResultOutput(boundedOutput(callback.errorMessage()));
+                                }
 
                                 return Uni.createFrom().item(new JobStatusSnapshot(
                                         job.getId(),
@@ -325,6 +332,24 @@ public class JobExecutionService {
                 }).onFailure().recoverWithNull()
                 .replaceWithVoid()
                 .onTermination().invoke(() -> callbackSpan.end());
+    }
+
+    static final int MAX_RESULT_OUTPUT_CHARS = 70_000;
+
+    private static boolean isTerminal(JobStatus status) {
+        return status == JobStatus.COMPLETED || status == JobStatus.FAILED;
+    }
+
+    /** SSH jobs keep command output in resultOutput; errorMessage only carries it for failures. */
+    static String sshErrorMessage(JobStatus status, String message) {
+        return status == JobStatus.FAILED ? boundedOutput(message) : null;
+    }
+
+    static String boundedOutput(String message) {
+        if (message == null || message.length() <= MAX_RESULT_OUTPUT_CHARS) {
+            return message;
+        }
+        return message.substring(0, MAX_RESULT_OUTPUT_CHARS) + "\n[output truncated]";
     }
 
     Context extractTraceContext(JobStatusCallback callback) {

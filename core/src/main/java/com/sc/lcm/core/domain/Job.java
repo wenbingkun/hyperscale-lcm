@@ -77,6 +77,13 @@ public class Job extends PanacheEntityBase {
     @Column(columnDefinition = "TEXT")
     private String executionPayload;
 
+    // SSH 任务: 已批准的目标设备及有界输出
+    private String targetDeviceId;
+    private String targetHost;
+
+    @Column(columnDefinition = "TEXT")
+    private String resultOutput;
+
     // 时间戳
     @CreationTimestamp
     private LocalDateTime createdAt;

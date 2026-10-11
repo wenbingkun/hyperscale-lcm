@@ -134,7 +134,7 @@ Satellite 镜像包含 `bash` 与 `openssh-client`。SSH 任务（payload 含 `t
 | `LCM_SSH_TIMEOUT` | `60s` | 超时/取消只终止本端 ssh 客户端，输出管道排空最多再等 1s；远端命令状态视为未知 |
 | `LCM_SSH_ALLOW_INLINE` | 未设置 | 仅 dev/test：允许旧的内联口令/私钥 payload；默认拒绝 |
 
-目前任务目录只有 `SYSTEM_INFO`（`uname -a && uptime && df -h / && free -m`，任一步失败即停止并返回非零），命令固定在 Satellite 内，输出上限 64KiB。Core 侧下发入口随后续 PR 提供。
+目前任务目录只有 `SYSTEM_INFO`（`uname -a && uptime && df -h / && free -m`，任一步失败即停止并返回非零），命令固定在 Satellite 内，输出上限 64KiB。Core 侧：提交作业时 `executionType=SSH`，带 `targetDeviceId`（必须是已批准/已纳管的设备）与 `task`，Core 用设备 IP 和配置的 `lcm.ssh.default-user` / `lcm.ssh.default-key-ref`（环境变量 `LCM_SSH_DEFAULT_USER` / `LCM_SSH_DEFAULT_KEY_REF`）在服务端构造 payload，不含任何凭据；未配置时返回 503。旧的内联口令/私钥 payload 默认返回 400，仅 dev/test 可用 `LCM_SSH_INLINE_PAYLOAD_ENABLED=true` 开启。作业记录 `targetDeviceId`/`targetHost`，命令输出写入 `resultOutput`（有长度上限），提交动作写入审计（操作人、目标、任务）。
 
 ---
 

@@ -13,6 +13,7 @@ The format follows Keep a Changelog, and this project uses semver-style release 
 
 ### Changed
 
+- SSH jobs now run fixed read-only tasks (`SYSTEM_INFO`) against approved devices (`targetDeviceId` + `task`); the Core builds a credential-free payload, the Satellite resolves the key and `known_hosts` locally, output is stored in `job.result_output`, and submission is audited. Inline password/private-key SSH payloads are rejected unless `lcm.ssh.inline-payload.enabled=true` (dev/test). Satellite image now ships `bash` and `openssh-client`.
 - Production gRPC now uses a dual-port layout: plaintext 8080 for REST/health/metrics and HTTPS 8443 with required client certificates for Satellite gRPC; plaintext gRPC is rejected by `GrpcTlsEnforcer` (`lcm.grpc.require-tls`). Default deployment image tag moves to the unreleased `v0.1.1`; `v0.1.0` images carry the old contract.
 - Docker build contexts now exclude generated artifacts and local dependency/report directories.
 - Local image build helper now defaults to a fixed release tag and rejects `latest` unless explicitly allowed for dev-only experiments.
