@@ -262,3 +262,7 @@
 | CI 工作流 Job | 9 个（contract-guard / helm-chart-lint / backend / frontend-build / frontend-e2e / satellite / load-test / demo-smoke / docker-build） |
 | Core JaCoCo 指令覆盖率 | 58.08%（基线门槛 50%） |
 | Frontend Istanbul Statements | 65.23%（Lines 65.24%） |
+
+## 无硬件阶段（NO_HARDWARE_PHASE_PLAN）
+
+M0–M3 的实现与验收记录见 [documentation/NO_HARDWARE_PHASE_PLAN.md](documentation/NO_HARDWARE_PHASE_PLAN.md) 的进度表和 [documentation/runbooks/deployment.md](documentation/runbooks/deployment.md) §5.3。M4（团队试用）与 M5 依赖使用条件，未启动；真实硬件验收仍在上方“受外部条件门控”。

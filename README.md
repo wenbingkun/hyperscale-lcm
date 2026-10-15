@@ -21,6 +21,10 @@ The authoritative rolling status snapshot lives in `documentation/PROJECT_STATUS
 - WebSocket-driven updates for dashboard, jobs, job detail, and topology pages
 - Prometheus, Grafana, OpenTelemetry, health probes, and trace continuity across `Satellite -> Kafka -> Core`
 
+### Evidence Levels
+
+"Implemented" means code exists; it does not mean it has been run on the target hardware. The no-hardware phase verified the job, dispatch, recovery and capacity paths on a real software stack (compose + mTLS + PostgreSQL/Kafka/Redis, see `documentation/runbooks/deployment.md` §5.3). Redfish/BMC is covered by sanitized vendor fixtures only; PXE, AlertManager delivery, Kubernetes and real GPU hardware are not validated. The matrix is in `documentation/PROJECT_STATUS.md` §5.
+
 ### Still In Progress
 
 - Deployment Closure Step 5 clean-environment acceptance walkthrough for compose or Kubernetes.

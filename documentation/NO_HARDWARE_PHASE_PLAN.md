@@ -252,8 +252,8 @@
 |---|---|---|
 | M0 基线与首批计划 | 进行中 | 基线：HEAD 9a43f8e、分支 fix/prod-grpc-mtls-dual-port、14 个已修改文件 + 2 个未跟踪（`.local/m0-baseline.patch`、`m0-status.txt`、`m0-untracked.sha256`）；已确认单写者；Codex 两轮意见见 `.local/claude-review-prod-grpc-mtls.md`，新 P1/P2 均已在工作区处理，待 Codex 复审；部署批次验证见 runbooks/deployment.md §5.3 |
 | M1 部署与真实主流程 | 进行中 | 批 1 #25（prod mTLS 双端口）、批 2 #26/#27/#28（真实 SSH 只读任务、审计、前端与真实后端验收）已合并；批 3 Satellite 证书身份见 runbooks/deployment.md §2.3 / §5.3；批 4：任务 6 PXE/发现默认关闭、任务 5 派发前复核 SSH 目标（执行端与目标的网络可达关系仍未建模，留给 M3/M4）；批 5：单机实验环境干净启动验收见 lab-quickstart.md / deployment.md §5.3；批 5 已通过干净检出与空卷复审；M1 仍按原验收门槛收口，不关闭 Deployment Closure Step 5 |
-| M2 任务正确性与恢复 | 进行中 | 批 A：状态契约与转换/取消护栏见 JOB_LIFECYCLE_CONTRACT.md；批 B 持久派发与 UNKNOWN（扫描器、认领、resolve）已实现；批 C Satellite 执行正确性（Docker 等待退出/超时/清理、进程内命令去重、终态补报）已实现；批 D 恢复与反例验收待办 |
-| M3 调度边界与作品出口 A | 待执行 | — |
+| M2 任务正确性与恢复 | 已实现（待审核） | 批 A：状态契约与转换/取消护栏见 JOB_LIFECYCLE_CONTRACT.md；批 B 持久派发与 UNKNOWN（扫描器、认领、resolve）已实现；批 C Satellite 执行正确性（Docker 等待退出/超时/清理、进程内命令去重、终态补报）已实现；批 D 恢复与反例验收（PENDING 重试/超时、重启后占用与规格恢复、Core/Satellite/PG/Kafka 故障演练）已实现并记录于 deployment.md §5.3 |
+| M3 调度边界与作品出口 A | 已实现（待审核） | 容量感知原子放置与 PENDING 重试/超时、GPU 型号硬约束、Allocation API 默认关闭、令牌租户约束；演示脚本见 DEMO_GUIDE.md，取舍见 ENTERPRISE_LCM_ARCHITECTURE.md §6.1，证据级别见 PROJECT_STATUS.md §5；备份恢复到独立实例已验证（deployment.md §5.3）。未做：整套环境重启后的全量状态核对记录、Docker 作业经 lab 栈端到端、实际耗时/资源用量记录 |
 | M4 团队试用出口 B | 待需求与环境确认 | — |
 | M5 虚拟硬件实验 | 可选、未启动 | — |
 
