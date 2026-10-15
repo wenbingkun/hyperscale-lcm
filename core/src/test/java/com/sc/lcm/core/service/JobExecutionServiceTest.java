@@ -93,7 +93,7 @@ class JobExecutionServiceTest {
         String payload = service.objectMapper.writeValueAsString(new JobStatusCallback(
                 "job-404",
                 "node-x",
-                "UNKNOWN",
+                "NOT_A_STATUS",
                 1,
                 "invalid",
                 "",
@@ -144,6 +144,7 @@ class JobExecutionServiceTest {
             "RUNNING,CANCELLED,IGNORE_INVALID", "SCHEDULED,PENDING,IGNORE_INVALID",
             "COMPLETED,RUNNING,IGNORE_FINAL", "COMPLETED,FAILED,IGNORE_FINAL", "COMPLETED,COMPLETED,IGNORE_FINAL",
             "FAILED,COMPLETED,IGNORE_FINAL", "FAILED,RUNNING,IGNORE_FINAL",
+            "UNKNOWN,RUNNING,APPLY", "UNKNOWN,COMPLETED,APPLY", "UNKNOWN,FAILED,APPLY", "UNKNOWN,PENDING,IGNORE_INVALID",
             "CANCELLED,RUNNING,IGNORE_FINAL", "CANCELLED,COMPLETED,IGNORE_FINAL", "CANCELLED,FAILED,IGNORE_FINAL"
     })
     void callbackTransitionTable(Job.JobStatus current, Job.JobStatus reported,

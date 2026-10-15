@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc.lcm.core.api.DashboardWebSocket;
 import com.sc.lcm.core.domain.Job;
+import com.sc.lcm.core.domain.AuditLog.AuditEventType;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.domain.JobExecutionMessage;
 import com.sc.lcm.core.domain.JobStatusCallback;
@@ -269,9 +270,9 @@ public class JobExecutionService {
                                                 finalCallbackStatus, callback.jobId(), job.getStatus(), decision);
                                     }
                                     if (decision == CallbackDecision.IGNORE_FINAL
-                                            && job.getStatus() == JobStatus.CANCELLED
-                                            && isTerminal(finalCallbackStatus)) {
-                                        return recordLateResultAfterCancel(job, finalCallbackStatus, callback)
+                                            && isTerminal(finalCallbackStatus)
+                                            && job.getStatus() != finalCallbackStatus) {
+                                        return recordLateResultIgnored(job, finalCallbackStatus, callback)
                                                 .replaceWith((JobStatusSnapshot) null);
                                     }
                                     return Uni.createFrom().nullItem();
@@ -376,17 +377,24 @@ public class JobExecutionService {
         if (current == JobStatus.COMPLETED || current == JobStatus.FAILED || current == JobStatus.CANCELLED) {
             return CallbackDecision.IGNORE_FINAL;
         }
+        if (current == JobStatus.UNKNOWN) {
+            return CallbackDecision.APPLY; // a late real report beats the sweeper's guess
+        }
         if (current == JobStatus.RUNNING && reported == JobStatus.RUNNING) {
             return CallbackDecision.IGNORE_INVALID;
         }
         return CallbackDecision.APPLY;
     }
 
-    private Uni<Void> recordLateResultAfterCancel(Job job, JobStatus reported, JobStatusCallback callback) {
-        String details = String.format("{\"action\":\"late_result_after_cancel\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
-                reported, callback.exitCode());
-        return auditService.logEvent(com.sc.lcm.core.domain.AuditLog.AuditEventType.JOB_CANCELLED, "JOB", job.getId(),
-                "SYSTEM", job.getTenantId(), details);
+    /** A conflicting result arrived after a final state (cancel, manual resolve, sweeper): keep it as audit evidence. */
+    private Uni<Void> recordLateResultIgnored(Job job, JobStatus reported, JobStatusCallback callback) {
+        String action = job.getStatus() == JobStatus.CANCELLED ? "late_result_after_cancel" : "late_result_ignored";
+        String details = String.format(
+                "{\"action\":\"%s\",\"currentStatus\":\"%s\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
+                action, job.getStatus(), reported, callback.exitCode());
+        AuditEventType eventType = job.getStatus() == JobStatus.CANCELLED
+                ? AuditEventType.JOB_CANCELLED : AuditEventType.JOB_LATE_RESULT;
+        return auditService.logEvent(eventType, "JOB", job.getId(), "SYSTEM", job.getTenantId(), details);
     }
 
     private static boolean isTerminal(JobStatus status) {

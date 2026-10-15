@@ -114,4 +114,27 @@ describe('JobDetailPage', () => {
         expect(await screen.findByText('10.0.0.5')).toBeInTheDocument();
         expect(screen.getByTestId('ssh-result-output')).toHaveTextContent('Linux lab <b>x</b>');
     });
+
+    it('flags an UNKNOWN job as needing manual verification', async () => {
+        mockedFetchJobs.mockResolvedValue([
+            {
+                id: 'job-unknown',
+                name: 'maybe-ran',
+                status: 'UNKNOWN',
+                assignedNodeId: 'node-1',
+                errorMessage: 'no status reported in time',
+            },
+        ]);
+
+        render(
+            <MemoryRouter initialEntries={['/jobs/job-unknown']}>
+                <Routes>
+                    <Route path="/jobs/:id" element={<JobDetailPage />} />
+                </Routes>
+            </MemoryRouter>,
+        );
+
+        expect(await screen.findByText('Result unknown')).toBeInTheDocument();
+        expect(screen.getByTestId('unknown-notice')).toHaveTextContent('no status reported in time');
+    });
 });

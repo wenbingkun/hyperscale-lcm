@@ -94,6 +94,10 @@ public class Job extends PanacheEntityBase {
     private LocalDateTime scheduledAt;
     private LocalDateTime completedAt;
 
+    // 派发认领: dispatchedAt 非空表示已持久认领，不能据此确认命令是否送达（见 JOB_LIFECYCLE_CONTRACT.md）
+    private int dispatchAttempt = 0;
+    private LocalDateTime dispatchedAt;
+
     // 执行结果
     private Integer exitCode;
     private String errorMessage;
@@ -148,7 +152,8 @@ public class Job extends PanacheEntityBase {
         RUNNING, // 运行中
         COMPLETED, // 已完成
         FAILED, // 失败
-        CANCELLED // 已取消
+        CANCELLED, // 已取消
+        UNKNOWN // 结果未知: 命令已送达但长时间无结果，需人工核对
     }
 
     public enum ExecutionType {

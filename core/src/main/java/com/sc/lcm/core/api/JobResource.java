@@ -331,7 +331,7 @@ public class JobResource {
         }
 
         /**
-         * 取消作业 (仅 ADMIN 和 OPERATOR)。首版只取消尚未开始执行的作业（PENDING / SCHEDULED）：
+         * 取消作业 (仅 ADMIN 和 OPERATOR)。只取消尚未被派发认领的作业（PENDING / SCHEDULED）：
          * 运行中取消需要"远端已停止"的证据，目前没有，故返回 409（见 documentation/JOB_LIFECYCLE_CONTRACT.md）。
          */
         @DELETE
@@ -339,9 +339,9 @@ public class JobResource {
         @RolesAllowed({ "ADMIN", "OPERATOR" })
         public Uni<Response> cancelJob(@PathParam("id") String id) {
                 String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
-                // Conditional update: a concurrent RUNNING callback cannot be overwritten by the cancel.
+                // Compete atomically with callbacks and dispatch claims; success means no emit can follow.
                 return Panache.withTransaction(() -> Job.update(
-                                "status = ?1 where id = ?2 and status in (?3, ?4)",
+                                "status = ?1 where id = ?2 and status in (?3, ?4) and dispatchedAt is null",
                                 JobStatus.CANCELLED, id, JobStatus.PENDING, JobStatus.SCHEDULED)
                                 .flatMap(updated -> {
                                         if (updated > 0) {
@@ -358,14 +358,75 @@ public class JobResource {
                                                                                         "Job not found: " + id))
                                                                         .build();
                                                 }
-                                                String reason = job.getStatus() == JobStatus.RUNNING
-                                                                ? "Cancelling a running job is not supported yet"
-                                                                : "Cannot cancel job in status: " + job.getStatus();
+                                                String reason;
+                                                if (job.getStatus() == JobStatus.RUNNING) {
+                                                        reason = "Cancelling a running job is not supported yet";
+                                                } else if (job.getStatus() == JobStatus.SCHEDULED
+                                                                && job.getDispatchedAt() != null) {
+                                                        reason = "Dispatch already claimed; cancellation cannot be guaranteed";
+                                                } else {
+                                                        reason = "Cannot cancel job in status: " + job.getStatus();
+                                                }
                                                 return Response.status(Response.Status.CONFLICT)
                                                                 .entity(new ErrorResponse(reason))
                                                                 .build();
                                         });
                                 }));
+        }
+
+        /**
+         * 人工核对"结果未知"的作业: 操作者确认远端实际结果后记录结论。仅 UNKNOWN 可核对；
+         * 需要重新执行时请重新提交新作业（不自动重发）。
+         */
+        @POST
+        @Path("/{id}/resolve")
+        @RolesAllowed({ "ADMIN", "OPERATOR" })
+        public Uni<Response> resolveJob(@PathParam("id") String id, ResolveRequest request) {
+                JobStatus outcome;
+                try {
+                        outcome = JobStatus.valueOf(request == null || request.outcome() == null ? ""
+                                        : request.outcome().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                        outcome = null;
+                }
+                if (outcome != JobStatus.COMPLETED && outcome != JobStatus.FAILED) {
+                        return badRequest("outcome must be COMPLETED or FAILED");
+                }
+                JobStatus resolved = outcome;
+                String note = request.note() == null ? "" : request.note();
+                String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
+                String errorMessage = resolved == JobStatus.FAILED ? "Resolved manually by " + actor + ": " + note : null;
+                String details;
+                try {
+                        details = OBJECT_MAPPER.writeValueAsString(
+                                        Map.of("action", "resolved", "outcome", resolved.name(), "note", note));
+                } catch (JsonProcessingException e) {
+                        throw new IllegalStateException("Failed to serialize resolve audit details", e);
+                }
+                return Panache.withTransaction(() -> Job.update(
+                                "status = ?1, errorMessage = ?2, completedAt = ?3 where id = ?4 and status = ?5",
+                                resolved, errorMessage, java.time.LocalDateTime.now(), id, JobStatus.UNKNOWN)
+                                .flatMap(updated -> {
+                                        if (updated > 0) {
+                                                return auditService.logEvent(AuditEventType.JOB_RESOLVED, "JOB", id,
+                                                                actor, null, details)
+                                                                .replaceWith(Response.ok(new JobResponse(id,
+                                                                                resolved.name(), "Job resolved"))
+                                                                                .build());
+                                        }
+                                        return Job.<Job>findByIdReactive(id).map(job -> job == null
+                                                        ? Response.status(Response.Status.NOT_FOUND)
+                                                                        .entity(new ErrorResponse("Job not found: " + id))
+                                                                        .build()
+                                                        : Response.status(Response.Status.CONFLICT)
+                                                                        .entity(new ErrorResponse(
+                                                                                        "Only UNKNOWN jobs can be resolved (status: "
+                                                                                                        + job.getStatus() + ")"))
+                                                                        .build());
+                                }));
+        }
+
+        public record ResolveRequest(String outcome, String note) {
         }
 
         /**

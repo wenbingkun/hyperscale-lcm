@@ -51,12 +51,13 @@ class JobTest {
     @Test
     @DisplayName("状态枚举应包含所有值")
     void testAllJobStatuses() {
-        assertEquals(6, Job.JobStatus.values().length);
+        assertEquals(7, Job.JobStatus.values().length);
         assertNotNull(Job.JobStatus.valueOf("PENDING"));
         assertNotNull(Job.JobStatus.valueOf("SCHEDULED"));
         assertNotNull(Job.JobStatus.valueOf("RUNNING"));
         assertNotNull(Job.JobStatus.valueOf("COMPLETED"));
         assertNotNull(Job.JobStatus.valueOf("FAILED"));
         assertNotNull(Job.JobStatus.valueOf("CANCELLED"));
+        assertNotNull(Job.JobStatus.valueOf("UNKNOWN"));
     }
 }

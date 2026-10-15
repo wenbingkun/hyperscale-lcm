@@ -18,7 +18,7 @@ class JobDispatcherTest {
 
     private StreamRegistry streamRegistry;
     private JobDispatcher dispatcher;
-    private JobStateReader jobStateReader;
+    private JobDispatchStore jobStateReader;
 
     @BeforeEach
     void setUp() {
@@ -27,10 +27,15 @@ class JobDispatcherTest {
         dispatcher = new JobDispatcher();
         dispatcher.streamRegistry = streamRegistry;
         dispatcher.openTelemetry = GlobalOpenTelemetry.get();
-        jobStateReader = Mockito.mock(JobStateReader.class);
-        Mockito.when(jobStateReader.isScheduled(Mockito.anyString()))
+        jobStateReader = Mockito.mock(JobDispatchStore.class);
+        Mockito.when(jobStateReader.claim(Mockito.anyString()))
                 .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(true));
-        dispatcher.jobStateReader = jobStateReader;
+        Mockito.when(jobStateReader.release(Mockito.anyString()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().voidItem());
+        Mockito.when(streamRegistry.isConnected(Mockito.anyString())).thenReturn(true);
+        Mockito.when(streamRegistry.sendCommand(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
+                Mockito.any(), Mockito.anyMap())).thenReturn(true);
+        dispatcher.dispatchStore = jobStateReader;
     }
 
     @Test
@@ -208,7 +213,7 @@ class JobDispatcherTest {
 
     @Test
     void dispatchDropsJobThatIsNoLongerScheduled() {
-        Mockito.when(jobStateReader.isScheduled("job-cancelled"))
+        Mockito.when(jobStateReader.claim("job-cancelled"))
                 .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(false));
         Job job = new Job("job-cancelled", 1, 1, 0, null);
         job.setAssignedNodeId("node-1");
@@ -222,7 +227,7 @@ class JobDispatcherTest {
     @Test
     void dispatchCompletionWaitsForDatabaseStateCheck() throws Exception {
         var state = new java.util.concurrent.CompletableFuture<Boolean>();
-        Mockito.when(jobStateReader.isScheduled("job-delayed-state"))
+        Mockito.when(jobStateReader.claim("job-delayed-state"))
                 .thenReturn(io.smallrye.mutiny.Uni.createFrom().completionStage(state));
         Job job = new Job("job-delayed-state", 1, 1, 0, null);
         job.setAssignedNodeId("node-1");
@@ -238,7 +243,7 @@ class JobDispatcherTest {
 
     @Test
     void dispatchPropagatesStateReadFailureWithoutSending() {
-        Mockito.when(jobStateReader.isScheduled("job-state-error"))
+        Mockito.when(jobStateReader.claim("job-state-error"))
                 .thenReturn(io.smallrye.mutiny.Uni.createFrom().failure(new IllegalStateException("database unavailable")));
         Job job = new Job("job-state-error", 1, 1, 0, null);
         job.setAssignedNodeId("node-1");
@@ -247,5 +252,31 @@ class JobDispatcherTest {
                 () -> dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5)));
         verify(streamRegistry, never()).sendCommand(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
+    }
+
+    @Test
+    void dispatchLeavesJobUndeliveredWhenSatelliteHasNoStream() {
+        Mockito.when(streamRegistry.isConnected("node-offline")).thenReturn(false);
+        Job job = new Job("job-offline", 1, 1, 0, null);
+        job.setAssignedNodeId("node-offline");
+
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
+
+        verify(jobStateReader, never()).claim(Mockito.anyString());
+        verify(streamRegistry, never()).sendCommand(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.any(), anyMap());
+    }
+
+    @Test
+    void dispatchReleasesTheClaimWhenTheCommandCannotBeEmitted() {
+        Mockito.when(streamRegistry.sendCommand(Mockito.eq("node-1"), Mockito.eq("job-emit-fails"),
+                Mockito.anyString(), Mockito.any(), Mockito.anyMap())).thenReturn(false);
+        Job job = new Job("job-emit-fails", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
+
+        verify(jobStateReader).claim("job-emit-fails");
+        verify(jobStateReader).release("job-emit-fails");
     }
 }

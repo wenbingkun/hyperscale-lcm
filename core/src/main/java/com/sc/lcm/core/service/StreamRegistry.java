@@ -26,7 +26,15 @@ public class StreamRegistry {
         });
     }
 
-    public void sendCommand(String satelliteId, String commandId, String commandType, String payload,
+    public boolean isConnected(String satelliteId) {
+        return emitters.containsKey(satelliteId);
+    }
+
+    /**
+     * @return false only when no emitter was found and nothing was attempted.
+     * An exception during emit is ambiguous: callers must retain the claim instead of retrying.
+     */
+    public boolean sendCommand(String satelliteId, String commandId, String commandType, String payload,
             Map<String, String> traceContext) {
         MultiEmitter<? super StreamResponse> emitter = emitters.get(satelliteId);
         if (emitter != null) {
@@ -39,11 +47,16 @@ public class StreamRegistry {
                 builder.putAllTraceContext(traceContext);
             }
 
-            StreamResponse response = builder.build();
-            emitter.emit(response);
+            try {
+                emitter.emit(builder.build());
+            } catch (RuntimeException e) {
+                LOG.errorf(e, "Failed to emit command %s to %s", commandId, satelliteId);
+                throw e;
+            }
             LOG.infof("🚀 Command sent to %s: %s", satelliteId, commandType);
-        } else {
-            LOG.warnf("⚠️ Cannot send command. Satellite not connected: %s", satelliteId);
+            return true;
         }
+        LOG.warnf("⚠️ Cannot send command. Satellite not connected: %s", satelliteId);
+        return false;
     }
 }

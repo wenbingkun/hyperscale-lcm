@@ -39,7 +39,7 @@ export interface Job {
     id: string;
     name: string;
     description?: string;
-    status: string; // 'PENDING' | 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+    status: string; // 'PENDING' | 'SCHEDULED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'UNKNOWN'
     assignedNodeId?: string;
     clusterId?: string;
     requiredGpuCount?: number;
