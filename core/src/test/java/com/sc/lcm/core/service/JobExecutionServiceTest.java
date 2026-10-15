@@ -135,4 +135,19 @@ class JobExecutionServiceTest {
         assertTrue(bounded.endsWith("[output truncated]"));
         assertTrue(bounded.length() < JobExecutionService.MAX_RESULT_OUTPUT_CHARS + 50);
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "PENDING,RUNNING,APPLY", "PENDING,COMPLETED,APPLY", "SCHEDULED,RUNNING,APPLY",
+            "SCHEDULED,FAILED,APPLY", "RUNNING,COMPLETED,APPLY", "RUNNING,FAILED,APPLY",
+            "RUNNING,RUNNING,IGNORE_INVALID", "RUNNING,PENDING,IGNORE_INVALID", "RUNNING,SCHEDULED,IGNORE_INVALID",
+            "RUNNING,CANCELLED,IGNORE_INVALID", "SCHEDULED,PENDING,IGNORE_INVALID",
+            "COMPLETED,RUNNING,IGNORE_FINAL", "COMPLETED,FAILED,IGNORE_FINAL", "COMPLETED,COMPLETED,IGNORE_FINAL",
+            "FAILED,COMPLETED,IGNORE_FINAL", "FAILED,RUNNING,IGNORE_FINAL",
+            "CANCELLED,RUNNING,IGNORE_FINAL", "CANCELLED,COMPLETED,IGNORE_FINAL", "CANCELLED,FAILED,IGNORE_FINAL"
+    })
+    void callbackTransitionTable(Job.JobStatus current, Job.JobStatus reported,
+            JobExecutionService.CallbackDecision expected) {
+        assertEquals(expected, JobExecutionService.decideCallback(current, reported));
+    }
 }

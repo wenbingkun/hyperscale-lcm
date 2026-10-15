@@ -331,36 +331,40 @@ public class JobResource {
         }
 
         /**
-         * 取消作业 (仅 ADMIN 和 OPERATOR)
+         * 取消作业 (仅 ADMIN 和 OPERATOR)。首版只取消尚未开始执行的作业（PENDING / SCHEDULED）：
+         * 运行中取消需要"远端已停止"的证据，目前没有，故返回 409（见 documentation/JOB_LIFECYCLE_CONTRACT.md）。
          */
-        @SuppressWarnings("unused")
         @DELETE
         @Path("/{id}")
         @RolesAllowed({ "ADMIN", "OPERATOR" })
         public Uni<Response> cancelJob(@PathParam("id") String id) {
-                return Panache.withTransaction(() -> Job.<Job>findByIdReactive(id)
-                                .onItem().transformToUni(job -> {
-                                        if (job == null) {
-                                                return Uni.createFrom().item(Response.status(Response.Status.NOT_FOUND)
-                                                                .entity(new ErrorResponse("Job not found: " + id))
-                                                                .build());
+                String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
+                // Conditional update: a concurrent RUNNING callback cannot be overwritten by the cancel.
+                return Panache.withTransaction(() -> Job.update(
+                                "status = ?1 where id = ?2 and status in (?3, ?4)",
+                                JobStatus.CANCELLED, id, JobStatus.PENDING, JobStatus.SCHEDULED)
+                                .flatMap(updated -> {
+                                        if (updated > 0) {
+                                                return auditService.logJobCancelled(id, actor, null)
+                                                                .replaceWith(Response
+                                                                                .ok(new JobResponse(id, "CANCELLED",
+                                                                                                "Job cancelled"))
+                                                                                .build());
                                         }
-                                        if (job.getStatus() == JobStatus.COMPLETED
-                                                        || job.getStatus() == JobStatus.CANCELLED) {
-                                                return Uni.createFrom().item(Response
-                                                                .status(Response.Status.BAD_REQUEST)
-                                                                .entity(new ErrorResponse(
-                                                                                "Cannot cancel job in status: "
-                                                                                                + job.getStatus()))
-                                                                .build());
-                                        }
-
-                                        job.setStatus(JobStatus.CANCELLED);
-                                        log.info("🚫 Job {} cancelled", id);
-
-                                        return Uni.createFrom().item(
-                                                        Response.ok(new JobResponse(id, "CANCELLED", "Job cancelled"))
-                                                                        .build());
+                                        return Job.<Job>findByIdReactive(id).map(job -> {
+                                                if (job == null) {
+                                                        return Response.status(Response.Status.NOT_FOUND)
+                                                                        .entity(new ErrorResponse(
+                                                                                        "Job not found: " + id))
+                                                                        .build();
+                                                }
+                                                String reason = job.getStatus() == JobStatus.RUNNING
+                                                                ? "Cancelling a running job is not supported yet"
+                                                                : "Cannot cancel job in status: " + job.getStatus();
+                                                return Response.status(Response.Status.CONFLICT)
+                                                                .entity(new ErrorResponse(reason))
+                                                                .build();
+                                        });
                                 }));
         }
 

@@ -34,6 +34,9 @@ public class JobDispatcher {
     @Inject
     JobExecutionService jobExecutionService;
 
+    @Inject
+    JobStateReader jobStateReader;
+
     /**
      * Consumes scheduled jobs from Kafka and dispatches them to Satellites via
      * gRPC.
@@ -68,7 +71,20 @@ public class JobDispatcher {
         return Uni.createFrom().voidItem();
     }
 
+    /** Only jobs still SCHEDULED in the database are sent; a job cancelled while its message was in flight is dropped. */
     private void send(Job job, String nodeId) {
+        jobStateReader.isScheduled(job.getId()).subscribe().with(
+                scheduled -> {
+                    if (scheduled) {
+                        doSend(job, nodeId);
+                    } else {
+                        LOG.warnf("Not dispatching job %s: it is no longer SCHEDULED", job.getId());
+                    }
+                },
+                e -> LOG.errorf(e, "Could not confirm state of job %s; not dispatching", job.getId()));
+    }
+
+    private void doSend(Job job, String nodeId) {
         ExecutionCommand executionCommand = resolveExecutionCommand(job);
 
         // Extract Context

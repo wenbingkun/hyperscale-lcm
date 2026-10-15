@@ -37,6 +37,28 @@ class SshDispatchIntegrationTest {
     @Test void kafkaRefusesDeletedTarget() throws Throwable { exercise("missing"); }
     @Test void kafkaRefusesPayloadHostMismatch() throws Throwable { exercise("payload"); }
 
+    @Test
+    void kafkaDoesNotDispatchAJobCancelledWhileItsMessageWasInFlight() throws Throwable {
+        String nodeId = "dispatch-cancel-" + UUID.randomUUID();
+        var commands = new LinkedBlockingQueue<StreamResponse>();
+        Cancellable connection = Multi.createFrom().<StreamResponse>emitter(
+                emitter -> streams.register(nodeId, emitter)).subscribe().with(commands::add);
+        Job job = new Job(UUID.randomUUID().toString(), 1, 1, 0, null);
+        job.setName("cancelled-in-flight");
+        job.setStatus(Job.JobStatus.CANCELLED);
+        job.setAssignedNodeId(nodeId);
+        try {
+            VertxContextSupport.subscribeAndAwait(() -> Panache.withTransaction(() -> job.persist().replaceWithVoid()));
+            queue.send(job).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertNull(commands.poll(5, TimeUnit.SECONDS), "A cancelled job must not reach the Satellite");
+            Job stored = VertxContextSupport.subscribeAndAwait(
+                    () -> Panache.withSession(() -> Job.<Job>findById(job.getId())));
+            assertEquals(Job.JobStatus.CANCELLED, stored.getStatus());
+        } finally {
+            connection.cancel();
+        }
+    }
+
     private void exercise(String scenario) throws Throwable {
         String nodeId = "dispatch-review-" + UUID.randomUUID();
         var commands = new LinkedBlockingQueue<StreamResponse>();

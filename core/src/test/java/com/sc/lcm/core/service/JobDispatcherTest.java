@@ -18,6 +18,7 @@ class JobDispatcherTest {
 
     private StreamRegistry streamRegistry;
     private JobDispatcher dispatcher;
+    private JobStateReader jobStateReader;
 
     @BeforeEach
     void setUp() {
@@ -26,6 +27,10 @@ class JobDispatcherTest {
         dispatcher = new JobDispatcher();
         dispatcher.streamRegistry = streamRegistry;
         dispatcher.openTelemetry = GlobalOpenTelemetry.get();
+        jobStateReader = Mockito.mock(JobStateReader.class);
+        Mockito.when(jobStateReader.isScheduled(Mockito.anyString()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(true));
+        dispatcher.jobStateReader = jobStateReader;
     }
 
     @Test
@@ -200,4 +205,17 @@ class JobDispatcherTest {
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.any(), anyMap());
     }
 
+
+    @Test
+    void dispatchDropsJobThatIsNoLongerScheduled() {
+        Mockito.when(jobStateReader.isScheduled("job-cancelled"))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(false));
+        Job job = new Job("job-cancelled", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+
+        dispatcher.dispatch(job);
+
+        verify(streamRegistry, never()).sendCommand(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
+    }
 }
