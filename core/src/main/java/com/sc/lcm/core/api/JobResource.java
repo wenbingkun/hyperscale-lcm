@@ -84,6 +84,12 @@ public class JobResource {
          */
         @POST
         public Uni<Response> submitJob(JobRequest request) {
+                String tenantClaim = tenantClaim();
+                if (tenantClaim != null && hasText(request.tenantId()) && !tenantClaim.equals(request.tenantId())) {
+                        return Uni.createFrom().item(Response.status(Response.Status.FORBIDDEN)
+                                        .entity(new ErrorResponse("tenantId does not match the authenticated tenant"))
+                                        .build());
+                }
                 ExecutionType executionType;
                 try {
                         executionType = parseExecutionType(request.executionType());
@@ -183,7 +189,8 @@ public class JobResource {
                 job.setRequiredGpuModel(request.gpuModel());
                 job.setRequiresNvlink(request.requiresNvlink());
                 job.setMinNvlinkBandwidthGbps(request.minNvlinkBandwidthGbps());
-                job.setTenantId(request.tenantId());
+                String tenantId = tenantClaim() != null ? tenantClaim() : request.tenantId();
+                job.setTenantId(tenantId);
                 job.setClusterId(request.clusterId());
                 job.setStatus(JobStatus.PENDING);
                 job.setExecutionType(executionType);
@@ -217,7 +224,7 @@ public class JobResource {
                 // before a response is returned or scheduling is triggered.
                 return Panache.withTransaction(() -> job.persist()
                                 .call(() -> auditService.logEvent(AuditEventType.JOB_SUBMITTED, "JOB", jobId, actor,
-                                                request.tenantId(), auditDetailsJson)))
+                                                tenantId, auditDetailsJson)))
                                 .replaceWith(Response.status(Response.Status.CREATED)
                                                 .entity(new JobResponse(jobId, JobStatus.PENDING.name(),
                                                                 "Job submitted successfully"))
@@ -230,6 +237,20 @@ public class JobResource {
                 return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                                 .entity(new ErrorResponse(message))
                                 .build());
+        }
+
+        /** Tenant bound to the caller's token (JWT `tenant_id`), or null when the token carries none. */
+        private String tenantClaim() {
+                if (identity.getPrincipal() instanceof org.eclipse.microprofile.jwt.JsonWebToken token
+                                && token.getClaim("tenant_id") instanceof String tenant && !tenant.isBlank()) {
+                        return tenant;
+                }
+                return null;
+        }
+
+        /** Non-admin callers are confined to their own tenant; returns null when no confinement applies. */
+        private String confinedTenant() {
+                return identity.hasRole("ADMIN") ? null : tenantClaim();
         }
 
         private static boolean hasText(String value) {
@@ -304,6 +325,15 @@ public class JobResource {
                         @QueryParam("tenantId") String tenantId,
                         @QueryParam("limit") @DefaultValue("100") int limit) {
 
+                String confined = confinedTenant();
+                if (confined != null) {
+                        // Other tenants' jobs are never listed, whatever filter the client sends.
+                        if (status != null) {
+                                return Job.list("tenantId = ?1 and status = ?2", confined,
+                                                JobStatus.valueOf(status.toUpperCase()));
+                        }
+                        return Job.<Job>find("tenantId", confined).page(0, limit).list();
+                }
                 if (status != null) {
                         return Job.findByStatus(JobStatus.valueOf(status.toUpperCase()));
                 }
@@ -321,7 +351,8 @@ public class JobResource {
         public Uni<Response> getJob(@PathParam("id") String id) {
                 return Job.findByIdReactive(id)
                                 .onItem().transform(job -> {
-                                        if (job == null) {
+                                        String confined = confinedTenant();
+                                        if (job == null || (confined != null && !confined.equals(job.getTenantId()))) {
                                                 return Response.status(Response.Status.NOT_FOUND)
                                                                 .entity(new ErrorResponse("Job not found: " + id))
                                                                 .build();

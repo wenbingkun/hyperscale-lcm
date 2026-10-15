@@ -23,6 +23,21 @@ public class RegistrationNodeSpecsProvider implements NodeSpecsProvider {
     // 内存缓存注册的硬件规格，用于同步访问
     private final ConcurrentHashMap<String, HardwareSpecs> specsCache = new ConcurrentHashMap<>();
 
+    // 重启后从数据库恢复的规格；注册后以 specsCache 为准
+    private final ConcurrentHashMap<String, Node> persistedNodes = new ConcurrentHashMap<>();
+
+    /** Restores persisted node specs so capacity checks stay meaningful after a Core restart. */
+    void hydrate(@jakarta.enterprise.event.Observes io.quarkus.runtime.StartupEvent event) {
+        try {
+            java.util.List<Node> nodes = io.quarkus.vertx.VertxContextSupport.subscribeAndAwait(
+                    () -> Panache.withSession(() -> Node.<Node>listAll()));
+            nodes.forEach(node -> persistedNodes.put(node.getId(), node));
+            log.info("Restored hardware specs of {} node(s) from the database", nodes.size());
+        } catch (Throwable t) {
+            log.warn("Could not restore node specs at startup; capacity is unknown until Satellites re-register", t);
+        }
+    }
+
     /**
      * 缓存 Satellite 注册时上报的硬件规格
      */
@@ -58,6 +73,17 @@ public class RegistrationNodeSpecsProvider implements NodeSpecsProvider {
             node.setSystemSerial(specs.getSystemSerial());
             node.setSystemModel(specs.getSystemModel());
             return node;
+        }
+
+        Node persisted = persistedNodes.get(satellite.getId());
+        if (persisted != null) {
+            Node copy = new Node(persisted.getId(), persisted.getCpuCores(), persisted.getMemoryGb(),
+                    persisted.getGpuCount(), persisted.getGpuModel());
+            copy.setGpuTopology(persisted.getGpuTopology());
+            copy.setNvlinkBandwidthGbps(persisted.getNvlinkBandwidthGbps());
+            copy.setRackId(persisted.getRackId());
+            copy.setZoneId(persisted.getZoneId());
+            return copy;
         }
 
         // 降级: 如果没有缓存的规格，返回基础信息

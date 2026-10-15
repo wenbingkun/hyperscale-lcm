@@ -29,6 +29,8 @@ public class JobDispatchSweeper {
 
     static final String UNDELIVERED_MESSAGE =
             "Not delivered to the executor (Satellite offline or command stream unavailable); the command was never sent";
+    static final String NO_CAPACITY_MESSAGE =
+            "No node with sufficient free capacity was found in time; the job was never dispatched and nothing ran";
     static final String NO_START_MESSAGE =
             "Dispatch was claimed but no status was reported in time; the result is unknown and needs manual verification";
     static final String NO_RESULT_MESSAGE =
@@ -36,6 +38,25 @@ public class JobDispatchSweeper {
 
     @Inject
     JobDispatcher dispatcher;
+
+    @Inject
+    SchedulingService schedulingService;
+
+    @Inject
+    PartitionedSchedulingService partitionedSchedulingService;
+
+    @ConfigProperty(name = "lcm.scheduling.partitioned.enabled", defaultValue = "false")
+    boolean partitionedSchedulingEnabled;
+
+    @ConfigProperty(name = "lcm.jobs.pending-retry-interval")
+    Duration pendingRetryInterval;
+
+    @ConfigProperty(name = "lcm.jobs.pending-timeout")
+    Duration pendingTimeout;
+
+    /** Last scheduling retry per PENDING job, to keep retries spaced by pending-retry-interval. */
+    private final java.util.concurrent.ConcurrentHashMap<String, LocalDateTime> lastPendingRetry =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     @Inject
     AuditService auditService;
@@ -66,9 +87,55 @@ public class JobDispatchSweeper {
     }
 
     public Uni<Void> sweepOnce(LocalDateTime now) {
-        return failUndelivered(now)
+        return failUnschedulable(now)
+                .chain(() -> retryPending(now))
+                .chain(() -> failUndelivered(now))
                 .chain(() -> redeliver(now))
                 .chain(() -> markUnknown(now));
+    }
+
+    /** PENDING past the deadline never found a node (or its scheduling was lost): nothing was dispatched. */
+    private Uni<Void> failUnschedulable(LocalDateTime now) {
+        LocalDateTime deadline = now.minus(pendingTimeout);
+        return forEach(
+                () -> Job.<Job>list("status = ?1 and createdAt < ?2", JobStatus.PENDING, deadline),
+                job -> Panache.withTransaction(() -> Job.update(
+                        "status = ?1, errorMessage = ?2, exitCode = -1, completedAt = ?3 "
+                                + "where id = ?4 and status = ?5 and createdAt < ?6",
+                        JobStatus.FAILED, NO_CAPACITY_MESSAGE, now, job.getId(), JobStatus.PENDING, deadline))
+                        .chain(updated -> {
+                            if (updated == 0) {
+                                return Uni.createFrom().voidItem();
+                            }
+                            log.warn("Job {} failed: {}", job.getId(), NO_CAPACITY_MESSAGE);
+                            lastPendingRetry.remove(job.getId());
+                            metricsService.recordJobFailed();
+                            announce(job, JobStatus.FAILED);
+                            return auditService.logJobFailed(job.getId(), "SYSTEM", job.getTenantId(),
+                                    NO_CAPACITY_MESSAGE);
+                        }));
+    }
+
+    /**
+     * Re-triggers scheduling for PENDING jobs: capacity may have been freed, a Satellite may have appeared, or the
+     * original attempt may have been lost with a Core restart. Placement itself stays atomic in the DB.
+     */
+    private Uni<Void> retryPending(LocalDateTime now) {
+        lastPendingRetry.values().removeIf(at -> at.isBefore(now.minus(pendingTimeout).minus(pendingTimeout)));
+        return forEach(
+                () -> Job.<Job>list("status = ?1 and createdAt < ?2", JobStatus.PENDING,
+                        now.minus(pendingRetryInterval)),
+                job -> {
+                    LocalDateTime last = lastPendingRetry.get(job.getId());
+                    if (last != null && last.isAfter(now.minus(pendingRetryInterval))) {
+                        return Uni.createFrom().voidItem();
+                    }
+                    lastPendingRetry.put(job.getId(), now);
+                    log.info("Re-triggering scheduling for pending job {}", job.getId());
+                    return (partitionedSchedulingEnabled
+                            ? partitionedSchedulingService.scheduleByZone(job).replaceWithVoid()
+                            : schedulingService.scheduleJob(job));
+                });
     }
 
     private Uni<Void> failUndelivered(LocalDateTime now) {

@@ -50,6 +50,16 @@
 - **Satellite 执行端（批 C，已实现）**：Docker 作业等待容器退出，`COMPLETED` 表示退出码 0，非 0 为 `FAILED` 并带真实退出码；输出为合并的 stdout/stderr，保留尾部 64KiB；超时（`LCM_DOCKER_TIMEOUT`，默认 1h）后请求停止容器，停止成功才报"container stopped"，否则报"state unknown"；容器无论结果都被删除。Docker payload 为镜像名，或 `{"image":"...","cmd":[...]}`。Satellite 按 `command_id` 在**进程内**记账（上限 1024）：重复到达的命令不再执行，已完成的重发其终态；终态发送失败时进入有界待补报队列（上限 256），流重连后重发（尽力而为，丢弃最旧）。命令仍在 Recv 循环中串行执行，长容器会占用命令通道。
 - **仍然成立的缺口**（批 D 及之后）：认领成功后、Satellite 实际收到前断流 → 命令可能丢失，作业在 start-timeout 后变 `UNKNOWN`（保守）；Satellite 无命令确认、无 attempt id；Satellite **重启后**去重账本和待补报队列都会清空，重启后的重复投递仍可能重复执行，未送出的终态丢失（Core 靠超时变 `UNKNOWN`）；Shell/Ansible 仍无超时与输出上限；Core/Satellite 重启后的专门对账未做（目前只靠上述超时）。
 
+### 4.1 调度与容量边界（M3）
+
+- **调度对象**：Satellite 执行容量（CPU/内存/GPU 数量，来自 Satellite 注册上报的规格）。SSH 任务不承诺目标设备的 GPU 分配；资源数值仅约束执行它的 Satellite。
+- **占用**：由作业行推导，没有独立台账——`SCHEDULED`、`RUNNING`、`UNKNOWN` 的作业占用其 `assigned_node_id` 的容量（`UNKNOWN` 命令可能仍在运行，所以占用到 resolve 为止）。完成、失败、取消、resolve 自动释放；Core 重启后占用从数据库恢复。规格也在启动时从 `node` 表恢复。
+- **原子预留**：`PENDING → SCHEDULED` 时在事务里锁定目标 Satellite 行，再校验“节点容量 − 已占用”是否满足作业（CPU、内存、GPU 数量、GPU 型号、NVLink 与带宽）。不满足则作业保持 `PENDING`，不入队、不派发。并发请求因行锁串行，8 核节点同时收到两个 8 核请求只会放行一个。
+- **无可行节点**：作业保持 `PENDING`；sweeper 每 `lcm.jobs.pending-retry-interval`（30s）重新触发调度（容量释放、Satellite 上线、Core 重启丢失的调度都靠它恢复）；超过 `lcm.jobs.pending-timeout`（10m）置 `FAILED`，`errorMessage` 说明从未派发、没有任何命令执行，并写 `JOB_FAILED` 审计。
+- **未支持的条件**：GPU 型号是硬约束（节点型号不一致则不放行）；`nodeSelector` 不是 `POST /api/jobs` 的字段，也不参与调度。Allocation API（`POST /api/v1/allocations`）会进入默认 Docker 执行路径（`hello-world`），因此默认关闭（`lcm.allocations.enabled=false`，返回 501）。
+- **租户**：令牌带 `tenant_id` 声明时，提交以声明为准，请求体里不一致的 `tenantId` 返回 403；非 ADMIN 只能列出/读取本租户作业（其他租户的 id 返回 404）。令牌不带声明时保持旧行为（dev 登录的声明来自请求体，生产身份来源属于 M4）。
+- **已知限制**：分区调度（`lcm.scheduling.partitioned.enabled`，默认关）求解时不扣减占用，但落库时仍会拒绝放不下的放置；单 Core 假设下行锁已足够，多 Core 同样成立（锁在数据库）。
+
 ## 5. 幂等性分类（后续重试策略的前提）
 
 | 执行方式 | 分类 | 结果不明时 |

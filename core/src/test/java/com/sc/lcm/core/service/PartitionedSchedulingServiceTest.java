@@ -84,9 +84,9 @@ class PartitionedSchedulingServiceTest {
         assertEquals(zoneBSatellite.getId(), persistedJob.getAssignedNodeId());
         assertNotNull(persistedJob.getScheduledAt());
 
-        Mockito.verify(nodeSpecsProvider).getNodeSpecs(
+        Mockito.verify(nodeSpecsProvider, Mockito.atLeastOnce()).getNodeSpecs(
                 Mockito.argThat(satellite -> satellite != null && zoneASatellite.getId().equals(satellite.getId())));
-        Mockito.verify(nodeSpecsProvider).getNodeSpecs(
+        Mockito.verify(nodeSpecsProvider, Mockito.atLeastOnce()).getNodeSpecs(
                 Mockito.argThat(satellite -> satellite != null && zoneBSatellite.getId().equals(satellite.getId())));
         Mockito.verify(nodeSpecsProvider, Mockito.never()).getNodeSpecs(
                 Mockito.argThat(satellite -> satellite != null && ignoredClusterSatellite.getId().equals(satellite.getId())));
@@ -183,7 +183,7 @@ class PartitionedSchedulingServiceTest {
     }
 
     private Job persistedJob(String id, String tenantId, String clusterId) {
-        Job job = new Job(id, 8, 64, 1, "A100");
+        Job job = new Job(id, 8, 64, 1, null);
         job.setName("Zone Scheduling Test");
         job.setTenantId(tenantId);
         job.setClusterId(clusterId);

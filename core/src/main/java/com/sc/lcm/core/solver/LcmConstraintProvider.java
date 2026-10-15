@@ -25,6 +25,7 @@ public class LcmConstraintProvider implements ConstraintProvider {
                 // 硬约束 - GPU 拓扑 (P2-3)
                 nvlinkRequired(factory),
                 nvlinkBandwidthRequired(factory),
+                gpuModelMatch(factory),
 
                 // 软约束 - 优化
                 preferHigherNvlinkBandwidth(factory)
@@ -69,6 +70,18 @@ public class LcmConstraintProvider implements ConstraintProvider {
                 .filter(job -> !job.getAssignedNode().hasNvlink())
                 .penalize(HardSoftScore.ONE_HARD)
                 .asConstraint("NVLink Required");
+    }
+
+    /**
+     * 硬约束: 如果作业指定 GPU 型号，节点型号必须一致（忽略大小写）
+     */
+    public Constraint gpuModelMatch(ConstraintFactory factory) {
+        return factory.forEach(Job.class)
+                .filter(job -> job.getRequiredGpuModel() != null && !job.getRequiredGpuModel().isBlank())
+                .filter(job -> job.getAssignedNode() != null)
+                .filter(job -> !job.getRequiredGpuModel().equalsIgnoreCase(job.getAssignedNode().getGpuModel()))
+                .penalize(HardSoftScore.ONE_HARD)
+                .asConstraint("GPU Model Match");
     }
 
     /**
