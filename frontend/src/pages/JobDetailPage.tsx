@@ -12,6 +12,7 @@ const statusConfig: Record<string, { color: string; icon: React.ReactNode; label
     COMPLETED: { color: 'text-green-400', icon: <CheckCircle size={20} />, label: 'Completed' },
     FAILED: { color: 'text-red-400', icon: <XCircle size={20} />, label: 'Failed' },
     CANCELLED: { color: 'text-gray-400', icon: <AlertCircle size={20} />, label: 'Cancelled' },
+    UNKNOWN: { color: 'text-orange-400', icon: <AlertCircle size={20} />, label: 'Result unknown' },
 };
 
 export const JobDetailPage: React.FC = () => {
@@ -88,6 +89,14 @@ export const JobDetailPage: React.FC = () => {
                             {status.icon}
                             <span className="text-xl font-semibold">{status.label}</span>
                         </div>
+
+                        {job.status === 'UNKNOWN' && (
+                            <p data-testid="unknown-notice" className="text-orange-300 text-sm">
+                                The command was delivered but no result arrived in time. It may have run; verify on the
+                                target and record the outcome via POST /api/jobs/{job.id}/resolve.
+                                {job.errorMessage ? ` (${job.errorMessage})` : ''}
+                            </p>
+                        )}
 
                         <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
                             <div>

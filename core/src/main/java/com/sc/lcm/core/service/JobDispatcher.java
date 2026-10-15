@@ -35,7 +35,7 @@ public class JobDispatcher {
     JobExecutionService jobExecutionService;
 
     @Inject
-    JobStateReader jobStateReader;
+    JobDispatchStore dispatchStore;
 
     /**
      * Consumes scheduled jobs from Kafka and dispatches them to Satellites via
@@ -69,22 +69,33 @@ public class JobDispatcher {
         return send(job, nodeId);
     }
 
-    /** Only jobs still SCHEDULED in the database are sent; a job cancelled while its message was in flight is dropped. */
+    /**
+     * Sends only when the node has a live command stream and this caller wins the dispatch claim (the job is still
+     * SCHEDULED and was not dispatched yet). Without a stream the job stays undelivered for the sweeper to retry.
+     */
     private Uni<Void> send(Job job, String nodeId) {
-        return jobStateReader.isScheduled(job.getId()).invoke(
-                scheduled -> {
-                    if (scheduled) {
-                        doSend(job, nodeId);
-                    } else {
-                        LOG.warnf("Not dispatching job %s: it is no longer SCHEDULED", job.getId());
+        if (!streamRegistry.isConnected(nodeId)) {
+            LOG.warnf("Satellite %s has no command stream; job %s stays SCHEDULED until it is delivered or times out",
+                    nodeId, job.getId());
+            return Uni.createFrom().voidItem();
+        }
+        return dispatchStore.claim(job.getId())
+                .chain(claimed -> {
+                    if (!claimed) {
+                        LOG.warnf("Not dispatching job %s: it is no longer SCHEDULED or was already dispatched",
+                                job.getId());
+                        return Uni.createFrom().voidItem();
                     }
+                    if (doSend(job, nodeId)) {
+                        return Uni.createFrom().voidItem();
+                    }
+                    LOG.warnf("Command for job %s could not be emitted; releasing the claim", job.getId());
+                    return dispatchStore.release(job.getId());
                 })
-                .onFailure().invoke(e -> LOG.errorf(e,
-                        "Could not confirm state of job %s; not dispatching", job.getId()))
-                .replaceWithVoid();
+                .onFailure().invoke(e -> LOG.errorf(e, "Dispatch of job %s failed", job.getId()));
     }
 
-    private void doSend(Job job, String nodeId) {
+    private boolean doSend(Job job, String nodeId) {
         ExecutionCommand executionCommand = resolveExecutionCommand(job);
 
         // Extract Context
@@ -92,7 +103,7 @@ public class JobDispatcher {
         openTelemetry.getPropagators().getTextMapPropagator()
                 .inject(Context.current(), traceContext, Map::put);
 
-        streamRegistry.sendCommand(
+        return streamRegistry.sendCommand(
                 nodeId,
                 job.getId(),
                 executionCommand.commandType(),

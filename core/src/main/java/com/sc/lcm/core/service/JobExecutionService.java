@@ -376,6 +376,9 @@ public class JobExecutionService {
         if (current == JobStatus.COMPLETED || current == JobStatus.FAILED || current == JobStatus.CANCELLED) {
             return CallbackDecision.IGNORE_FINAL;
         }
+        if (current == JobStatus.UNKNOWN) {
+            return CallbackDecision.APPLY; // a late real report beats the sweeper's guess
+        }
         if (current == JobStatus.RUNNING && reported == JobStatus.RUNNING) {
             return CallbackDecision.IGNORE_INVALID;
         }

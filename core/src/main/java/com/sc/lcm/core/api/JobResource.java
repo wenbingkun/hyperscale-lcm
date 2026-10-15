@@ -369,6 +369,61 @@ public class JobResource {
         }
 
         /**
+         * 人工核对"结果未知"的作业: 操作者确认远端实际结果后记录结论。仅 UNKNOWN 可核对；
+         * 需要重新执行时请重新提交新作业（不自动重发）。
+         */
+        @POST
+        @Path("/{id}/resolve")
+        @RolesAllowed({ "ADMIN", "OPERATOR" })
+        public Uni<Response> resolveJob(@PathParam("id") String id, ResolveRequest request) {
+                JobStatus outcome;
+                try {
+                        outcome = JobStatus.valueOf(request == null || request.outcome() == null ? ""
+                                        : request.outcome().toUpperCase());
+                } catch (IllegalArgumentException e) {
+                        outcome = null;
+                }
+                if (outcome != JobStatus.COMPLETED && outcome != JobStatus.FAILED) {
+                        return badRequest("outcome must be COMPLETED or FAILED");
+                }
+                JobStatus resolved = outcome;
+                String note = request.note() == null ? "" : request.note();
+                String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
+                String errorMessage = resolved == JobStatus.FAILED ? "Resolved manually by " + actor + ": " + note : null;
+                String details;
+                try {
+                        details = OBJECT_MAPPER.writeValueAsString(
+                                        Map.of("action", "resolved", "outcome", resolved.name(), "note", note));
+                } catch (JsonProcessingException e) {
+                        throw new IllegalStateException("Failed to serialize resolve audit details", e);
+                }
+                return Panache.withTransaction(() -> Job.update(
+                                "status = ?1, errorMessage = ?2, completedAt = ?3 where id = ?4 and status = ?5",
+                                resolved, errorMessage, java.time.LocalDateTime.now(), id, JobStatus.UNKNOWN)
+                                .flatMap(updated -> {
+                                        if (updated > 0) {
+                                                return auditService.logEvent(AuditEventType.JOB_RESOLVED, "JOB", id,
+                                                                actor, null, details)
+                                                                .replaceWith(Response.ok(new JobResponse(id,
+                                                                                resolved.name(), "Job resolved"))
+                                                                                .build());
+                                        }
+                                        return Job.<Job>findByIdReactive(id).map(job -> job == null
+                                                        ? Response.status(Response.Status.NOT_FOUND)
+                                                                        .entity(new ErrorResponse("Job not found: " + id))
+                                                                        .build()
+                                                        : Response.status(Response.Status.CONFLICT)
+                                                                        .entity(new ErrorResponse(
+                                                                                        "Only UNKNOWN jobs can be resolved (status: "
+                                                                                                        + job.getStatus() + ")"))
+                                                                        .build());
+                                }));
+        }
+
+        public record ResolveRequest(String outcome, String note) {
+        }
+
+        /**
          * 获取作业状态
          */
         @GET

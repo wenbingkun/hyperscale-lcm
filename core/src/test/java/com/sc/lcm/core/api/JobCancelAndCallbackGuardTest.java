@@ -199,4 +199,32 @@ class JobCancelAndCallbackGuardTest {
         }
         org.junit.jupiter.api.Assertions.fail("Expected " + expected + " blocked job writers");
     }
+
+    @Test
+    void unknownJobsCanBeResolvedByAnOperatorButNotCancelled() throws Throwable {
+        String id = persistJob(JobStatus.UNKNOWN);
+        assertEquals(409, cancel(id));
+
+        given().header("Authorization", "Bearer " + token).contentType(ContentType.JSON)
+                .body(java.util.Map.of("outcome", "MAYBE")).post("/api/jobs/" + id + "/resolve")
+                .then().statusCode(400);
+        given().header("Authorization", "Bearer " + token).contentType(ContentType.JSON)
+                .body(java.util.Map.of("outcome", "FAILED", "note", "checked on host: not executed"))
+                .post("/api/jobs/" + id + "/resolve").then().statusCode(200);
+
+        Job job = load(id);
+        assertEquals(JobStatus.FAILED, job.getStatus());
+        assertTrue(job.getErrorMessage().contains("not executed"));
+        List<AuditLog> audit = VertxContextSupport.subscribeAndAwait(
+                () -> Panache.withSession(() -> AuditLog.findByResourceId(id)));
+        assertTrue(audit.stream().anyMatch(a -> a.getEventType() == AuditEventType.JOB_RESOLVED
+                && "admin".equals(a.getActor()) && a.getDetails().contains("checked on host")));
+
+        given().header("Authorization", "Bearer " + token).contentType(ContentType.JSON)
+                .body(java.util.Map.of("outcome", "COMPLETED")).post("/api/jobs/" + id + "/resolve")
+                .then().statusCode(409);
+        given().header("Authorization", "Bearer " + token).contentType(ContentType.JSON)
+                .body(java.util.Map.of("outcome", "COMPLETED")).post("/api/jobs/no-such/resolve")
+                .then().statusCode(404);
+    }
 }
