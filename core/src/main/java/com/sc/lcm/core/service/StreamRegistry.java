@@ -30,7 +30,10 @@ public class StreamRegistry {
         return emitters.containsKey(satelliteId);
     }
 
-    /** @return true when the command was handed to a live command stream; false otherwise (nothing was sent). */
+    /**
+     * @return false only when no emitter was found and nothing was attempted.
+     * An exception during emit is ambiguous: callers must retain the claim instead of retrying.
+     */
     public boolean sendCommand(String satelliteId, String commandId, String commandType, String payload,
             Map<String, String> traceContext) {
         MultiEmitter<? super StreamResponse> emitter = emitters.get(satelliteId);
@@ -48,7 +51,7 @@ public class StreamRegistry {
                 emitter.emit(builder.build());
             } catch (RuntimeException e) {
                 LOG.errorf(e, "Failed to emit command %s to %s", commandId, satelliteId);
-                return false;
+                throw e;
             }
             LOG.infof("🚀 Command sent to %s: %s", satelliteId, commandType);
             return true;

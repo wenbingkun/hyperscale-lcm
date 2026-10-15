@@ -92,7 +92,7 @@ export const JobDetailPage: React.FC = () => {
 
                         {job.status === 'UNKNOWN' && (
                             <p data-testid="unknown-notice" className="text-orange-300 text-sm">
-                                The command was delivered but no result arrived in time. It may have run; verify on the
+                                Dispatch or execution could not be confirmed. The command may have run; verify on the
                                 target and record the outcome via POST /api/jobs/{job.id}/resolve.
                                 {job.errorMessage ? ` (${job.errorMessage})` : ''}
                             </p>

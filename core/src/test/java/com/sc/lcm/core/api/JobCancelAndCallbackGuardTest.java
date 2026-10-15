@@ -240,6 +240,16 @@ class JobCancelAndCallbackGuardTest {
         List<AuditLog> audit = VertxContextSupport.subscribeAndAwait(
                 () -> Panache.withSession(() -> AuditLog.findByResourceId(id)));
         assertTrue(audit.stream().anyMatch(a -> a.getDetails() != null
-                && a.getDetails().contains("late_result_ignored") && a.getDetails().contains("COMPLETED")));
+                && a.getDetails().contains("late_result_ignored") && a.getDetails().contains("COMPLETED")
+                && a.getEventType() == AuditEventType.JOB_LATE_RESULT));
+    }
+
+    @Test
+    void scheduledJobCannotBeCancelledOnceDispatchIsClaimed() throws Throwable {
+        String id = persistJob(JobStatus.SCHEDULED);
+        VertxContextSupport.subscribeAndAwait(() -> Panache.withTransaction(() -> Job.update(
+                "dispatchedAt = ?1, dispatchAttempt = 1 where id = ?2", LocalDateTime.now(), id)));
+        assertEquals(409, cancel(id));
+        assertEquals(JobStatus.SCHEDULED, load(id).getStatus());
     }
 }

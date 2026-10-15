@@ -331,7 +331,7 @@ public class JobResource {
         }
 
         /**
-         * 取消作业 (仅 ADMIN 和 OPERATOR)。首版只取消尚未开始执行的作业（PENDING / SCHEDULED）：
+         * 取消作业 (仅 ADMIN 和 OPERATOR)。只取消尚未被派发认领的作业（PENDING / SCHEDULED）：
          * 运行中取消需要"远端已停止"的证据，目前没有，故返回 409（见 documentation/JOB_LIFECYCLE_CONTRACT.md）。
          */
         @DELETE
@@ -339,9 +339,9 @@ public class JobResource {
         @RolesAllowed({ "ADMIN", "OPERATOR" })
         public Uni<Response> cancelJob(@PathParam("id") String id) {
                 String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
-                // Conditional update: a concurrent RUNNING callback cannot be overwritten by the cancel.
+                // Compete atomically with callbacks and dispatch claims; success means no emit can follow.
                 return Panache.withTransaction(() -> Job.update(
-                                "status = ?1 where id = ?2 and status in (?3, ?4)",
+                                "status = ?1 where id = ?2 and status in (?3, ?4) and dispatchedAt is null",
                                 JobStatus.CANCELLED, id, JobStatus.PENDING, JobStatus.SCHEDULED)
                                 .flatMap(updated -> {
                                         if (updated > 0) {
@@ -358,9 +358,15 @@ public class JobResource {
                                                                                         "Job not found: " + id))
                                                                         .build();
                                                 }
-                                                String reason = job.getStatus() == JobStatus.RUNNING
-                                                                ? "Cancelling a running job is not supported yet"
-                                                                : "Cannot cancel job in status: " + job.getStatus();
+                                                String reason;
+                                                if (job.getStatus() == JobStatus.RUNNING) {
+                                                        reason = "Cancelling a running job is not supported yet";
+                                                } else if (job.getStatus() == JobStatus.SCHEDULED
+                                                                && job.getDispatchedAt() != null) {
+                                                        reason = "Dispatch already claimed; cancellation cannot be guaranteed";
+                                                } else {
+                                                        reason = "Cannot cancel job in status: " + job.getStatus();
+                                                }
                                                 return Response.status(Response.Status.CONFLICT)
                                                                 .entity(new ErrorResponse(reason))
                                                                 .build();

@@ -30,7 +30,7 @@ public class JobDispatchSweeper {
     static final String UNDELIVERED_MESSAGE =
             "Not delivered to the executor (Satellite offline or command stream unavailable); the command was never sent";
     static final String NO_START_MESSAGE =
-            "Command was delivered but no status was reported in time; the result is unknown and needs manual verification";
+            "Dispatch was claimed but no status was reported in time; the result is unknown and needs manual verification";
     static final String NO_RESULT_MESSAGE =
             "Job has been running longer than the allowed time without a result; the result is unknown and needs manual verification";
 
@@ -77,8 +77,9 @@ public class JobDispatchSweeper {
                         JobStatus.SCHEDULED, now.minus(dispatchTimeout)),
                 job -> Panache.withTransaction(() -> Job.update(
                         "status = ?1, errorMessage = ?2, exitCode = -1, completedAt = ?3 "
-                                + "where id = ?4 and status = ?5 and dispatchedAt is null",
-                        JobStatus.FAILED, UNDELIVERED_MESSAGE, now, job.getId(), JobStatus.SCHEDULED))
+                                + "where id = ?4 and status = ?5 and dispatchedAt is null and scheduledAt < ?6",
+                        JobStatus.FAILED, UNDELIVERED_MESSAGE, now, job.getId(), JobStatus.SCHEDULED,
+                        now.minus(dispatchTimeout)))
                         .chain(updated -> {
                             if (updated == 0) {
                                 return Uni.createFrom().voidItem();
@@ -102,17 +103,18 @@ public class JobDispatchSweeper {
         Uni<Void> notStarted = forEach(
                 () -> Job.<Job>list("status = ?1 and dispatchedAt is not null and dispatchedAt < ?2",
                         JobStatus.SCHEDULED, now.minus(startTimeout)),
-                job -> toUnknown(job, JobStatus.SCHEDULED, NO_START_MESSAGE));
+                job -> toUnknown(job, JobStatus.SCHEDULED, NO_START_MESSAGE, now.minus(startTimeout)));
         return notStarted.chain(() -> forEach(
                 () -> Job.<Job>list("status = ?1 and coalesce(dispatchedAt, scheduledAt) < ?2",
                         JobStatus.RUNNING, now.minus(runTimeout)),
-                job -> toUnknown(job, JobStatus.RUNNING, NO_RESULT_MESSAGE)));
+                job -> toUnknown(job, JobStatus.RUNNING, NO_RESULT_MESSAGE, now.minus(runTimeout))));
     }
 
-    private Uni<Void> toUnknown(Job job, JobStatus from, String message) {
+    private Uni<Void> toUnknown(Job job, JobStatus from, String message, LocalDateTime deadline) {
+        String clock = from == JobStatus.SCHEDULED ? "dispatchedAt" : "coalesce(dispatchedAt, scheduledAt)";
         return Panache.withTransaction(() -> Job.update(
-                "status = ?1, errorMessage = ?2 where id = ?3 and status = ?4",
-                JobStatus.UNKNOWN, message, job.getId(), from))
+                "status = ?1, errorMessage = ?2 where id = ?3 and status = ?4 and " + clock + " < ?5",
+                JobStatus.UNKNOWN, message, job.getId(), from, deadline))
                 .chain(updated -> {
                     if (updated == 0) {
                         return Uni.createFrom().voidItem();

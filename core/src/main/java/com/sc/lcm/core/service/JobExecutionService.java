@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sc.lcm.core.api.DashboardWebSocket;
 import com.sc.lcm.core.domain.Job;
+import com.sc.lcm.core.domain.AuditLog.AuditEventType;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.domain.JobExecutionMessage;
 import com.sc.lcm.core.domain.JobStatusCallback;
@@ -391,8 +392,9 @@ public class JobExecutionService {
         String details = String.format(
                 "{\"action\":\"%s\",\"currentStatus\":\"%s\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
                 action, job.getStatus(), reported, callback.exitCode());
-        return auditService.logEvent(com.sc.lcm.core.domain.AuditLog.AuditEventType.JOB_CANCELLED, "JOB", job.getId(),
-                "SYSTEM", job.getTenantId(), details);
+        AuditEventType eventType = job.getStatus() == JobStatus.CANCELLED
+                ? AuditEventType.JOB_CANCELLED : AuditEventType.JOB_LATE_RESULT;
+        return auditService.logEvent(eventType, "JOB", job.getId(), "SYSTEM", job.getTenantId(), details);
     }
 
     private static boolean isTerminal(JobStatus status) {

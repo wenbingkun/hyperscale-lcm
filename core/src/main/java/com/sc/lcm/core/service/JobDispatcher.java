@@ -51,28 +51,10 @@ public class JobDispatcher {
 
         LOG.infof("📨 [Kafka -> Dispatcher] Processing Job %s for Node %s", job.getId(), nodeId);
 
-        if (job.getExecutionType() == ExecutionType.SSH && job.getTargetDeviceId() != null) {
-            // Complete message processing only after verification and any refusal are recorded.
-            return sshTargetVerifier.findMismatch(job)
-                    .chain(mismatch -> {
-                        if (mismatch == null) {
-                            return send(job, nodeId);
-                        }
-                        LOG.warnf("Refusing to dispatch SSH job %s: %s", job.getId(), mismatch);
-                        return jobExecutionService.processJobStatusCallback(new JobStatusCallback(
-                                job.getId(), nodeId, "FAILED", -1, mismatch, null, null, 0,
-                                LocalDateTime.now(), null));
-                    })
-                    .onFailure().invoke(e -> LOG.errorf(e,
-                            "Target verification or refusal recording failed for job %s; not dispatching", job.getId()));
-        }
         return send(job, nodeId);
     }
 
-    /**
-     * Sends only when the node has a live command stream and this caller wins the dispatch claim (the job is still
-     * SCHEDULED and was not dispatched yet). Without a stream the job stays undelivered for the sweeper to retry.
-     */
+    /** Only the claim owner may verify the target or emit; duplicates have no lifecycle side effects. */
     private Uni<Void> send(Job job, String nodeId) {
         if (!streamRegistry.isConnected(nodeId)) {
             LOG.warnf("Satellite %s has no command stream; job %s stays SCHEDULED until it is delivered or times out",
@@ -86,13 +68,33 @@ public class JobDispatcher {
                                 job.getId());
                         return Uni.createFrom().voidItem();
                     }
-                    if (doSend(job, nodeId)) {
-                        return Uni.createFrom().voidItem();
-                    }
-                    LOG.warnf("Command for job %s could not be emitted; releasing the claim", job.getId());
-                    return dispatchStore.release(job.getId());
+                    return Uni.createFrom().deferred(() ->
+                            job.getExecutionType() == ExecutionType.SSH && job.getTargetDeviceId() != null
+                                    ? sshTargetVerifier.findMismatch(job)
+                                    : Uni.createFrom().<String>nullItem())
+                            // No emit has been attempted yet; this failure is safe to release.
+                            .onFailure().call(error -> dispatchStore.release(job.getId()))
+                            .chain(mismatch -> {
+                                if (mismatch != null) {
+                                    LOG.warnf("Refusing to dispatch SSH job %s: %s", job.getId(), mismatch);
+                                    return jobExecutionService.processJobStatusCallback(new JobStatusCallback(
+                                            job.getId(), nodeId, "FAILED", -1, mismatch, null, null, 0,
+                                            LocalDateTime.now(), null));
+                                }
+                                try {
+                                    if (doSend(job, nodeId)) {
+                                        return Uni.createFrom().voidItem();
+                                    }
+                                } catch (RuntimeException error) {
+                                    LOG.errorf(error, "Emission of job %s is uncertain; retaining its claim", job.getId());
+                                    return dispatchStore.recordUncertainSend(job.getId());
+                                }
+                                // false means there was no emitter, so the command was certainly not handed off.
+                                LOG.warnf("No stream for job %s; releasing its claim", job.getId());
+                                return dispatchStore.release(job.getId());
+                            });
                 })
-                .onFailure().invoke(e -> LOG.errorf(e, "Dispatch of job %s failed", job.getId()));
+                .onFailure().invoke(error -> LOG.errorf(error, "Dispatch of job %s failed", job.getId()));
     }
 
     private boolean doSend(Job job, String nodeId) {

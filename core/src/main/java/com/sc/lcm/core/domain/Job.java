@@ -94,7 +94,7 @@ public class Job extends PanacheEntityBase {
     private LocalDateTime scheduledAt;
     private LocalDateTime completedAt;
 
-    // 派发认领: dispatchedAt 非空表示命令已交给执行端的命令流（送达判定见 JOB_LIFECYCLE_CONTRACT.md）
+    // 派发认领: dispatchedAt 非空表示已持久认领，不能据此确认命令是否送达（见 JOB_LIFECYCLE_CONTRACT.md）
     private int dispatchAttempt = 0;
     private LocalDateTime dispatchedAt;
 

@@ -89,6 +89,7 @@ public class AuditLog extends PanacheEntityBase {
         JOB_CANCELLED,
         JOB_UNKNOWN,
         JOB_RESOLVED,
+        JOB_LATE_RESULT,
 
         // 节点相关
         NODE_REGISTERED,
