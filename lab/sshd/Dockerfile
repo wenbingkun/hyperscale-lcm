@@ -6,4 +6,5 @@ RUN apk add --no-cache openssh-server procps \
     && echo "ops:$(head -c 24 /dev/urandom | base64)" | chpasswd \
     && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 EXPOSE 22
-CMD ["/usr/sbin/sshd", "-D", "-e", "-h", "/etc/ssh/lab/ssh_host_ed25519_key", "-o", "AuthorizedKeysFile=/etc/ssh/lab/authorized_keys"]
+# Copy the public authorization file to an ops-owned location; bind-mount ownership may use any host UID.
+CMD ["/bin/sh", "-c", "mkdir -p /home/ops/.ssh && cp /etc/ssh/lab/authorized_keys /home/ops/.ssh/authorized_keys && chown -R ops:ops /home/ops/.ssh && chmod 700 /home/ops/.ssh && chmod 600 /home/ops/.ssh/authorized_keys && exec /usr/sbin/sshd -D -e -h /etc/ssh/lab/ssh_host_ed25519_key"]

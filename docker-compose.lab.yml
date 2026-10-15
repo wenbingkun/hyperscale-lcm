@@ -1,7 +1,7 @@
 # Single-host lab overlay for docker-compose.prod.yml: dev login, a fixed-address SSH target and a
 # per-Satellite certificate. NOT for production. See documentation/runbooks/lab-quickstart.md.
 #   scripts/lab_prepare.sh
-#   docker compose -f docker-compose.prod.yml -f docker-compose.lab.yml up -d
+#   docker compose -p lcm-lab -f docker-compose.prod.yml -f docker-compose.lab.yml up -d
 #   scripts/lab_bootstrap.sh
 networks:
   default:

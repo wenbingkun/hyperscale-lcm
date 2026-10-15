@@ -6,7 +6,7 @@
 
 - Docker Engine + Compose v2 插件（`docker compose`），`jq`、`curl`、`openssl`、`ssh-keygen`。
 - 仓库根目录执行；未发布的 `v0.1.1` 需先本地构建（见 [deployment.md §3.1](deployment.md)）。
-- 主机端口 5432/6379/9092/3000/9090/9093/16686/4317/5173/8080/8443 空闲。`docker-compose.prod.yml` 把依赖服务发布在宿主端口，并写死了容器名；若本机有其他 LCM 开发环境（例如自己的 Redis 占着 6379），先停掉它们。
+- 主机端口 5432/6379/9092/3000/9090/9093/16686/4317/5173/8080/8443 空闲。`docker-compose.prod.yml` 把依赖服务发布在宿主端口，并写死了容器名；若本机有其他 LCM 开发环境（例如自己的 Redis 占着 6379），改用独立 Docker 主机/daemon，或先单独确认停机安排；不要让启动命令重建、停止已有服务。
 - **必须**用独立项目名 `-p lcm-lab`。不加 `-p` 时 compose 会按目录名把同目录下已有的开发容器（同名服务）当作自己的并重建它们。
 
 ## 步骤
@@ -15,12 +15,14 @@
 export DOCKER_NAMESPACE=local DOCKER_TAG=v0.1.1
 export DB_PASSWORD='<任意>' GRAFANA_PASSWORD='<任意>' GRPC_TRUSTSTORE_PASSWORD=changeit
 
-DOCKER_NAMESPACE=local scripts/build.sh v0.1.1      # 本地构建三个应用镜像
-scripts/lab_prepare.sh                              # 证书、实验 SSH 密钥、sshd 主机密钥、严格 known_hosts → lab/data（已 gitignore）
+scripts/lab_prepare.sh                              # 先生成 TLS/JWT 密钥及实验数据（lab/data 已 gitignore）
+DOCKER_NAMESPACE=local scripts/build.sh v0.1.1      # 再构建镜像，使 Core 包含开发登录所需 JWT 签名密钥
 docker compose -p lcm-lab -f docker-compose.prod.yml -f docker-compose.lab.yml up -d --build
 curl -sf http://127.0.0.1:8080/health/ready
 scripts/lab_bootstrap.sh                            # 经 REST 登记并批准 Satellite 自身地址；SSH 目标留为 PENDING
 ```
+
+`lab_bootstrap.sh` 可以重复运行：复用已登记设备，只批准 PENDING 设备，不恢复被拒绝的设备。
 
 `lab_bootstrap.sh` 之后约一分钟内 Satellite 完成注册（`docker logs lcm-satellite` 出现 `Heartbeat sent`）。固定地址：Satellite `172.30.77.20`，SSH 目标 `172.30.77.30`。
 
