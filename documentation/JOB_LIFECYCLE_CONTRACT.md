@@ -47,7 +47,8 @@
   2. **已认领无进展**：`SCHEDULED` 且 `dispatched_at` 超过 `lcm.jobs.start-timeout`（默认 5m），或 `RUNNING` 且 `coalesce(dispatched_at, scheduled_at)` 超过 `lcm.jobs.run-timeout`（默认 2h） → `UNKNOWN`。**不自动重发**。
 - 扫描先找候选，真正更新时再次检查状态、派发标记和截止时间；并发刷新、释放或回调后不再符合截止条件的作业不会被旧扫描误判。
 - **人工核对**：`POST /api/jobs/{id}/resolve`（ADMIN/OPERATOR），body `{"outcome":"COMPLETED|FAILED","note":"..."}`，仅 `UNKNOWN` 有效，写 `JOB_RESOLVED` 审计（操作人、结论、备注）。重新执行 = 以新作业重新提交。`UNKNOWN` 不可取消。
-- **仍然成立的缺口**（批 C/D）：认领成功后、Satellite 实际收到前断流 → 命令可能丢失，作业在 start-timeout 后变 `UNKNOWN`（保守）；Satellite 无命令确认、无按 `command_id` 去重（Core 侧单次认领不覆盖 Satellite 侧重复到达）、状态回调失败不重试，断流期间的终态回调会丢失；Docker 执行器 `ContainerStart` 即视为完成；Core/Satellite 重启后的专门对账未做（目前只靠上述超时）。
+- **Satellite 执行端（批 C，已实现）**：Docker 作业等待容器退出，`COMPLETED` 表示退出码 0，非 0 为 `FAILED` 并带真实退出码；输出为合并的 stdout/stderr，保留尾部 64KiB；超时（`LCM_DOCKER_TIMEOUT`，默认 1h）后请求停止容器，停止成功才报"container stopped"，否则报"state unknown"；容器无论结果都被删除。Docker payload 为镜像名，或 `{"image":"...","cmd":[...]}`。Satellite 按 `command_id` 在**进程内**记账（上限 1024）：重复到达的命令不再执行，已完成的重发其终态；终态发送失败时进入有界待补报队列（上限 256），流重连后重发（尽力而为，丢弃最旧）。命令仍在 Recv 循环中串行执行，长容器会占用命令通道。
+- **仍然成立的缺口**（批 D 及之后）：认领成功后、Satellite 实际收到前断流 → 命令可能丢失，作业在 start-timeout 后变 `UNKNOWN`（保守）；Satellite 无命令确认、无 attempt id；Satellite **重启后**去重账本和待补报队列都会清空，重启后的重复投递仍可能重复执行，未送出的终态丢失（Core 靠超时变 `UNKNOWN`）；Shell/Ansible 仍无超时与输出上限；Core/Satellite 重启后的专门对账未做（目前只靠上述超时）。
 
 ## 5. 幂等性分类（后续重试策略的前提）
 
@@ -58,7 +59,7 @@
 
 ## 6. 明确不保证
 
-- 不声称 exactly-once。Core 对同一作业最多持有一个未释放认领；确定未尝试发送时可以释放再认领，所以 `dispatch_attempt` 可能大于 1。发送后或发送结果不确定时不自动重发；Satellite 去重与回调补报（批 C）落地前，不保证“至多一次执行”。
+- 不声称 exactly-once。Core 对同一作业最多持有一个未释放认领；确定未尝试发送时可以释放再认领，所以 `dispatch_attempt` 可能大于 1。发送后或发送结果不确定时不自动重发；Satellite 端的去重只在进程内，Satellite 重启后不保证“至多一次执行”。
 - 超时（Satellite 端 `LCM_SSH_TIMEOUT`）只表示本端终止了 ssh 客户端，不表示远端命令已停止。
 - 状态变化的通知（WebSocket）、指标、审计是尽力而为，不参与状态正确性。
 

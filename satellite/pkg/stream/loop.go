@@ -20,6 +20,10 @@ type Config struct {
 	SatelliteID string
 	// RetryInterval is the wait between reconnect attempts; defaults to 5s.
 	RetryInterval time.Duration
+	// OnConnected, when set, runs after each successful (re)connect and
+	// handshake, before commands are received. It runs on the loop goroutine,
+	// so it may use the stream without extra locking.
+	OnConnected func(stream pb.LcmService_ConnectStreamClient)
 	// Logf defaults to log.Printf.
 	Logf func(format string, v ...any)
 }
@@ -72,6 +76,9 @@ func RunCommandStreamLoop(ctx context.Context, client pb.LcmServiceClient, cfg C
 		}
 
 		logf("✅ Command Stream Connected")
+		if cfg.OnConnected != nil {
+			cfg.OnConnected(stream)
+		}
 
 		// Listen for commands
 		for {

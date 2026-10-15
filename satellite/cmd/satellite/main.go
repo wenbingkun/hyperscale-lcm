@@ -121,11 +121,10 @@ func main() {
 		defer bgCancel()
 
 		// Start Stream Connection in background (reconnection loop lives in pkg/stream)
+		cmdAgent := newAgent(satelliteId, dockerExec, dockerTimeout())
 		go stream.RunCommandStreamLoop(bgCtx, client,
-			stream.Config{SatelliteID: satelliteId},
-			func(resp *pb.StreamResponse, s pb.LcmService_ConnectStreamClient) {
-				handleCommand(resp, satelliteId, dockerExec, s)
-			})
+			stream.Config{SatelliteID: satelliteId, OnConnected: cmdAgent.replayPending},
+			cmdAgent.handleCommand)
 
 		// Start Discovery Manager (DHCP listener + ARP scanner)
 		// Off by default: it listens for DHCP broadcasts and ARP-scans the local network.
@@ -239,4 +238,15 @@ func usePlaintextGRPC() bool {
 func envEnabled(name string) bool {
 	v, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(name)))
 	return err == nil && v
+}
+
+// dockerTimeout bounds a single Docker job run (LCM_DOCKER_TIMEOUT, default 1h).
+func dockerTimeout() time.Duration {
+	if v := os.Getenv("LCM_DOCKER_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+		log.Printf("⚠️ Invalid LCM_DOCKER_TIMEOUT %q; using 1h", v)
+	}
+	return time.Hour
 }
