@@ -123,6 +123,8 @@ public class SchedulingService {
         copy.setNodeSelector(original.getNodeSelector());
         copy.setExecutionType(original.getExecutionType());
         copy.setExecutionPayload(original.getExecutionPayload());
+        copy.setTargetDeviceId(original.getTargetDeviceId());
+        copy.setTargetHost(original.getTargetHost());
         return copy;
     }
 

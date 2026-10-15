@@ -44,6 +44,9 @@ class SchedulingServiceTest {
 
         Job job = new Job("job-west", 4, 8, 1, "A100");
         job.setClusterId("west");
+        job.setExecutionType(Job.ExecutionType.SSH);
+        job.setTargetDeviceId("approved-target");
+        job.setTargetHost("10.30.0.5");
 
         asserter.execute(() -> Satellite.deleteAll())
                 .execute(() -> Satellite.persist(defaultSatellite))
@@ -52,6 +55,8 @@ class SchedulingServiceTest {
                     assertEquals(1, solution.getNodeList().size());
                     assertEquals("sat-west", solution.getNodeList().get(0).getId());
                     assertEquals("west", solution.getJobList().get(0).getClusterId());
+                    assertEquals("approved-target", solution.getJobList().get(0).getTargetDeviceId());
+                    assertEquals("10.30.0.5", solution.getJobList().get(0).getTargetHost());
                 });
     }
 }

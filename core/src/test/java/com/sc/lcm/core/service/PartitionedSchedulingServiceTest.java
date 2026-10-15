@@ -56,6 +56,9 @@ class PartitionedSchedulingServiceTest {
         Satellite zoneBSatellite = activeSatellite("sat-zone-b", "west", "node-b");
         Satellite ignoredClusterSatellite = activeSatellite("sat-other", "east", "node-other");
         Job job = persistedJob("job-zone-best", "tenant-west", "west");
+        job.setExecutionType(Job.ExecutionType.SSH);
+        job.setTargetDeviceId("approved-target");
+        job.setTargetHost("10.30.0.5");
 
         resetPersistence(zoneASatellite, zoneBSatellite, ignoredClusterSatellite, job);
         mockNode(zoneASatellite.getId(), "zone-a", "A100");
@@ -150,6 +153,11 @@ class PartitionedSchedulingServiceTest {
         Mockito.when(lcmSolverFacade.solveBlocking(Mockito.any(LcmSolution.class)))
                 .thenAnswer(invocation -> {
                     LcmSolution problem = invocation.getArgument(0);
+                    Job candidate = problem.getJobList().get(0);
+                    if (candidate.getExecutionType() == Job.ExecutionType.SSH) {
+                        assertEquals("approved-target", candidate.getTargetDeviceId());
+                        assertEquals("10.30.0.5", candidate.getTargetHost());
+                    }
                     String zoneId = problem.getNodeList().get(0).getZoneId();
                     ZoneOutcome outcome = outcomes.get(zoneId);
 

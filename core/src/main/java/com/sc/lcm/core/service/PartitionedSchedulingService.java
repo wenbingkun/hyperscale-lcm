@@ -189,6 +189,8 @@ public class PartitionedSchedulingService {
         clone.setNodeSelector(original.getNodeSelector());
         clone.setExecutionType(original.getExecutionType());
         clone.setExecutionPayload(original.getExecutionPayload());
+        clone.setTargetDeviceId(original.getTargetDeviceId());
+        clone.setTargetHost(original.getTargetHost());
         return clone;
     }
 

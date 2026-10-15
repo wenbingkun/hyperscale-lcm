@@ -78,6 +78,8 @@ Kickstart template render
 
 | 环境变量 | 默认值 | 用途 |
 |----------|--------|------|
+| `LCM_PXE_ENABLED` | `false` | 总开关。默认不启动 TFTP/HTTP PXE/ProxyDHCP，避免影响所在网络；需要 PXE 时显式设为 `true` |
+| `LCM_DISCOVERY_ENABLED` | `false` | Satellite 网络发现（DHCP 监听 + ARP 扫描）总开关；默认关闭，设备可通过 `POST /api/discovery` 登记 |
 | `LCM_PXE_TFTP_ADDR` | `:69` | TFTP 监听地址 |
 | `LCM_PXE_TFTP_ROOT` | `/var/lib/lcm/tftpboot` | TFTP 根目录 |
 | `LCM_PXE_HTTP_ADDR` | `:8090` | HTTP PXE 服务监听地址 |
