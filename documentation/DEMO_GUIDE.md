@@ -66,6 +66,25 @@ mock Redfish 默认使用 `openbmc-baseline` fixture；如需切到其他厂商 
 - Job 调度、Satellite SSH 执行和状态回调闭环可用
 - Dashboard WebSocket 会收到 `DISCOVERY_EVENT`、`HEARTBEAT_UPDATE`、`JOB_STATUS`
 
+## 无硬件阶段演示（约 8 分钟，lab 栈）
+
+与上面的 `demo.sh`（mock Redfish/SSH、本机 quarkusDev）不同，这一条走部署镜像 + 真实 mTLS + 真实 PostgreSQL/Kafka/Redis，所有结果都是该栈上的真实状态。启动方式见 [runbooks/lab-quickstart.md](runbooks/lab-quickstart.md)；为了让故障场景在分钟内出结果，叠加缩短超时的 override（扫描 5s、PENDING 重试 10s、PENDING 上限 100s、运行上限 60s，即 `LCM_JOBS_*`，格式见 deployment.md §5.3 记录）。下面用的 `sh_job`/`state` 小函数就是该记录里用到的：`sh_job` 以 `POST /api/jobs`（`executionType=SHELL`）提交，`state` 查询 `job` 表。
+
+| 步骤 | 做什么 | 看什么 |
+|------|--------|--------|
+| 1 成功任务 | 经 Jobs 页或 API 提交 SSH `SYSTEM_INFO` 任务 | 作业 `COMPLETED`，详情页显示真实 `uname/df/free`；审计有 `JOB_SUBMITTED/SCHEDULED/COMPLETED` |
+| 2 失败任务 | 提交需要 64 核的作业（节点只有 16 核） | 保持 `PENDING`，重试，100s 后 `FAILED`："never dispatched and nothing ran"；`dispatch_attempt=0` |
+| 3 容量 | 同时提交两个 16 核作业 | 一个先跑，另一个排队到前者结束，执行记录不重叠 |
+| 4 Core 重启 | 作业 `RUNNING` 时 `docker stop lcm-core`，等作业在 Satellite 结束后再 `start` | Satellite 日志 `Replaying terminal status`，作业 `COMPLETED`，执行记录仍 1 条 |
+| 5 结果未知 | `docker restart lcm-satellite` 打断一个长作业 | 运行上限后 `UNKNOWN`（不自动重发），需要时 `POST /api/jobs/{id}/resolve` |
+
+### 证据边界
+
+- **真实软件环境验收**：上表 1–5 在 lab 栈上实际执行并记录（deployment.md §5.3）。
+- **仅 fixture / 单测**：四种 BMC 厂商的 Redfish 脱敏响应夹具、Docker 执行器的假客户端测试。
+- **未验证**：真实 BMC/Redfish 硬件、PXE/裸机、AlertManager 真实送达、Kubernetes 集群、多 Core 副本、GPU/NVLink 的真实硬件（调度只按 Satellite 上报规格计算，规格本身未经真机核对）。
+- 截图或录屏不代替上述可重复步骤。
+
 ## Cleanup
 
 ```bash

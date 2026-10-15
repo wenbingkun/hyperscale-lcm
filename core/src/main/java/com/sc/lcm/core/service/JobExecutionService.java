@@ -8,6 +8,8 @@ import com.sc.lcm.core.domain.AuditLog.AuditEventType;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.domain.JobExecutionMessage;
 import com.sc.lcm.core.domain.JobStatusCallback;
+import com.sc.lcm.core.domain.Node;
+import com.sc.lcm.core.domain.Satellite;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
@@ -46,6 +48,9 @@ public class JobExecutionService {
     private record JobStatusSnapshot(String jobId, String jobName, String assignedNodeId, String status,
             Integer exitCode) {
     }
+
+    @Inject
+    NodeSpecsProvider nodeSpecsProvider;
 
     @Inject
     ObjectMapper objectMapper;
@@ -121,45 +126,84 @@ public class JobExecutionService {
     private record ScheduledDispatchResult(boolean dispatchable, ScheduledDispatchSnapshot snapshot) {
     }
 
+    /**
+     * Atomic reservation: serialises concurrent placements on the node by locking its Satellite row, then checks the
+     * job against the node's capacity minus every job already holding it (see {@link CapacityCheck}).
+     *
+     * @return null when the job may be scheduled (or needs no reservation), otherwise the rejection reason
+     */
+    private Uni<String> reserveCapacity(Job job, String assignedNodeId) {
+        if (job == null || job.getStatus() != JobStatus.PENDING || assignedNodeId == null || assignedNodeId.isBlank()) {
+            return Uni.createFrom().nullItem();
+        }
+        return Satellite.<Satellite>findById(assignedNodeId, LockModeType.PESSIMISTIC_WRITE)
+                .chain(satellite -> {
+                    if (satellite == null) {
+                        return Uni.createFrom().item("node " + assignedNodeId + " is not registered");
+                    }
+                    Node node = nodeSpecsProvider.getNodeSpecs(satellite);
+                    return Job.<Job>list("assignedNodeId = ?1 and status in ?2 and id <> ?3",
+                            assignedNodeId, CapacityCheck.OCCUPYING, job.getId())
+                            .map(placed -> CapacityCheck.mismatch(node, CapacityCheck.Usage.of(placed), job));
+                });
+    }
+
+    private ScheduledDispatchResult markScheduled(Job job, String jobId, String assignedNodeId) {
+        if (job == null) {
+            log.warn("Cannot mark job {} as scheduled because it does not exist", jobId);
+            return new ScheduledDispatchResult(false, null);
+        }
+
+        if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.SCHEDULED) {
+            log.info("Not dispatching job {} because its status is {}", jobId, job.getStatus());
+            return new ScheduledDispatchResult(false, null);
+        }
+
+        // Retries may deliver an older solver result after another result already reserved this job.
+        // Placement is immutable once scheduled; moving it would skip reservation and orphan any in-flight command.
+        if (job.getStatus() == JobStatus.SCHEDULED
+                && !Objects.equals(job.getAssignedNodeId(), assignedNodeId)) {
+            log.info("Ignoring stale placement of scheduled job {} onto {}", jobId, assignedNodeId);
+            return new ScheduledDispatchResult(false, null);
+        }
+
+        boolean updated = false;
+        if (job.getStatus() == JobStatus.PENDING) {
+            job.setStatus(JobStatus.SCHEDULED);
+            updated = true;
+        }
+        if (assignedNodeId != null
+                && !assignedNodeId.isBlank()
+                && !assignedNodeId.equals(job.getAssignedNodeId())) {
+            job.setAssignedNodeId(assignedNodeId);
+            updated = true;
+        }
+        if (job.getScheduledAt() == null) {
+            job.setScheduledAt(LocalDateTime.now());
+            updated = true;
+        }
+
+        if (!updated) {
+            return new ScheduledDispatchResult(true, null);
+        }
+
+        return new ScheduledDispatchResult(true, new ScheduledDispatchSnapshot(
+                job.getId(),
+                job.getName(),
+                job.getTenantId(),
+                job.getAssignedNodeId()));
+    }
+
     private Uni<Boolean> persistScheduledDispatch(String jobId, String assignedNodeId) {
         return Panache.withTransaction(() -> Job.<Job>findById(jobId, LockModeType.PESSIMISTIC_WRITE)
-                .onItem().transform(job -> {
-                    if (job == null) {
-                        log.warn("Cannot mark job {} as scheduled because it does not exist", jobId);
-                        return new ScheduledDispatchResult(false, null);
-                    }
-
-                    if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.SCHEDULED) {
-                        log.info("Not dispatching job {} because its status is {}", jobId, job.getStatus());
-                        return new ScheduledDispatchResult(false, null);
-                    }
-
-                    boolean updated = false;
-                    if (job.getStatus() == JobStatus.PENDING) {
-                        job.setStatus(JobStatus.SCHEDULED);
-                        updated = true;
-                    }
-                    if (assignedNodeId != null
-                            && !assignedNodeId.isBlank()
-                            && !assignedNodeId.equals(job.getAssignedNodeId())) {
-                        job.setAssignedNodeId(assignedNodeId);
-                        updated = true;
-                    }
-                    if (job.getScheduledAt() == null) {
-                        job.setScheduledAt(LocalDateTime.now());
-                        updated = true;
-                    }
-
-                    if (!updated) {
-                        return new ScheduledDispatchResult(true, null);
-                    }
-
-                    return new ScheduledDispatchResult(true, new ScheduledDispatchSnapshot(
-                            job.getId(),
-                            job.getName(),
-                            job.getTenantId(),
-                            job.getAssignedNodeId()));
-                }))
+                .chain(job -> reserveCapacity(job, assignedNodeId)
+                        .map(reason -> {
+                            if (reason != null) {
+                                log.warn("Job {} stays PENDING: {}", jobId, reason);
+                                return new ScheduledDispatchResult(false, null);
+                            }
+                            return markScheduled(job, jobId, assignedNodeId);
+                        })))
                 .invoke(result -> {
                     ScheduledDispatchSnapshot snapshot = result.snapshot();
                     if (snapshot == null) {

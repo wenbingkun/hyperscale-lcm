@@ -56,6 +56,16 @@ class AllocationResourceTest {
     }
 
     @Test
+    void allocationApiIsRejectedWhenDisabled() {
+        AllocationResource resource = new AllocationResource();
+        resource.allocationsEnabled = false;
+        jakarta.ws.rs.core.Response response = resource.requestAllocation(
+                new AllocationResource.AllocationRequest(1, 1L, 0, null, false, 0, "default", "default"))
+                .await().indefinitely();
+        org.junit.jupiter.api.Assertions.assertEquals(501, response.getStatus());
+    }
+
+    @Test
     void requestAllocationPersistsPendingJob() {
         AllocationResource.AllocationResponse response = given()
                 .header("Authorization", "Bearer " + authToken)

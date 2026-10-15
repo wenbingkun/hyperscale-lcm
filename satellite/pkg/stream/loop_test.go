@@ -214,3 +214,36 @@ func TestRunCommandStreamLoopExitsOnContextCancel(t *testing.T) {
 		t.Fatal("loop did not exit after context cancellation")
 	}
 }
+
+// OnConnected must run after every successful (re)connect.
+func TestRunCommandStreamLoopCallsOnConnectedEachConnection(t *testing.T) {
+	fake := &fakeCore{
+		handshakeCh: make(chan string, 4),
+		script: func(conn int, stream pb.LcmService_ConnectStreamServer) error {
+			if conn == 1 {
+				return nil // drop immediately
+			}
+			<-stream.Context().Done()
+			return nil
+		},
+	}
+	client := startFakeCore(t, fake)
+
+	var connected atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go RunCommandStreamLoop(ctx, client,
+		Config{SatelliteID: "sat-hook", RetryInterval: testRetry, Logf: t.Logf,
+			OnConnected: func(pb.LcmService_ConnectStreamClient) { connected.Add(1) }},
+		func(*pb.StreamResponse, pb.LcmService_ConnectStreamClient) {})
+
+	waitHandshake(t, fake.handshakeCh, "first handshake")
+	waitHandshake(t, fake.handshakeCh, "second handshake")
+	deadline := time.Now().Add(5 * time.Second)
+	for connected.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := connected.Load(); got != 2 {
+		t.Fatalf("OnConnected calls = %d, want 2", got)
+	}
+}

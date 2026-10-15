@@ -9,6 +9,7 @@ import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.Job.ExecutionType;
 import com.sc.lcm.core.domain.Job.JobStatus;
 import com.sc.lcm.core.service.AuditService;
+import com.sc.lcm.core.service.CapacityCheck;
 import com.sc.lcm.core.service.SchedulingService;
 import com.sc.lcm.core.service.PartitionedSchedulingService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -18,6 +19,7 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -84,6 +86,17 @@ public class JobResource {
          */
         @POST
         public Uni<Response> submitJob(JobRequest request) {
+                String tenantClaim = tenantClaim();
+                if (tenantClaim != null && hasText(request.tenantId()) && !tenantClaim.equals(request.tenantId())) {
+                        return Uni.createFrom().item(Response.status(Response.Status.FORBIDDEN)
+                                        .entity(new ErrorResponse("tenantId does not match the authenticated tenant"))
+                                        .build());
+                }
+                String invalidResources = CapacityCheck.invalidRequest(request.cpuCores(), request.memoryGb(),
+                                request.gpuCount(), request.minNvlinkBandwidthGbps());
+                if (invalidResources != null) {
+                        return badRequest(invalidResources);
+                }
                 ExecutionType executionType;
                 try {
                         executionType = parseExecutionType(request.executionType());
@@ -183,7 +196,8 @@ public class JobResource {
                 job.setRequiredGpuModel(request.gpuModel());
                 job.setRequiresNvlink(request.requiresNvlink());
                 job.setMinNvlinkBandwidthGbps(request.minNvlinkBandwidthGbps());
-                job.setTenantId(request.tenantId());
+                String tenantId = tenantClaim() != null ? tenantClaim() : request.tenantId();
+                job.setTenantId(tenantId);
                 job.setClusterId(request.clusterId());
                 job.setStatus(JobStatus.PENDING);
                 job.setExecutionType(executionType);
@@ -217,7 +231,7 @@ public class JobResource {
                 // before a response is returned or scheduling is triggered.
                 return Panache.withTransaction(() -> job.persist()
                                 .call(() -> auditService.logEvent(AuditEventType.JOB_SUBMITTED, "JOB", jobId, actor,
-                                                request.tenantId(), auditDetailsJson)))
+                                                tenantId, auditDetailsJson)))
                                 .replaceWith(Response.status(Response.Status.CREATED)
                                                 .entity(new JobResponse(jobId, JobStatus.PENDING.name(),
                                                                 "Job submitted successfully"))
@@ -230,6 +244,30 @@ public class JobResource {
                 return Uni.createFrom().item(Response.status(Response.Status.BAD_REQUEST)
                                 .entity(new ErrorResponse(message))
                                 .build());
+        }
+
+        /** Tenant bound to the caller's token (JWT `tenant_id`), or null when the token carries none. */
+        private String tenantClaim() {
+                if (identity.getPrincipal() instanceof org.eclipse.microprofile.jwt.JsonWebToken token
+                                && token.getClaim("tenant_id") instanceof String tenant && !tenant.isBlank()) {
+                        return tenant;
+                }
+                return null;
+        }
+
+        /** Non-admin callers are confined to their own tenant; returns null when no confinement applies. */
+        private String confinedTenant() {
+                return identity.hasRole("ADMIN") ? null : tenantClaim();
+        }
+
+        private boolean visible(Job job) {
+                String tenant = confinedTenant();
+                return job != null && (tenant == null || tenant.equals(job.getTenantId()));
+        }
+
+        private Response jobNotFound(String id) {
+                return Response.status(Response.Status.NOT_FOUND)
+                                .entity(new ErrorResponse("Job not found: " + id)).build();
         }
 
         private static boolean hasText(String value) {
@@ -304,6 +342,15 @@ public class JobResource {
                         @QueryParam("tenantId") String tenantId,
                         @QueryParam("limit") @DefaultValue("100") int limit) {
 
+                String confined = confinedTenant();
+                if (confined != null) {
+                        // Other tenants' jobs are never listed, whatever filter the client sends.
+                        if (status != null) {
+                                return Job.list("tenantId = ?1 and status = ?2", confined,
+                                                JobStatus.valueOf(status.toUpperCase()));
+                        }
+                        return Job.<Job>find("tenantId", confined).page(0, limit).list();
+                }
                 if (status != null) {
                         return Job.findByStatus(JobStatus.valueOf(status.toUpperCase()));
                 }
@@ -321,7 +368,7 @@ public class JobResource {
         public Uni<Response> getJob(@PathParam("id") String id) {
                 return Job.findByIdReactive(id)
                                 .onItem().transform(job -> {
-                                        if (job == null) {
+                                        if (!visible(job)) {
                                                 return Response.status(Response.Status.NOT_FOUND)
                                                                 .entity(new ErrorResponse("Job not found: " + id))
                                                                 .build();
@@ -339,38 +386,30 @@ public class JobResource {
         @RolesAllowed({ "ADMIN", "OPERATOR" })
         public Uni<Response> cancelJob(@PathParam("id") String id) {
                 String actor = identity.getPrincipal() != null ? identity.getPrincipal().getName() : "unknown";
-                // Compete atomically with callbacks and dispatch claims; success means no emit can follow.
-                return Panache.withTransaction(() -> Job.update(
-                                "status = ?1 where id = ?2 and status in (?3, ?4) and dispatchedAt is null",
-                                JobStatus.CANCELLED, id, JobStatus.PENDING, JobStatus.SCHEDULED)
-                                .flatMap(updated -> {
-                                        if (updated > 0) {
-                                                return auditService.logJobCancelled(id, actor, null)
-                                                                .replaceWith(Response
-                                                                                .ok(new JobResponse(id, "CANCELLED",
-                                                                                                "Job cancelled"))
-                                                                                .build());
+                // The row lock serialises tenant-authorised cancellation with claims and callbacks.
+                return Panache.withTransaction(() -> Job.<Job>findById(id, LockModeType.PESSIMISTIC_WRITE)
+                                .chain(job -> {
+                                        if (!visible(job)) {
+                                                return Uni.createFrom().item(jobNotFound(id));
                                         }
-                                        return Job.<Job>findByIdReactive(id).map(job -> {
-                                                if (job == null) {
-                                                        return Response.status(Response.Status.NOT_FOUND)
-                                                                        .entity(new ErrorResponse(
-                                                                                        "Job not found: " + id))
-                                                                        .build();
-                                                }
-                                                String reason;
-                                                if (job.getStatus() == JobStatus.RUNNING) {
-                                                        reason = "Cancelling a running job is not supported yet";
-                                                } else if (job.getStatus() == JobStatus.SCHEDULED
-                                                                && job.getDispatchedAt() != null) {
-                                                        reason = "Dispatch already claimed; cancellation cannot be guaranteed";
-                                                } else {
-                                                        reason = "Cannot cancel job in status: " + job.getStatus();
-                                                }
-                                                return Response.status(Response.Status.CONFLICT)
-                                                                .entity(new ErrorResponse(reason))
-                                                                .build();
-                                        });
+                                        if ((job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.SCHEDULED)
+                                                        && job.getDispatchedAt() == null) {
+                                                job.setStatus(JobStatus.CANCELLED);
+                                                return auditService.logJobCancelled(id, actor, job.getTenantId())
+                                                                .replaceWith(Response.ok(new JobResponse(id,
+                                                                                "CANCELLED", "Job cancelled")).build());
+                                        }
+                                        String reason;
+                                        if (job.getStatus() == JobStatus.RUNNING) {
+                                                reason = "Cancelling a running job is not supported yet";
+                                        } else if (job.getStatus() == JobStatus.SCHEDULED
+                                                        && job.getDispatchedAt() != null) {
+                                                reason = "Dispatch already claimed; cancellation cannot be guaranteed";
+                                        } else {
+                                                reason = "Cannot cancel job in status: " + job.getStatus();
+                                        }
+                                        return Uni.createFrom().item(Response.status(Response.Status.CONFLICT)
+                                                        .entity(new ErrorResponse(reason)).build());
                                 }));
         }
 
@@ -403,26 +442,23 @@ public class JobResource {
                 } catch (JsonProcessingException e) {
                         throw new IllegalStateException("Failed to serialize resolve audit details", e);
                 }
-                return Panache.withTransaction(() -> Job.update(
-                                "status = ?1, errorMessage = ?2, completedAt = ?3 where id = ?4 and status = ?5",
-                                resolved, errorMessage, java.time.LocalDateTime.now(), id, JobStatus.UNKNOWN)
-                                .flatMap(updated -> {
-                                        if (updated > 0) {
-                                                return auditService.logEvent(AuditEventType.JOB_RESOLVED, "JOB", id,
-                                                                actor, null, details)
-                                                                .replaceWith(Response.ok(new JobResponse(id,
-                                                                                resolved.name(), "Job resolved"))
-                                                                                .build());
+                return Panache.withTransaction(() -> Job.<Job>findById(id, LockModeType.PESSIMISTIC_WRITE)
+                                .chain(job -> {
+                                        if (!visible(job)) {
+                                                return Uni.createFrom().item(jobNotFound(id));
                                         }
-                                        return Job.<Job>findByIdReactive(id).map(job -> job == null
-                                                        ? Response.status(Response.Status.NOT_FOUND)
-                                                                        .entity(new ErrorResponse("Job not found: " + id))
-                                                                        .build()
-                                                        : Response.status(Response.Status.CONFLICT)
-                                                                        .entity(new ErrorResponse(
-                                                                                        "Only UNKNOWN jobs can be resolved (status: "
-                                                                                                        + job.getStatus() + ")"))
-                                                                        .build());
+                                        if (job.getStatus() != JobStatus.UNKNOWN) {
+                                                return Uni.createFrom().item(Response.status(Response.Status.CONFLICT)
+                                                                .entity(new ErrorResponse("Only UNKNOWN jobs can be resolved (status: "
+                                                                                + job.getStatus() + ")")).build());
+                                        }
+                                        job.setStatus(resolved);
+                                        job.setErrorMessage(errorMessage);
+                                        job.setCompletedAt(LocalDateTime.now());
+                                        return auditService.logEvent(AuditEventType.JOB_RESOLVED, "JOB", id,
+                                                        actor, job.getTenantId(), details)
+                                                        .replaceWith(Response.ok(new JobResponse(id,
+                                                                        resolved.name(), "Job resolved")).build());
                                 }));
         }
 
@@ -437,7 +473,7 @@ public class JobResource {
         public Uni<Response> getJobStatus(@PathParam("id") String id) {
                 return Job.findByIdReactive(id)
                                 .onItem().transform(job -> {
-                                        if (job == null) {
+                                        if (!visible(job)) {
                                                 return Response.status(Response.Status.NOT_FOUND)
                                                                 .entity(new ErrorResponse("Job not found: " + id))
                                                                 .build();
@@ -458,13 +494,19 @@ public class JobResource {
         @GET
         @Path("/stats")
         public Uni<JobStats> getJobStats() {
-                // Execute sequentially to avoid concurrent session usage issues
-                return Job.countByStatus(JobStatus.PENDING).flatMap(pending -> Job.countByStatus(JobStatus.SCHEDULED)
-                                .flatMap(scheduled -> Job.countByStatus(JobStatus.RUNNING).flatMap(running -> Job
-                                                .countByStatus(JobStatus.COMPLETED)
-                                                .flatMap(completed -> Job.countByStatus(JobStatus.FAILED)
-                                                                .map(failed -> new JobStats(pending, scheduled, running,
-                                                                                completed, failed))))));
+                // Keep the same tenant scope as list/detail and query sequentially on the reactive session.
+                String tenant = confinedTenant();
+                return countVisible(JobStatus.PENDING, tenant)
+                                .flatMap(pending -> countVisible(JobStatus.SCHEDULED, tenant)
+                                .flatMap(scheduled -> countVisible(JobStatus.RUNNING, tenant)
+                                .flatMap(running -> countVisible(JobStatus.COMPLETED, tenant)
+                                .flatMap(completed -> countVisible(JobStatus.FAILED, tenant)
+                                .map(failed -> new JobStats(pending, scheduled, running, completed, failed))))));
+        }
+
+        private Uni<Long> countVisible(JobStatus status, String tenant) {
+                return tenant == null ? Job.countByStatus(status)
+                                : Job.count("status = ?1 and tenantId = ?2", status, tenant);
         }
 
         // ============== DTO Records ==============

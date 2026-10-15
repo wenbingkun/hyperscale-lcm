@@ -57,6 +57,27 @@ public class SchedulingService {
                     solution.setJobList(jobs);
 
                     return solution;
+                })
+                .chain(solution -> subtractOccupancy(solution, newJob.getId()));
+    }
+
+    /** Shrinks each node by what SCHEDULED/RUNNING/UNKNOWN jobs already hold, so the solver sees free capacity. */
+    private Uni<LcmSolution> subtractOccupancy(LcmSolution solution, String newJobId) {
+        List<String> nodeIds = solution.getNodeList().stream().map(Node::getId).toList();
+        if (nodeIds.isEmpty()) {
+            return Uni.createFrom().item(solution);
+        }
+        return Job.<Job>list("assignedNodeId in ?1 and status in ?2 and id <> ?3",
+                nodeIds, CapacityCheck.OCCUPYING, newJobId)
+                .map(placed -> {
+                    for (Node node : solution.getNodeList()) {
+                        CapacityCheck.Usage used = CapacityCheck.Usage.of(placed.stream()
+                                .filter(j -> node.getId().equals(j.getAssignedNodeId())).toList());
+                        node.setCpuCores((int) Math.max(0L, node.getCpuCores() - used.cpu()));
+                        node.setMemoryGb(Math.max(0, node.getMemoryGb() - used.memoryGb()));
+                        node.setGpuCount((int) Math.max(0L, node.getGpuCount() - used.gpu()));
+                    }
+                    return solution;
                 });
     }
 
@@ -68,7 +89,8 @@ public class SchedulingService {
             log.info("Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
             try {
                 if (!jobExecutionService.recordScheduledDispatchBlocking(job.getId(), nodeId)) {
-                    log.info("Job {} is no longer dispatchable (cancelled or finished); not queuing it", job.getId());
+                    log.info("Job {} was not scheduled onto {} (cancelled, finished or no free capacity); not queuing it",
+                            job.getId(), nodeId);
                     return;
                 }
                 job.setStatus(Job.JobStatus.SCHEDULED);

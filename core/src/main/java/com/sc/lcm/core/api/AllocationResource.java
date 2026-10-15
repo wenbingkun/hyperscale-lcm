@@ -42,11 +42,26 @@ public class AllocationResource {
         Vertx vertx;
 
         /**
+         * Allocations reuse the Job table and its default Docker execution path, so an allocation request would
+         * run `hello-world` on the chosen node. Disabled until a placement-only job type exists.
+         */
+        @ConfigProperty(name = "lcm.allocations.enabled", defaultValue = "false")
+        boolean allocationsEnabled;
+
+        private static final String DISABLED_MESSAGE =
+                        "Allocation API is disabled: allocations would enter the default Docker execution path. "
+                                        + "Submit a job instead.";
+
+        /**
          * 提交资源分配请求
          * 返回一个 Allocation ID，用于后续查询调度结果
          */
         @POST
         public Uni<Response> requestAllocation(AllocationRequest request) {
+                if (!allocationsEnabled) {
+                        return Uni.createFrom().item(Response.status(Response.Status.NOT_IMPLEMENTED)
+                                        .entity(new ErrorResponse(DISABLED_MESSAGE)).build());
+                }
                 String allocationId = UUID.randomUUID().toString();
 
                 // 复用 Job 实体作为底层的调度对象，未来可以抽象出单独的 Allocation 实体

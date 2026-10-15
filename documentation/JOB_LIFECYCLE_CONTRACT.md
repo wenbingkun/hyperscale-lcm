@@ -35,9 +35,9 @@
 
 ## 3. 取消（已实现，首版保守）
 
-- `DELETE /api/jobs/{id}`（ADMIN/OPERATOR）：仅尚未认领（`dispatched_at is null`）的 `PENDING`、`SCHEDULED` 可取消，用条件更新（`status in (PENDING, SCHEDULED) and dispatched_at is null`）完成，并写 `JOB_CANCELLED` 审计（操作人）。
+- `DELETE /api/jobs/{id}`（ADMIN/OPERATOR）：仅尚未认领（`dispatched_at is null`）的 `PENDING`、`SCHEDULED` 可取消，在事务中锁定作业行并检查 `status in (PENDING, SCHEDULED) and dispatched_at is null` 后完成，并写 `JOB_CANCELLED` 审计（操作人）。
 - 已认领的 `SCHEDULED`、`RUNNING`、`UNKNOWN` 及终态返回 **409**；不存在返回 404。**运行中取消暂不支持**：Satellite 没有取消命令，也没有"远端已停止"的证据；关闭 SSH 连接不保证远端进程终止。
-- 取消与派发认领竞争同一数据库条件更新：取消先成功则认领失败；认领先成功则取消返回 409。因此不会在成功取消后继续发出命令。目标复核仅在认领成功后进行，重复消息不能对运行中的作业追加“目标变化”失败。数据库检查属于返回给 Kafka 的异步链，检查失败传播为消息处理失败，不提前确认消息。
+- 取消与派发认领竞争同一作业行锁与状态条件：取消先成功则认领失败；认领先成功则取消返回 409。因此不会在成功取消后继续发出命令。目标复核仅在认领成功后进行，重复消息不能对运行中的作业追加“目标变化”失败。数据库检查属于返回给 Kafka 的异步链，检查失败传播为消息处理失败，不提前确认消息。
 
 ## 4. 派发、送达判定与扫描器（已实现，批 B）
 
@@ -47,7 +47,18 @@
   2. **已认领无进展**：`SCHEDULED` 且 `dispatched_at` 超过 `lcm.jobs.start-timeout`（默认 5m），或 `RUNNING` 且 `coalesce(dispatched_at, scheduled_at)` 超过 `lcm.jobs.run-timeout`（默认 2h） → `UNKNOWN`。**不自动重发**。
 - 扫描先找候选，真正更新时再次检查状态、派发标记和截止时间；并发刷新、释放或回调后不再符合截止条件的作业不会被旧扫描误判。
 - **人工核对**：`POST /api/jobs/{id}/resolve`（ADMIN/OPERATOR），body `{"outcome":"COMPLETED|FAILED","note":"..."}`，仅 `UNKNOWN` 有效，写 `JOB_RESOLVED` 审计（操作人、结论、备注）。重新执行 = 以新作业重新提交。`UNKNOWN` 不可取消。
-- **仍然成立的缺口**（批 C/D）：认领成功后、Satellite 实际收到前断流 → 命令可能丢失，作业在 start-timeout 后变 `UNKNOWN`（保守）；Satellite 无命令确认、无按 `command_id` 去重（Core 侧单次认领不覆盖 Satellite 侧重复到达）、状态回调失败不重试，断流期间的终态回调会丢失；Docker 执行器 `ContainerStart` 即视为完成；Core/Satellite 重启后的专门对账未做（目前只靠上述超时）。
+- **Satellite 执行端（批 C，已实现）**：Docker 作业等待容器退出，`COMPLETED` 表示退出码 0，非 0 为 `FAILED` 并带真实退出码；输出为合并的 stdout/stderr，保留尾部 64KiB；超时（`LCM_DOCKER_TIMEOUT`，默认 1h）后请求停止容器，停止成功才报"container stopped"，否则报"state unknown"；拉取、创建、启动和等待共用该执行上限，停止/日志/删除各有独立清理上限。退出后强制删除容器；删除失败不能报成功，执行端保留 RUNNING，Core 超时后转 UNKNOWN，占用保留至人工核对清理。Docker payload 为镜像名，或 `{"image":"...","cmd":[...]}`。Satellite 按 `command_id` 在**进程内**记账（最多保留 1024 条历史完成记录，运行中的条目不淘汰）：仍在账本中的重复命令不再执行，已完成的重发其终态；完成记录被淘汰后再到达的旧命令可能重新执行；终态发送失败时进入有界待补报队列（上限 256），流重连后重发（尽力而为，丢弃最旧）。命令仍在 Recv 循环中串行执行，长容器会占用命令通道。
+- **仍然成立的缺口**（批 D 及之后）：认领成功后、Satellite 实际收到前断流 → 命令可能丢失，作业在 start-timeout 后变 `UNKNOWN`（保守）；Satellite 无命令确认、无 attempt id；Satellite **重启后**去重账本和待补报队列都会清空，重启后的重复投递仍可能重复执行，未送出的终态丢失（Core 靠超时变 `UNKNOWN`）；Shell/Ansible 仍无超时与输出上限；Core/Satellite 重启后的专门对账未做（目前只靠上述超时）。
+
+### 4.1 调度与容量边界（M3）
+
+- **调度对象**：Satellite 执行容量（CPU/内存/GPU 数量，来自 Satellite 注册上报的规格）。SSH 任务不承诺目标设备的 GPU 分配；资源数值仅约束执行它的 Satellite。
+- **占用**：由作业行推导，没有独立台账——`SCHEDULED`、`RUNNING`、`UNKNOWN` 的作业占用其 `assigned_node_id` 的容量（`UNKNOWN` 命令可能仍在运行，所以占用到 resolve 为止）。完成、失败、取消、resolve 自动释放；Core 重启后占用从数据库恢复。规格也在启动时从 `node` 表恢复。
+- **原子预留**：`PENDING → SCHEDULED` 时在事务里锁定目标 Satellite 行，再校验“节点容量 − 已占用”是否满足作业（CPU、内存、GPU 数量、GPU 型号、NVLink 与带宽）。不满足则作业保持 `PENDING`，不入队、不派发。已预留的节点不再接受迟到求解结果改写；跨节点结果被拒绝，不跳过容量校验。资源请求不得为负，旧负值不抵扣占用，累计占用饱和计算，避免溢出制造空闲。并发请求因行锁串行，8 核节点同时收到两个 8 核请求只会放行一个。
+- **无可行节点**：作业保持 `PENDING`；sweeper 每 `lcm.jobs.pending-retry-interval`（30s）重新触发调度（容量释放、Satellite 上线、Core 重启丢失的调度都靠它恢复）；超过 `lcm.jobs.pending-timeout`（10m）置 `FAILED`，`errorMessage` 说明从未派发、没有任何命令执行，并写 `JOB_FAILED` 审计。
+- **未支持的条件**：GPU 型号是硬约束（节点型号不一致则不放行）；`nodeSelector` 不是 `POST /api/jobs` 的字段，也不参与调度。Allocation API（`POST /api/v1/allocations`）会进入默认 Docker 执行路径（`hello-world`），因此默认关闭（`lcm.allocations.enabled=false`，返回 501）。
+- **租户**：令牌带 `tenant_id` 声明时，提交以声明为准，请求体里不一致的 `tenantId` 返回 403；非 ADMIN 的列表、详情、状态、统计及取消/人工核对均限定本租户（其他租户的 id 返回 404，写入不产生状态或审计副作用）。令牌不带声明时保持旧行为（dev 登录的声明来自请求体，生产身份来源属于 M4）。
+- **已知限制**：分区调度（`lcm.scheduling.partitioned.enabled`，默认关）求解时不扣减占用，但落库时仍会拒绝放不下的放置；单 Core 假设下行锁已足够，多 Core 同样成立（锁在数据库）。
 
 ## 5. 幂等性分类（后续重试策略的前提）
 
@@ -58,7 +69,7 @@
 
 ## 6. 明确不保证
 
-- 不声称 exactly-once。Core 对同一作业最多持有一个未释放认领；确定未尝试发送时可以释放再认领，所以 `dispatch_attempt` 可能大于 1。发送后或发送结果不确定时不自动重发；Satellite 去重与回调补报（批 C）落地前，不保证“至多一次执行”。
+- 不声称 exactly-once。Core 对同一作业最多持有一个未释放认领；确定未尝试发送时可以释放再认领，所以 `dispatch_attempt` 可能大于 1。发送后或发送结果不确定时不自动重发；Satellite 端的去重只在进程内，Satellite 重启后不保证“至多一次执行”。
 - 超时（Satellite 端 `LCM_SSH_TIMEOUT`）只表示本端终止了 ssh 客户端，不表示远端命令已停止。
 - 状态变化的通知（WebSocket）、指标、审计是尽力而为，不参与状态正确性。
 

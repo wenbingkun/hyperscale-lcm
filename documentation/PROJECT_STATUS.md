@@ -1,6 +1,6 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-06-14 (Offline/restricted-network release bundle runbook and helper script added to reduce the remaining Deployment Closure Step 5 registry-access blocker)
+> **Last Updated:** 2026-10-16 (PR #34 软件执行、恢复与容量边界复审；实体硬件与生产验收仍未完成)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
@@ -74,7 +74,7 @@ Satellite (Go 1.24)
 
 ### 2.3 调度引擎
 
-基于 **Timefold Solver 1.4.0**，约束维度包括：GPU 型号匹配、NVLink / NVSwitch 拓扑亲和性、IB Fabric 优化、租户与资源条件。`SchedulingService` 与 `PartitionedSchedulingService` 均已按 `clusterId` 过滤活跃节点。独立分配 API：`POST /api/v1/allocations`。
+基于 **Timefold Solver 1.4.0**，约束维度包括：GPU 型号匹配、NVLink / NVSwitch 拓扑亲和性、IB Fabric 优化、租户与资源条件。`SchedulingService` 与 `PartitionedSchedulingService` 均已按 `clusterId` 过滤活跃节点。放置前先扣减已有占用并在数据库内原子预留（见 [JOB_LIFECYCLE_CONTRACT.md §4.1](JOB_LIFECYCLE_CONTRACT.md)）；GPU 型号是硬约束；无可行节点的作业保持 PENDING，重试并在超时后失败。独立分配 API `POST /api/v1/allocations` 会进入默认 Docker 路径，默认关闭（`lcm.allocations.enabled`）。
 
 ### 2.4 安全体系
 
@@ -135,3 +135,18 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 详细运行时验证矩阵参见 [CI_CONTRACT.md](CI_CONTRACT.md)。
 
 根目录文档导航统一见 [../README.md](../README.md) 的 `Documentation Map`。
+
+---
+
+## 5. 证据级别
+
+区分“代码存在”与“验证过什么”。无硬件阶段的验收记录见 [NO_HARDWARE_PHASE_PLAN.md](NO_HARDWARE_PHASE_PLAN.md) 与 [runbooks/deployment.md §5.3](runbooks/deployment.md)。
+
+| 能力 | 代码存在 | fixture / 单测回归 | 真实软件环境验收（lab 栈、真实 PG/Kafka/Redis/sshd） | 虚拟硬件 | 实体硬件 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| SSH 任务、证书指纹身份、状态护栏、持久派发与 UNKNOWN | ✅ | ✅ | ✅ | — | — |
+| Docker 作业（等待退出、超时、清理）、命令去重、终态补报 | ✅ | ✅ | 部分（真实 Docker 直连退出/超时/输出；Docker 退出 3 与 Core 重启终态补报端到端通过） | — | — |
+| 容量感知放置、PENDING 重试/超时 | ✅ | ✅ | 见 §5.3 记录 | — | — |
+| Redfish / BMC（OpenBMC、iDRAC、iLO、XCC） | ✅ | ✅（脱敏响应夹具） | — | — | ❌ 未做 |
+| PXE / iPXE 重装 | ✅ | 部分 | ❌ | ❌ | ❌ |
+| AlertManager 外部通知 | ✅ | — | ❌ | — | — |
