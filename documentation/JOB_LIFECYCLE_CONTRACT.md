@@ -25,16 +25,16 @@
 | RUNNING | 忽略（重复） | 应用 | 忽略 |
 | COMPLETED / FAILED / CANCELLED | 忽略 | 忽略 | 忽略 |
 
-- 终态不被任何回调改写；迟到的 `RUNNING`、重复或相反的终态都被忽略（warn 日志，不进 DLQ）。
+- 回调和调度落库在事务中先对作业加数据库行锁，再读取与判断状态；取消的条件更新使用同一数据库行锁串行化。终态不被任何回调改写；迟到的 `RUNNING`、重复或相反的终态都被忽略（warn 日志，不进 DLQ）。
 - 同一条回调经 gRPC 直调和 `jobs.status` Kafka 回读各处理一次，两份副本因上表天然幂等。
-- 取消后收到执行端的真实结果：状态保持 `CANCELLED`，并写一条审计 `JOB_CANCELLED`，details 为 `late_result_after_cancel`（含上报状态与退出码），保留"其实执行过"的证据。
+- 取消后收到执行端的真实结果：状态保持 `CANCELLED`，并为该次报告写一条审计 `JOB_CANCELLED`，details 为 `late_result_after_cancel`（含上报状态与退出码），保留"其实执行过"的证据。该审计等待写入完成；重复迟到报告仍可能产生多条审计，事件身份与去重属于后续批次。
 - 迁移 `PENDING → SCHEDULED` 只由调度落库完成（`JobExecutionService.persistScheduledDispatch`），不接受回调。
 
 ## 3. 取消（已实现，首版保守）
 
 - `DELETE /api/jobs/{id}`（ADMIN/OPERATOR）：仅 `PENDING`、`SCHEDULED` 可取消，用条件更新（`status in (PENDING, SCHEDULED)`）完成，并写 `JOB_CANCELLED` 审计（操作人）。
 - `RUNNING`、终态返回 **409**；不存在返回 404。**运行中取消暂不支持**：Satellite 没有取消命令，也没有"远端已停止"的证据；关闭 SSH 连接不保证远端进程终止。
-- 已取消的作业不会被随后派发：调度落库发现作业已不在 `PENDING/SCHEDULED` 时不再发 Kafka；`JobDispatcher` 在发送前从库中确认仍为 `SCHEDULED`，否则丢弃。该检查与取消之间仍有极小的竞态窗口（检查通过后、命令发出前被取消）——此时作业会执行，随后结果走"取消后收到结果"路径留下审计证据。
+- 已取消的作业不会被随后派发：调度落库发现作业已不在 `PENDING/SCHEDULED` 时不再发 Kafka；`JobDispatcher` 在发送前从库中确认仍为 `SCHEDULED`，否则丢弃。数据库检查属于返回给 Kafka 的异步链，检查失败传播为消息处理失败；不会提前确认消息。该检查与取消之间仍有极小的竞态窗口（检查通过后、命令发出前被取消）——此时作业会执行，随后结果走"取消后收到结果"路径留下审计证据。
 
 ## 4. 派发与回调的现有保证（如实记录）
 

@@ -11,6 +11,14 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.vertx.VertxContextSupport;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import io.agroal.api.AgroalDataSource;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.function.Executable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +35,9 @@ class JobCancelAndCallbackGuardTest {
 
     @Inject
     JobExecutionService jobExecutionService;
+
+    @Inject
+    AgroalDataSource dataSource;
 
     private String token;
 
@@ -111,5 +122,81 @@ class JobCancelAndCallbackGuardTest {
                 () -> Panache.withSession(() -> AuditLog.findByResourceId(id)));
         assertTrue(audit.stream().anyMatch(a -> a.getDetails() != null
                 && a.getDetails().contains("late_result_after_cancel")));
+    }
+
+    @Test
+    void concurrentLateRunningCannotOverwriteACompletedCallback() throws Throwable {
+        String id = persistJob(JobStatus.SCHEDULED);
+        raceBehindRowLock(id, () -> callback(id, "COMPLETED", 0), () -> callback(id, "RUNNING", 0));
+        assertEquals(JobStatus.COMPLETED, load(id).getStatus());
+    }
+
+    @Test
+    void concurrentCallbackCannotOverwriteASuccessfulCancel() throws Throwable {
+        String id = persistJob(JobStatus.SCHEDULED);
+        raceBehindRowLock(id, () -> assertEquals(200, cancel(id)), () -> callback(id, "COMPLETED", 0));
+        assertEquals(JobStatus.CANCELLED, load(id).getStatus());
+    }
+
+    @Test
+    void concurrentSchedulingCannotRestoreACancelledJob() throws Throwable {
+        String id = persistJob(JobStatus.PENDING);
+        AtomicBoolean dispatchable = new AtomicBoolean(true);
+        raceBehindRowLock(id, () -> assertEquals(200, cancel(id)),
+                () -> dispatchable.set(jobExecutionService.recordScheduledDispatchBlocking(id, "node-1")));
+        assertEquals(JobStatus.CANCELLED, load(id).getStatus());
+        org.junit.jupiter.api.Assertions.assertFalse(dispatchable.get());
+    }
+
+    // Hold a real PostgreSQL row lock so the writers queue in a known order.
+    // A plain read can still see stale state here; SELECT FOR UPDATE must wait.
+    private void raceBehindRowLock(String id, Executable first, Executable second) throws Exception {
+        List<CompletableFuture<Void>> writers = new ArrayList<>();
+        try (Connection blocker = dataSource.getConnection()) {
+            blocker.setAutoCommit(false);
+            try (var lock = blocker.prepareStatement("select id from job where id = ? for update")) {
+                lock.setString(1, id);
+                try (var result = lock.executeQuery()) {
+                    assertTrue(result.next());
+                }
+            }
+            try {
+                writers.add(async(first));
+                awaitBlockedWriters(1);
+                writers.add(async(second));
+                awaitBlockedWriters(2);
+            } finally {
+                blocker.rollback();
+                for (var writer : writers) writer.get(10, TimeUnit.SECONDS);
+            }
+        }
+    }
+
+    private CompletableFuture<Void> async(Executable action) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                action.execute();
+            } catch (Throwable error) {
+                throw new CompletionException(error);
+            }
+        });
+    }
+
+    private void awaitBlockedWriters(int expected) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        try (Connection observer = dataSource.getConnection();
+                var statement = observer.prepareStatement(
+                        "select count(*) from pg_stat_activity where datname = current_database() "
+                        + "and wait_event_type = 'Lock' "
+                        + "and (query ilike 'update job %' or query ilike 'select % from job %')")) {
+            do {
+                try (var result = statement.executeQuery()) {
+                    result.next();
+                    if (result.getInt(1) >= expected) return;
+                }
+                Thread.sleep(25);
+            } while (System.nanoTime() < deadline);
+        }
+        org.junit.jupiter.api.Assertions.fail("Expected " + expected + " blocked job writers");
     }
 }

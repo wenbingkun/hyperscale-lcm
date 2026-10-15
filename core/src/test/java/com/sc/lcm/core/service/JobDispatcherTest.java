@@ -213,8 +213,38 @@ class JobDispatcherTest {
         Job job = new Job("job-cancelled", 1, 1, 0, null);
         job.setAssignedNodeId("node-1");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
+        verify(streamRegistry, never()).sendCommand(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
+    }
+
+    @Test
+    void dispatchCompletionWaitsForDatabaseStateCheck() throws Exception {
+        var state = new java.util.concurrent.CompletableFuture<Boolean>();
+        Mockito.when(jobStateReader.isScheduled("job-delayed-state"))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().completionStage(state));
+        Job job = new Job("job-delayed-state", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+
+        var completion = dispatcher.dispatch(job).subscribeAsCompletionStage().toCompletableFuture();
+        org.junit.jupiter.api.Assertions.assertFalse(completion.isDone());
+        verify(streamRegistry, never()).sendCommand(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
+        state.complete(true);
+        completion.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        verify(streamRegistry).sendCommand(eq("node-1"), eq(job.getId()), eq("EXEC_DOCKER"), eq("hello-world"), anyMap());
+    }
+
+    @Test
+    void dispatchPropagatesStateReadFailureWithoutSending() {
+        Mockito.when(jobStateReader.isScheduled("job-state-error"))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().failure(new IllegalStateException("database unavailable")));
+        Job job = new Job("job-state-error", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5)));
         verify(streamRegistry, never()).sendCommand(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
     }

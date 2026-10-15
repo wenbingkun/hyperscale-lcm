@@ -18,6 +18,7 @@ import io.quarkus.vertx.VertxContextSupport;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
@@ -120,7 +121,7 @@ public class JobExecutionService {
     }
 
     private Uni<Boolean> persistScheduledDispatch(String jobId, String assignedNodeId) {
-        return Panache.withTransaction(() -> Job.<Job>findById(jobId)
+        return Panache.withTransaction(() -> Job.<Job>findById(jobId, LockModeType.PESSIMISTIC_WRITE)
                 .onItem().transform(job -> {
                     if (job == null) {
                         log.warn("Cannot mark job {} as scheduled because it does not exist", jobId);
@@ -246,7 +247,8 @@ public class JobExecutionService {
         // continues executing asynchronously.
         return Panache.withTransaction(() -> {
                     Scope scope = callbackSpan.makeCurrent();
-                    return Job.<Job>findById(callback.jobId())
+                    // Serialize callback and scheduling decisions with concurrent callbacks and cancellation.
+                    return Job.<Job>findById(callback.jobId(), LockModeType.PESSIMISTIC_WRITE)
                             .onItem().transformToUni(job -> {
                                 if (job == null) {
                                     log.warn("Job not found: {}, routing original message to DLQ",
@@ -269,7 +271,8 @@ public class JobExecutionService {
                                     if (decision == CallbackDecision.IGNORE_FINAL
                                             && job.getStatus() == JobStatus.CANCELLED
                                             && isTerminal(finalCallbackStatus)) {
-                                        recordLateResultAfterCancel(job, finalCallbackStatus, callback);
+                                        return recordLateResultAfterCancel(job, finalCallbackStatus, callback)
+                                                .replaceWith((JobStatusSnapshot) null);
                                     }
                                     return Uni.createFrom().nullItem();
                                 }
@@ -379,13 +382,11 @@ public class JobExecutionService {
         return CallbackDecision.APPLY;
     }
 
-    private void recordLateResultAfterCancel(Job job, JobStatus reported, JobStatusCallback callback) {
+    private Uni<Void> recordLateResultAfterCancel(Job job, JobStatus reported, JobStatusCallback callback) {
         String details = String.format("{\"action\":\"late_result_after_cancel\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
                 reported, callback.exitCode());
-        auditService.logEvent(com.sc.lcm.core.domain.AuditLog.AuditEventType.JOB_CANCELLED, "JOB", job.getId(),
-                "SYSTEM", job.getTenantId(), details)
-                .subscribe().with(v -> {
-                }, e -> log.error("Audit log failed", e));
+        return auditService.logEvent(com.sc.lcm.core.domain.AuditLog.AuditEventType.JOB_CANCELLED, "JOB", job.getId(),
+                "SYSTEM", job.getTenantId(), details);
     }
 
     private static boolean isTerminal(JobStatus status) {
