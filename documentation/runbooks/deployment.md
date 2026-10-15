@@ -58,7 +58,7 @@ Core 以 TLS 握手验证过的**客户端证书指纹（SHA-256）**识别 Sate
 ./scripts/issue_satellite_cert.sh <name>   # 输出 certs/satellites/<name>/{client.pem,client.key,ca.pem} 与指纹
 ```
 
-把该目录作为该 Satellite 的 `LCM_CERTS_DIR`。尚未做：证书吊销/轮换（撤销身份目前需清除设备的 `satellite_cert_fingerprint` 或拒绝设备）。
+把该目录作为该 Satellite 的 `LCM_CERTS_DIR`。尚未做：证书吊销/轮换。拒绝绑定设备会阻止后续注册，但不会主动断开已有连接。清除 `satellite_cert_fingerprint` 只会解除绑定，不会吊销证书；设备仍获批准时，旧证书可再次绑定，不能用清除字段代替撤销准入。
 
 ---
 
