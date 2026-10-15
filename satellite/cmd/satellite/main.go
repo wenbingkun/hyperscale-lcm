@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -127,9 +128,15 @@ func main() {
 			})
 
 		// Start Discovery Manager (DHCP listener + ARP scanner)
-		discoveryIface := os.Getenv("LCM_DISCOVERY_IFACE") // e.g. "eth0", empty = auto-detect
-		discoveryMgr := discovery.NewManager(client, satelliteId, discoveryIface)
-		discoveryMgr.Start(bgCtx)
+		// Off by default: it listens for DHCP broadcasts and ARP-scans the local network.
+		var discoveryMgr *discovery.Manager
+		if envEnabled("LCM_DISCOVERY_ENABLED") {
+			discoveryIface := os.Getenv("LCM_DISCOVERY_IFACE") // e.g. "eth0", empty = auto-detect
+			discoveryMgr = discovery.NewManager(client, satelliteId, discoveryIface)
+			discoveryMgr.Start(bgCtx)
+		} else {
+			log.Println("Network discovery (DHCP listener / ARP scan) disabled; set LCM_DISCOVERY_ENABLED=true to enable")
+		}
 
 		// Start Heartbeat Ticker
 		ticker := time.NewTicker(5 * time.Second)
@@ -137,7 +144,12 @@ func main() {
 
 		// Start PXE Services for bare-metal provisioning (TFTP + HTTP)
 		// DHCP discovery is handled by discoveryMgr above; no separate listener needed.
-		go pxe.StartPXEServices(bgCtx, pxe.DefaultConfig)
+		// Off by default: it binds TFTP/HTTP/ProxyDHCP ports that can affect the surrounding network.
+		if envEnabled("LCM_PXE_ENABLED") {
+			go pxe.StartPXEServices(bgCtx, pxe.DefaultConfig)
+		} else {
+			log.Println("PXE services disabled; set LCM_PXE_ENABLED=true to enable")
+		}
 
 		// Main loop with graceful shutdown
 		for {
@@ -157,7 +169,9 @@ func main() {
 			case sig := <-sigChan:
 				log.Printf("Received signal %v, shutting down gracefully...", sig)
 				bgCancel()
-				discoveryMgr.Stop()
+				if discoveryMgr != nil {
+					discoveryMgr.Stop()
+				}
 				ticker.Stop()
 				shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
 				if err := rfCollector.Close(shutdownCtx); err != nil {
@@ -219,4 +233,10 @@ func usePlaintextGRPC() bool {
 		return false
 	}
 	return parsed
+}
+
+// envEnabled reports whether the named environment variable is set to a true value.
+func envEnabled(name string) bool {
+	v, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(name)))
+	return err == nil && v
 }

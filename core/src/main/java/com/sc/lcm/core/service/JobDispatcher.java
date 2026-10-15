@@ -2,12 +2,14 @@ package com.sc.lcm.core.service;
 
 import com.sc.lcm.core.domain.Job;
 import com.sc.lcm.core.domain.Job.ExecutionType;
+import com.sc.lcm.core.domain.JobStatusCallback;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.Logger;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.context.Context;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,6 +27,12 @@ public class JobDispatcher {
     @Inject
     OpenTelemetry openTelemetry;
 
+    @Inject
+    SshTargetVerifier sshTargetVerifier;
+
+    @Inject
+    JobExecutionService jobExecutionService;
+
     /**
      * Consumes scheduled jobs from Kafka and dispatches them to Satellites via
      * gRPC.
@@ -39,6 +47,27 @@ public class JobDispatcher {
 
         LOG.infof("📨 [Kafka -> Dispatcher] Processing Job %s for Node %s", job.getId(), nodeId);
 
+        if (job.getExecutionType() == ExecutionType.SSH && job.getTargetDeviceId() != null) {
+            sshTargetVerifier.findMismatch(job).subscribe().with(
+                    mismatch -> {
+                        if (mismatch == null) {
+                            send(job, nodeId);
+                        } else {
+                            LOG.warnf("Refusing to dispatch SSH job %s: %s", job.getId(), mismatch);
+                            jobExecutionService.processJobStatusCallback(new JobStatusCallback(
+                                    job.getId(), nodeId, "FAILED", -1, mismatch, null, null, 0,
+                                    LocalDateTime.now(), null)).subscribe().with(
+                                    v -> { },
+                                    e -> LOG.errorf(e, "Failed to record dispatch refusal for job %s", job.getId()));
+                        }
+                    },
+                    e -> LOG.errorf(e, "Target verification failed for job %s; not dispatching", job.getId()));
+            return;
+        }
+        send(job, nodeId);
+    }
+
+    private void send(Job job, String nodeId) {
         ExecutionCommand executionCommand = resolveExecutionCommand(job);
 
         // Extract Context

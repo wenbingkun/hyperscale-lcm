@@ -120,4 +120,48 @@ class JobDispatcherTest {
                 Mockito.anyString(),
                 anyMap());
     }
+
+    @Test
+    void dispatchRefusesSshJobWhenTargetChangedAndMarksItFailed() {
+        SshTargetVerifier verifier = Mockito.mock(SshTargetVerifier.class);
+        JobExecutionService executionService = Mockito.mock(JobExecutionService.class);
+        Mockito.when(verifier.findMismatch(Mockito.any()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().item("Target device address changed since submission"));
+        Mockito.when(executionService.processJobStatusCallback(Mockito.any()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().voidItem());
+        dispatcher.sshTargetVerifier = verifier;
+        dispatcher.jobExecutionService = executionService;
+
+        Job job = new Job("job-ssh-moved", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+        job.setExecutionType(ExecutionType.SSH);
+        job.setTargetDeviceId("dev-1");
+        job.setTargetHost("10.0.0.5");
+
+        dispatcher.dispatch(job);
+
+        verify(streamRegistry, never()).sendCommand(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
+        verify(executionService).processJobStatusCallback(Mockito.argThat(cb ->
+                "FAILED".equals(cb.status()) && cb.errorMessage().contains("address changed")));
+    }
+
+    @Test
+    void dispatchSendsSshJobWhenTargetIsUnchanged() {
+        SshTargetVerifier verifier = Mockito.mock(SshTargetVerifier.class);
+        Mockito.when(verifier.findMismatch(Mockito.any())).thenReturn(io.smallrye.mutiny.Uni.createFrom().nullItem());
+        dispatcher.sshTargetVerifier = verifier;
+
+        Job job = new Job("job-ssh-ok", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+        job.setExecutionType(ExecutionType.SSH);
+        job.setExecutionPayload("{\"host\":\"10.0.0.5\"}");
+        job.setTargetDeviceId("dev-1");
+        job.setTargetHost("10.0.0.5");
+
+        dispatcher.dispatch(job);
+
+        verify(streamRegistry).sendCommand(
+                eq("node-1"), eq("job-ssh-ok"), eq("EXEC_SSH"), eq("{\"host\":\"10.0.0.5\"}"), anyMap());
+    }
 }

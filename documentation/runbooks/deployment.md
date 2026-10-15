@@ -45,6 +45,8 @@ Core 与 Satellite 共用同一个证书目录或 Kubernetes Secret，必须包�
 
 生产环境应由内部 CA 或证书平台签发同名文件，并保持文件名不变。
 
+> 隔离默认值：Satellite 默认**不**启动 PXE（TFTP :69、HTTP :8090、ProxyDHCP :4011）和网络发现（DHCP 监听、ARP 扫描）。helm/k8s 的 Satellite 使用 `hostNetwork`，这些功能一旦开启会直接占用宿主网络；只在需要的节点上设 `LCM_PXE_ENABLED=true` / `LCM_DISCOVERY_ENABLED=true`，详见 [pxe.md](pxe.md)。
+
 ### 2.3 Satellite 身份（每个 Satellite 一张证书）
 
 Core 以 TLS 握手验证过的**客户端证书指纹（SHA-256）**识别 Satellite，不再只信任自报 IP：
