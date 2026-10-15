@@ -25,48 +25,96 @@ public class SatelliteRegistrationService {
     @Inject
     RegistrationNodeSpecsProvider registrationNodeSpecs;
 
-    @WithTransaction
     public Uni<RegisterResponse> register(RegisterRequest request, boolean requireApproval) {
-        if (requireApproval) {
-            return DiscoveredDevice.findByIp(request.getIpAddress())
-                    .flatMap(device -> {
-                        if (device == null) {
-                            log.warn("Registration rejected for {}: device unknown", request.getIpAddress());
-                            return Uni.createFrom()
-                                    .failure(new StatusRuntimeException(Status.UNAUTHENTICATED
-                                            .withDescription("Device not discovered or approved")));
-                        }
-                        if (device.getStatus() != DiscoveryStatus.APPROVED
-                                && device.getStatus() != DiscoveryStatus.MANAGED) {
-                            log.warn("Registration rejected for {}: device status is {}", request.getIpAddress(),
-                                    device.getStatus());
-                            return Uni.createFrom()
-                                    .failure(new StatusRuntimeException(
-                                            Status.UNAUTHENTICATED.withDescription(
-                                                    "Device not approved for registration. Current status: "
-                                                            + device.getStatus())));
-                        }
-                        device.setStatus(DiscoveryStatus.MANAGED);
-                        device.setClaimStatus(ClaimStatus.MANAGED);
-                        if (device.getCredentialProfileId() != null && !device.getCredentialProfileId().isBlank()) {
-                            device.setAuthStatus(AuthStatus.AUTHENTICATED);
-                        }
-                        return persistSatelliteRegistration(request);
-                    });
-        }
-
-        return persistSatelliteRegistration(request);
+        return register(request, requireApproval, null);
     }
 
-    private Uni<RegisterResponse> persistSatelliteRegistration(RegisterRequest request) {
-        String id = UUID.randomUUID().toString();
-        Satellite satellite = new Satellite(
-                id,
+    /**
+     * @param peerFingerprint SHA-256 of the client certificate verified in the TLS handshake (null when the
+     *                        connection carried none); this, not the self-reported IP, is the Satellite identity.
+     */
+    @WithTransaction
+    public Uni<RegisterResponse> register(RegisterRequest request, boolean requireApproval, String peerFingerprint) {
+        if (!requireApproval) {
+            return persistSatelliteRegistration(request, peerFingerprint);
+        }
+        if (peerFingerprint == null) {
+            return findDeviceByIp(request, null);
+        }
+        return DiscoveredDevice.findBySatelliteCertFingerprint(peerFingerprint)
+                .flatMap(bound -> bound != null
+                        ? admit(bound, request, peerFingerprint)
+                        : findDeviceByIp(request, peerFingerprint));
+    }
+
+    private Uni<RegisterResponse> findDeviceByIp(RegisterRequest request, String peerFingerprint) {
+        return DiscoveredDevice.findByIp(request.getIpAddress())
+                .flatMap(device -> {
+                    if (device == null) {
+                        log.warn("Registration rejected for {}: device unknown", request.getIpAddress());
+                        return rejected("Device not discovered or approved");
+                    }
+                    String boundTo = device.getSatelliteCertFingerprint();
+                    if (peerFingerprint != null && boundTo != null && !boundTo.equals(peerFingerprint)) {
+                        log.warn("Registration rejected for {}: device is bound to a different certificate",
+                                request.getIpAddress());
+                        return rejected("Device is bound to a different Satellite certificate");
+                    }
+                    return admit(device, request, peerFingerprint);
+                });
+    }
+
+    private Uni<RegisterResponse> admit(DiscoveredDevice device, RegisterRequest request, String peerFingerprint) {
+        if (device.getStatus() != DiscoveryStatus.APPROVED && device.getStatus() != DiscoveryStatus.MANAGED) {
+            log.warn("Registration rejected for {}: device status is {}", request.getIpAddress(), device.getStatus());
+            return rejected("Device not approved for registration. Current status: " + device.getStatus());
+        }
+        device.setStatus(DiscoveryStatus.MANAGED);
+        device.setClaimStatus(ClaimStatus.MANAGED);
+        if (device.getCredentialProfileId() != null && !device.getCredentialProfileId().isBlank()) {
+            device.setAuthStatus(AuthStatus.AUTHENTICATED);
+        }
+        if (peerFingerprint != null) {
+            device.setSatelliteCertFingerprint(peerFingerprint);
+            if (request.getIpAddress() != null && !request.getIpAddress().isBlank()) {
+                device.setIpAddress(request.getIpAddress());
+            }
+        }
+        return persistSatelliteRegistration(request, peerFingerprint);
+    }
+
+    private static Uni<RegisterResponse> rejected(String message) {
+        return Uni.createFrom().failure(new StatusRuntimeException(Status.UNAUTHENTICATED.withDescription(message)));
+    }
+
+    private Uni<RegisterResponse> persistSatelliteRegistration(RegisterRequest request, String peerFingerprint) {
+        if (peerFingerprint == null) {
+            return persistSatellite(request, null, null);
+        }
+        return Satellite.findByCertFingerprint(peerFingerprint)
+                .flatMap(existing -> persistSatellite(request, peerFingerprint, existing));
+    }
+
+    private Uni<RegisterResponse> persistSatellite(RegisterRequest request, String peerFingerprint, Satellite existing) {
+        Satellite satellite = existing != null ? existing : new Satellite(
+                UUID.randomUUID().toString(),
                 request.getClusterId(),
                 request.getHostname(),
                 request.getIpAddress(),
                 request.getOsVersion(),
                 request.getAgentVersion());
+        String id = satellite.getId();
+        if (existing != null) {
+            log.info("Satellite {} reconnected with the same certificate; reusing identity", id);
+            satellite.setClusterId((request.getClusterId() == null || request.getClusterId().isBlank())
+                    ? "default" : request.getClusterId());
+            satellite.setHostname(request.getHostname());
+            satellite.setIpAddress(request.getIpAddress());
+            satellite.setOsVersion(request.getOsVersion());
+            satellite.setAgentVersion(request.getAgentVersion());
+            satellite.setStatus("ONLINE");
+        }
+        satellite.setCertFingerprint(peerFingerprint);
         satellite.setLastHeartbeat(LocalDateTime.now());
 
         if (request.hasHardware()) {

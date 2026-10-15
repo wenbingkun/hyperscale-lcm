@@ -74,8 +74,10 @@ public class LcmGrpcService implements LcmService {
      */
     @Override
     public Uni<RegisterResponse> registerSatellite(RegisterRequest request) {
-        log.info("Received registration request from host: {}", request.getHostname());
-        return satelliteRegistrationService.register(request, requireApproval);
+        String peerFingerprint = PeerIdentityInterceptor.PEER_FINGERPRINT.get();
+        log.info("Received registration request from host: {} (peer fingerprint: {})", request.getHostname(),
+                peerFingerprint);
+        return satelliteRegistrationService.register(request, requireApproval, peerFingerprint);
     }
 
     /**

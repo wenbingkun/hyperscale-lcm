@@ -20,7 +20,8 @@ public class StreamRegistry {
         LOG.infof("✅ Satellite connected to stream: %s", satelliteId);
 
         emitter.onTermination(() -> {
-            emitters.remove(satelliteId);
+            // A late close from an old connection must not remove its replacement.
+            emitters.remove(satelliteId, emitter);
             LOG.infof("❌ Satellite disconnected from stream: %s", satelliteId);
         });
     }

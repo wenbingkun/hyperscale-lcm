@@ -33,6 +33,9 @@ public class Satellite extends PanacheEntityBase {
 
     private String status; // ONLINE, OFFLINE
 
+    /** 客户端证书 SHA-256 指纹；同指纹重连复用本记录 */
+    private String certFingerprint;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
@@ -60,6 +63,10 @@ public class Satellite extends PanacheEntityBase {
      */
     public static Uni<Satellite> findByIdReactive(String id) {
         return findById(id);
+    }
+
+    public static Uni<Satellite> findByCertFingerprint(String fingerprint) {
+        return find("certFingerprint", fingerprint).firstResult();
     }
 
     /**

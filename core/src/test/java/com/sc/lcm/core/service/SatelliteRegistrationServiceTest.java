@@ -132,6 +132,72 @@ class SatelliteRegistrationServiceTest {
         Mockito.verifyNoMoreInteractions(registrationNodeSpecs);
     }
 
+    @Test
+    void registerBindsCertificateAndRecoversIdentityAfterIpChange() throws Throwable {
+        persistDevice("10.0.1.1", DiscoveryStatus.APPROVED);
+
+        RegisterResponse first = VertxContextSupport.subscribeAndAwait(
+                () -> satelliteRegistrationService.register(baseRequest("sat-a", "10.0.1.1"), true, "fp-a"));
+        RegisterResponse second = VertxContextSupport.subscribeAndAwait(
+                () -> satelliteRegistrationService.register(baseRequest("sat-a", "10.0.9.9"), true, "fp-a"));
+
+        assertEquals(first.getAssignedId(), second.getAssignedId());
+        DiscoveredDevice device = VertxContextSupport.subscribeAndAwait(
+                () -> Panache.withSession(() -> DiscoveredDevice.findBySatelliteCertFingerprint("fp-a")));
+        assertEquals("10.0.9.9", device.getIpAddress());
+        assertEquals(DiscoveryStatus.MANAGED, device.getStatus());
+        Long satellites = VertxContextSupport.subscribeAndAwait(() -> Panache.withSession(() -> Satellite.count()));
+        assertEquals(1L, satellites);
+    }
+
+    @Test
+    void registerRejectsOtherCertificateClaimingBoundDeviceIp() throws Throwable {
+        persistDevice("10.0.2.1", DiscoveryStatus.APPROVED);
+        VertxContextSupport.subscribeAndAwait(
+                () -> satelliteRegistrationService.register(baseRequest("sat-a", "10.0.2.1"), true, "fp-a"));
+
+        StatusRuntimeException exception = assertThrows(StatusRuntimeException.class,
+                () -> VertxContextSupport.subscribeAndAwait(
+                        () -> satelliteRegistrationService.register(baseRequest("evil", "10.0.2.1"), true, "fp-b")));
+
+        assertEquals(Status.Code.UNAUTHENTICATED, exception.getStatus().getCode());
+    }
+
+    @Test
+    void registerRejectsBoundCertificateWhenDeviceIsNoLongerApproved() throws Throwable {
+        persistDevice("10.0.3.1", DiscoveryStatus.APPROVED);
+        VertxContextSupport.subscribeAndAwait(
+                () -> satelliteRegistrationService.register(baseRequest("sat-a", "10.0.3.1"), true, "fp-a"));
+        VertxContextSupport.subscribeAndAwait(() -> Panache.withTransaction(
+                () -> DiscoveredDevice.<DiscoveredDevice>find("ipAddress", "10.0.3.1").firstResult()
+                        .invoke(d -> d.setStatus(DiscoveryStatus.REJECTED)).replaceWithVoid()));
+
+        StatusRuntimeException exception = assertThrows(StatusRuntimeException.class,
+                () -> VertxContextSupport.subscribeAndAwait(
+                        () -> satelliteRegistrationService.register(baseRequest("sat-a", "10.0.3.1"), true, "fp-a")));
+
+        assertEquals(Status.Code.UNAUTHENTICATED, exception.getStatus().getCode());
+    }
+
+    @Test
+    void registerRejectsUnapprovedDeviceEvenWithValidCertificate() {
+        StatusRuntimeException exception = assertThrows(StatusRuntimeException.class,
+                () -> VertxContextSupport.subscribeAndAwait(
+                        () -> satelliteRegistrationService.register(baseRequest("sat-x", "10.0.4.1"), true, "fp-x")));
+
+        assertEquals(Status.Code.UNAUTHENTICATED, exception.getStatus().getCode());
+    }
+
+    private void persistDevice(String ip, DiscoveryStatus status) throws Throwable {
+        DiscoveredDevice device = new DiscoveredDevice();
+        device.setIpAddress(ip);
+        device.setDiscoveryMethod(DiscoveryMethod.AGENT);
+        device.setStatus(status);
+        device.setClaimStatus(ClaimStatus.CLAIMED);
+        device.setAuthStatus(AuthStatus.PENDING);
+        VertxContextSupport.subscribeAndAwait(() -> Panache.withTransaction(() -> device.persist().replaceWithVoid()));
+    }
+
     private RegisterRequest baseRequest(String hostname, String ipAddress) {
         return RegisterRequest.newBuilder()
                 .setHostname(hostname)

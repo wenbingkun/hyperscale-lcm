@@ -45,6 +45,21 @@ Core 与 Satellite 共用同一个证书目录或 Kubernetes Secret，必须包�
 
 生产环境应由内部 CA 或证书平台签发同名文件，并保持文件名不变。
 
+### 2.3 Satellite 身份（每个 Satellite 一张证书）
+
+Core 以 TLS 握手验证过的**客户端证书指纹（SHA-256）**识别 Satellite，不再只信任自报 IP：
+
+- 首次注册：设备须已被批准（APPROVED/MANAGED），仍按请求 IP 匹配设备，匹配成功后把证书指纹绑定到该设备，并记录到 `satellite.cert_fingerprint`。
+- 之后同一证书重连：不再依赖 IP——容器 IP 变化后仍识别为同一设备，复用同一个 Satellite ID，并更新记录的 IP。
+- 其他证书声称已绑定设备的 IP，或绑定设备被拒绝/退回非批准状态：注册被拒（`UNAUTHENTICATED`）。
+- 所以每个 Satellite 必须用各自的证书；多个 Satellite 共用 `client.pem` 会被视为同一身份。用现有 CA 为新 Satellite 签发：
+
+```bash
+./scripts/issue_satellite_cert.sh <name>   # 输出 certs/satellites/<name>/{client.pem,client.key,ca.pem} 与指纹
+```
+
+把该目录作为该 Satellite 的 `LCM_CERTS_DIR`。尚未做：证书吊销/轮换。拒绝绑定设备会阻止后续注册，但不会主动断开已有连接。清除 `satellite_cert_fingerprint` 只会解除绑定，不会吊销证书；设备仍获批准时，旧证书可再次绑定，不能用清除字段代替撤销准入。
+
 ---
 
 ## 3. docker-compose 单机路径
@@ -305,4 +320,5 @@ kubectl -n lcm delete pod -l app.kubernetes.io/name=hyperscale-lcm-satellite
 - Compose v2（v2.29.7 插件）实测：必填变量缺失负向渲染 exit 15 并指明变量；正向渲染 Satellite 目标 `lcm-core:8443`；preflight 在 v2 下通过，且隐藏 `docker-compose` v1 后仍通过。
 - Satellite 运行镜像缺少 `bash` 与 `ssh`（`command -v` 均为空），这是走查中 SHELL Job 返回 exit -1 的直接原因；SSH 执行方式在该镜像内也不可用。
 - 真实后端浏览器验收（SSH 任务，非 API mock）：`frontend/playwright.real.config.ts` + `frontend/e2e-real/ssh-task.real.spec.ts`，不属于默认 `npx playwright test`（mock 套件仍在 `frontend/e2e`）。前置：Core(含 `LCM_SSH_DEFAULT_USER`/`LCM_SSH_DEFAULT_KEY_REF`、dev 登录、`ALLOWED_ORIGINS` 含 `http://127.0.0.1:5173`)、Satellite（其自身 IP 对应的设备已批准）与带实验密钥的 sshd；运行 `LCM_REAL_TARGET_IP=<sshd IP> npx playwright test -c playwright.real.config.ts`。流程：登录 → Discovery 页批准目标（PENDING 时）→ Dashboard 选 SSH Maintenance + 已批准设备 → 作业详情页出现 Completed 与真实 `uname/df/free` 输出。本地一次通过（40s，目标为 Satellite 同机实验 sshd），库内审计为 JOB_SUBMITTED(admin)、JOB_SCHEDULED、JOB_COMPLETED。未纳入 GitHub CI（需要真实栈）。
+- Satellite 证书身份（M1 批 3，v0.1.1 本地构建，真实 mTLS + 真实 PostgreSQL，grpcurl 以两张 CA 签发的证书实测）：alpha 首次注册绑定批准设备；alpha 换 IP 再注册 → 同一 `assignedId`，设备 IP 更新；beta 声称 alpha 的 IP → `Device is bound to a different Satellite certificate`；beta 使用未知 IP / PENDING 设备 → 拒绝；客户端伪造 `x-lcm-peer-fingerprint` 头无效（仍按握手证书识别）；无客户端证书在 TLS 层失败，8080 明文 gRPC → PermissionDenied。Core `gradlew check` 172 测试通过。
 - 未验证：k8s 清单在真实集群上的行为；GitHub CI 全链路。

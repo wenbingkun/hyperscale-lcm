@@ -47,6 +47,9 @@ public class DiscoveredDevice extends PanacheEntityBase {
     /** 主机名 (通过 DNS 反向解析) */
     private String hostname;
 
+    /** 绑定的 Satellite 客户端证书 SHA-256 指纹（首次经批准注册时绑定） */
+    private String satelliteCertFingerprint;
+
     /** 发现方式: SCAN, DHCP, MANUAL */
     @Enumerated(EnumType.STRING)
     private DiscoveryMethod discoveryMethod;
@@ -174,6 +177,10 @@ public class DiscoveredDevice extends PanacheEntityBase {
 
     public static Uni<List<DiscoveredDevice>> findPending() {
         return list("status", DiscoveryStatus.PENDING);
+    }
+
+    public static Uni<DiscoveredDevice> findBySatelliteCertFingerprint(String fingerprint) {
+        return find("satelliteCertFingerprint", fingerprint).firstResult();
     }
 
     public static Uni<DiscoveredDevice> findByIp(String ipAddress) {
