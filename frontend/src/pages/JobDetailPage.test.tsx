@@ -86,7 +86,7 @@ describe('JobDetailPage', () => {
         );
 
         await waitFor(() => expect(mockedFetchJobs).toHaveBeenCalledTimes(2));
-        expect(screen.getByText('Completed')).toBeInTheDocument();
+        expect(await screen.findByText('Completed')).toBeInTheDocument();
         expect(screen.getByText('0')).toBeInTheDocument();
     });
 

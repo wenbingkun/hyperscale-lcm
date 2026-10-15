@@ -33,7 +33,7 @@ class JobDispatcherTest {
         Job job = new Job("job-123", 4, 8, 1, "A100");
         job.setAssignedNode(new Node("node-1", 32, 128, 4, "A100"));
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry).sendCommand(
                 eq("node-1"),
@@ -48,7 +48,7 @@ class JobDispatcherTest {
         Job job = new Job("job-node-id", 4, 8, 1, "A100");
         job.setAssignedNodeId("node-from-kafka");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry).sendCommand(
                 eq("node-from-kafka"),
@@ -65,7 +65,7 @@ class JobDispatcherTest {
         job.setExecutionType(ExecutionType.DOCKER);
         job.setExecutionPayload("nvcr.io/nvidia/pytorch:24.01-py3");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry).sendCommand(
                 eq("node-2"),
@@ -82,7 +82,7 @@ class JobDispatcherTest {
         job.setExecutionType(ExecutionType.SHELL);
         job.setExecutionPayload("echo shell dispatch");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry).sendCommand(
                 eq("node-3"),
@@ -99,7 +99,7 @@ class JobDispatcherTest {
         job.setExecutionType(ExecutionType.SSH);
         job.setExecutionPayload("{\"host\":\"10.0.0.8\",\"user\":\"root\",\"password\":\"secret\",\"command\":\"hostname\"}");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry).sendCommand(
                 eq("node-4"),
@@ -138,7 +138,7 @@ class JobDispatcherTest {
         job.setTargetDeviceId("dev-1");
         job.setTargetHost("10.0.0.5");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry, never()).sendCommand(
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), anyMap());
@@ -159,9 +159,45 @@ class JobDispatcherTest {
         job.setTargetDeviceId("dev-1");
         job.setTargetHost("10.0.0.5");
 
-        dispatcher.dispatch(job);
+        dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5));
 
         verify(streamRegistry).sendCommand(
                 eq("node-1"), eq("job-ssh-ok"), eq("EXEC_SSH"), eq("{\"host\":\"10.0.0.5\"}"), anyMap());
     }
+    @Test
+    void dispatchCompletionWaitsForTargetVerification() throws Exception {
+        SshTargetVerifier verifier = Mockito.mock(SshTargetVerifier.class);
+        java.util.concurrent.CompletableFuture<String> verification = new java.util.concurrent.CompletableFuture<>();
+        Mockito.when(verifier.findMismatch(Mockito.any()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().completionStage(verification));
+        dispatcher.sshTargetVerifier = verifier;
+        Job job = new Job("job-delayed-check", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+        job.setExecutionType(ExecutionType.SSH);
+        job.setTargetDeviceId("dev-1");
+
+        var completion = dispatcher.dispatch(job).subscribeAsCompletionStage();
+        org.junit.jupiter.api.Assertions.assertFalse(completion.toCompletableFuture().isDone());
+        verification.complete(null);
+        completion.toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS);
+        verify(streamRegistry).sendCommand(eq("node-1"), eq(job.getId()), eq("EXEC_SSH"), Mockito.isNull(), anyMap());
+    }
+
+    @Test
+    void dispatchPropagatesVerificationFailureWithoutSending() {
+        SshTargetVerifier verifier = Mockito.mock(SshTargetVerifier.class);
+        Mockito.when(verifier.findMismatch(Mockito.any()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().failure(new IllegalStateException("database unavailable")));
+        dispatcher.sshTargetVerifier = verifier;
+        Job job = new Job("job-check-error", 1, 1, 0, null);
+        job.setAssignedNodeId("node-1");
+        job.setExecutionType(ExecutionType.SSH);
+        job.setTargetDeviceId("dev-1");
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> dispatcher.dispatch(job).await().atMost(java.time.Duration.ofSeconds(5)));
+        verify(streamRegistry, never()).sendCommand(
+                Mockito.anyString(), Mockito.anyString(), Mockito.anyString(), Mockito.any(), anyMap());
+    }
+
 }

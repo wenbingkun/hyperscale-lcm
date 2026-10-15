@@ -9,6 +9,7 @@ import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.Logger;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.context.Context;
+import io.smallrye.mutiny.Uni;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,33 +39,33 @@ public class JobDispatcher {
      * gRPC.
      */
     @Incoming("job-queue-in")
-    public void dispatch(Job job) {
+    public Uni<Void> dispatch(Job job) {
         String nodeId = resolveTargetNodeId(job);
         if (job == null || nodeId == null) {
             LOG.warn("Ignoring invalid job from Kafka because no assigned node information was present");
-            return;
+            return Uni.createFrom().voidItem();
         }
 
         LOG.infof("📨 [Kafka -> Dispatcher] Processing Job %s for Node %s", job.getId(), nodeId);
 
         if (job.getExecutionType() == ExecutionType.SSH && job.getTargetDeviceId() != null) {
-            sshTargetVerifier.findMismatch(job).subscribe().with(
-                    mismatch -> {
+            // Complete message processing only after verification and any refusal are recorded.
+            return sshTargetVerifier.findMismatch(job)
+                    .chain(mismatch -> {
                         if (mismatch == null) {
                             send(job, nodeId);
-                        } else {
-                            LOG.warnf("Refusing to dispatch SSH job %s: %s", job.getId(), mismatch);
-                            jobExecutionService.processJobStatusCallback(new JobStatusCallback(
-                                    job.getId(), nodeId, "FAILED", -1, mismatch, null, null, 0,
-                                    LocalDateTime.now(), null)).subscribe().with(
-                                    v -> { },
-                                    e -> LOG.errorf(e, "Failed to record dispatch refusal for job %s", job.getId()));
+                            return Uni.createFrom().voidItem();
                         }
-                    },
-                    e -> LOG.errorf(e, "Target verification failed for job %s; not dispatching", job.getId()));
-            return;
+                        LOG.warnf("Refusing to dispatch SSH job %s: %s", job.getId(), mismatch);
+                        return jobExecutionService.processJobStatusCallback(new JobStatusCallback(
+                                job.getId(), nodeId, "FAILED", -1, mismatch, null, null, 0,
+                                LocalDateTime.now(), null));
+                    })
+                    .onFailure().invoke(e -> LOG.errorf(e,
+                            "Target verification or refusal recording failed for job %s; not dispatching", job.getId()));
         }
         send(job, nodeId);
+        return Uni.createFrom().voidItem();
     }
 
     private void send(Job job, String nodeId) {
