@@ -111,3 +111,4 @@ certs/
 helm/*/charts/
 helm/*/Chart.lock
 frontend/test-results-real/
+lab/data/

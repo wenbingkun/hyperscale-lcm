@@ -13,6 +13,7 @@ The format follows Keep a Changelog, and this project uses semver-style release 
 
 ### Changed
 
+- Added a single-host lab path (`docker-compose.lab.yml`, `scripts/lab_prepare.sh`, `scripts/lab_bootstrap.sh`, `documentation/runbooks/lab-quickstart.md`): dev login, fixed-address SSH target, per-Satellite certificate. The real-backend Playwright config can target a deployed frontend via `LCM_REAL_BASE_URL`.
 - Satellite no longer starts PXE services or network discovery (DHCP listener / ARP scan) by default; opt in with `LCM_PXE_ENABLED=true` / `LCM_DISCOVERY_ENABLED=true`. SSH task jobs are re-checked right before dispatch (device still approved, address unchanged, payload host matches) and are failed instead of sent when the target changed.
 - Satellite registration is now keyed by the TLS client certificate fingerprint: the first approved registration binds it to the device, later registrations with the same certificate keep the approval and the Satellite ID across IP changes, and other certificates are rejected. Added `scripts/issue_satellite_cert.sh` and Flyway V2.9.0 (nullable columns).
 - Frontend: job form can submit an SSH maintenance task against an approved device; the job detail page shows target and result output as plain text. Added an opt-in real-backend Playwright acceptance (`playwright.real.config.ts`).
