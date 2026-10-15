@@ -269,9 +269,9 @@ public class JobExecutionService {
                                                 finalCallbackStatus, callback.jobId(), job.getStatus(), decision);
                                     }
                                     if (decision == CallbackDecision.IGNORE_FINAL
-                                            && job.getStatus() == JobStatus.CANCELLED
-                                            && isTerminal(finalCallbackStatus)) {
-                                        return recordLateResultAfterCancel(job, finalCallbackStatus, callback)
+                                            && isTerminal(finalCallbackStatus)
+                                            && job.getStatus() != finalCallbackStatus) {
+                                        return recordLateResultIgnored(job, finalCallbackStatus, callback)
                                                 .replaceWith((JobStatusSnapshot) null);
                                     }
                                     return Uni.createFrom().nullItem();
@@ -385,9 +385,12 @@ public class JobExecutionService {
         return CallbackDecision.APPLY;
     }
 
-    private Uni<Void> recordLateResultAfterCancel(Job job, JobStatus reported, JobStatusCallback callback) {
-        String details = String.format("{\"action\":\"late_result_after_cancel\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
-                reported, callback.exitCode());
+    /** A conflicting result arrived after a final state (cancel, manual resolve, sweeper): keep it as audit evidence. */
+    private Uni<Void> recordLateResultIgnored(Job job, JobStatus reported, JobStatusCallback callback) {
+        String action = job.getStatus() == JobStatus.CANCELLED ? "late_result_after_cancel" : "late_result_ignored";
+        String details = String.format(
+                "{\"action\":\"%s\",\"currentStatus\":\"%s\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
+                action, job.getStatus(), reported, callback.exitCode());
         return auditService.logEvent(com.sc.lcm.core.domain.AuditLog.AuditEventType.JOB_CANCELLED, "JOB", job.getId(),
                 "SYSTEM", job.getTenantId(), details);
     }

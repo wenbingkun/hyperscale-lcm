@@ -227,4 +227,19 @@ class JobCancelAndCallbackGuardTest {
                 .body(java.util.Map.of("outcome", "COMPLETED")).post("/api/jobs/no-such/resolve")
                 .then().statusCode(404);
     }
+
+    @Test
+    void resultArrivingAfterManualResolutionIsKeptAsAuditEvidence() throws Throwable {
+        String id = persistJob(JobStatus.UNKNOWN);
+        given().header("Authorization", "Bearer " + token).contentType(ContentType.JSON)
+                .body(java.util.Map.of("outcome", "FAILED", "note", "believed not executed"))
+                .post("/api/jobs/" + id + "/resolve").then().statusCode(200);
+        callback(id, "COMPLETED", 0);
+
+        assertEquals(JobStatus.FAILED, load(id).getStatus());
+        List<AuditLog> audit = VertxContextSupport.subscribeAndAwait(
+                () -> Panache.withSession(() -> AuditLog.findByResourceId(id)));
+        assertTrue(audit.stream().anyMatch(a -> a.getDetails() != null
+                && a.getDetails().contains("late_result_ignored") && a.getDetails().contains("COMPLETED")));
+    }
 }
