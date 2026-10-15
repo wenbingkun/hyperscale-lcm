@@ -1,6 +1,6 @@
 # Hyperscale LCM 项目现状 (Project Status)
 
-> **Last Updated:** 2026-06-14 (Offline/restricted-network release bundle runbook and helper script added to reduce the remaining Deployment Closure Step 5 registry-access blocker)
+> **Last Updated:** 2026-10-16 (PR #34 软件执行、恢复与容量边界复审；实体硬件与生产验收仍未完成)
 > **Maintenance:** 本文件为**滚动更新**的唯一现状快照，禁止再新增带日期后缀的 audit/analysis 文档。后续阶段进展应直接在本文件内更新章节并刷新顶部日期。
 >
 > **定位与 DEVELOPMENT_ROADMAP.md 的关系：**
@@ -145,7 +145,7 @@ Prometheus 指标、Grafana 仪表盘、Jaeger / OpenTelemetry 接线、Satellit
 | 能力 | 代码存在 | fixture / 单测回归 | 真实软件环境验收（lab 栈、真实 PG/Kafka/Redis/sshd） | 虚拟硬件 | 实体硬件 |
 |------|:---:|:---:|:---:|:---:|:---:|
 | SSH 任务、证书指纹身份、状态护栏、持久派发与 UNKNOWN | ✅ | ✅ | ✅ | — | — |
-| Docker 作业（等待退出、超时、清理）、命令去重、终态补报 | ✅ | ✅ | 部分（真实 Docker 直连；lab 端到端未做） | — | — |
+| Docker 作业（等待退出、超时、清理）、命令去重、终态补报 | ✅ | ✅ | 部分（真实 Docker 直连退出/超时/输出；Docker 退出 3 与 Core 重启终态补报端到端通过） | — | — |
 | 容量感知放置、PENDING 重试/超时 | ✅ | ✅ | 见 §5.3 记录 | — | — |
 | Redfish / BMC（OpenBMC、iDRAC、iLO、XCC） | ✅ | ✅（脱敏响应夹具） | — | — | ❌ 未做 |
 | PXE / iPXE 重装 | ✅ | 部分 | ❌ | ❌ | ❌ |

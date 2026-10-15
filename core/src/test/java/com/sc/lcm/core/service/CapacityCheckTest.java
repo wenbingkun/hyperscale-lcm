@@ -51,4 +51,24 @@ class CapacityCheckTest {
         assertTrue(CapacityCheck.mismatch(n, CapacityCheck.Usage.NONE, job(1, 64, 0, null)).contains("memory"));
         assertTrue(CapacityCheck.mismatch(n, CapacityCheck.Usage.NONE, job(1, 1, 3, null)).contains("GPUs"));
     }
+
+    @Test
+    void rejectsNegativeResourceRequests() {
+        assertNotNull(CapacityCheck.mismatch(node(), CapacityCheck.Usage.NONE, job(-1, 1, 0, null)));
+        assertNotNull(CapacityCheck.mismatch(node(), CapacityCheck.Usage.NONE, job(1, -1, 0, null)));
+        assertNotNull(CapacityCheck.mismatch(node(), CapacityCheck.Usage.NONE, job(1, 1, -1, null)));
+    }
+
+    @Test
+    void overflowCannotTurnOccupiedMemoryIntoFreeCapacity() {
+        CapacityCheck.Usage used = CapacityCheck.Usage.of(
+                List.of(job(0, Long.MAX_VALUE, 0, null), job(0, 1, 0, null)));
+        assertNotNull(CapacityCheck.mismatch(node(), used, job(1, 1, 0, null)));
+    }
+
+    @Test
+    void legacyNegativeRequestsCannotCreditCapacity() {
+        CapacityCheck.Usage used = CapacityCheck.Usage.of(List.of(job(-8, 0, 0, null), job(8, 0, 0, null)));
+        assertNotNull(CapacityCheck.mismatch(node(), used, job(8, 1, 0, null)));
+    }
 }

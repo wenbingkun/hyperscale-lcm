@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -24,18 +25,26 @@ func injectContext(ctx context.Context) map[string]string {
 	return carrier
 }
 
+type dockerRunner interface {
+	RunContainer(context.Context, string, []string, time.Duration) (string, int, error)
+}
+
 // agent carries per-process command state shared across handled commands.
 type agent struct {
 	satelliteID   string
-	dockerExec    *docker.Executor
+	dockerExec    dockerRunner
 	dockerTimeout time.Duration
 	ledger        *commandLedger
 	outbox        *outbox
 }
 
 func newAgent(satelliteID string, dockerExec *docker.Executor, dockerTimeout time.Duration) *agent {
-	return &agent{satelliteID: satelliteID, dockerExec: dockerExec, dockerTimeout: dockerTimeout,
+	a := &agent{satelliteID: satelliteID, dockerTimeout: dockerTimeout,
 		ledger: newCommandLedger(defaultLedgerSize), outbox: newOutbox(defaultOutboxSize)}
+	if dockerExec != nil {
+		a.dockerExec = dockerExec
+	}
+	return a
 }
 
 func (a *agent) send(stream pb.LcmService_ConnectStreamClient, update *pb.JobStatusUpdate) error {
@@ -232,6 +241,11 @@ func (a *agent) handleCommand(resp *pb.StreamResponse, stream pb.LcmService_Conn
 			log.Printf("Docker execution failed: %v", err)
 			status = pb.JobStatus_FAILED
 			message = strings.TrimSpace(err.Error() + "\n" + output)
+			var cleanup *docker.CleanupError
+			if errors.As(err, &cleanup) {
+				// No safe final result: retain Core's reservation until its sweeper marks UNKNOWN.
+				status = pb.JobStatus_RUNNING
+			}
 		} else if exitCode != 0 {
 			status = pb.JobStatus_FAILED
 		}

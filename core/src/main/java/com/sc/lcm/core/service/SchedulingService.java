@@ -73,9 +73,9 @@ public class SchedulingService {
                     for (Node node : solution.getNodeList()) {
                         CapacityCheck.Usage used = CapacityCheck.Usage.of(placed.stream()
                                 .filter(j -> node.getId().equals(j.getAssignedNodeId())).toList());
-                        node.setCpuCores(Math.max(0, node.getCpuCores() - used.cpu()));
+                        node.setCpuCores((int) Math.max(0L, node.getCpuCores() - used.cpu()));
                         node.setMemoryGb(Math.max(0, node.getMemoryGb() - used.memoryGb()));
-                        node.setGpuCount(Math.max(0, node.getGpuCount() - used.gpu()));
+                        node.setGpuCount((int) Math.max(0L, node.getGpuCount() - used.gpu()));
                     }
                     return solution;
                 });

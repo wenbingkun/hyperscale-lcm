@@ -85,4 +85,58 @@ class JobTenantBoundaryTest {
         given().header("Authorization", "Bearer " + login("admin", "admin123", "default")).get("/api/jobs/" + id)
                 .then().statusCode(200);
     }
+
+    private String anotherTenantJob(String status) throws Exception {
+        String id = submit(login("operator", "operator123", "tenant-a"), "tenant-a", 201);
+        try (Connection c = dataSource.getConnection();
+                PreparedStatement q = c.prepareStatement("UPDATE job SET status = ? WHERE id = ?")) {
+            q.setString(1, status);
+            q.setString(2, id);
+            q.executeUpdate();
+        }
+        return id;
+    }
+
+    @Test
+    void otherTenantCannotCancelAJob() throws Exception {
+        String id = anotherTenantJob("PENDING");
+        given().auth().oauth2(login("operator", "operator123", "tenant-b"))
+                .delete("/api/jobs/" + id).then().statusCode(404);
+        given().auth().oauth2(login("operator", "operator123", "tenant-a"))
+                .get("/api/jobs/" + id).then().body("status", org.hamcrest.Matchers.equalTo("PENDING"));
+    }
+
+    @Test
+    void otherTenantCannotResolveUnknownOrReleaseItsCapacity() throws Exception {
+        String id = anotherTenantJob("UNKNOWN");
+        given().auth().oauth2(login("operator", "operator123", "tenant-b"))
+                .contentType(ContentType.JSON).body(Map.of("outcome", "COMPLETED", "note", "foreign"))
+                .post("/api/jobs/" + id + "/resolve").then().statusCode(404);
+        given().auth().oauth2(login("operator", "operator123", "tenant-a"))
+                .get("/api/jobs/" + id).then().body("status", org.hamcrest.Matchers.equalTo("UNKNOWN"));
+    }
+
+    @Test
+    void statusEndpointDoesNotRevealAnotherTenantsJob() throws Exception {
+        String id = anotherTenantJob("PENDING");
+        given().auth().oauth2(login("operator", "operator123", "tenant-b"))
+                .get("/api/jobs/" + id + "/status").then().statusCode(404);
+    }
+
+    @Test
+    void statsOnlyCountTheCallersTenant() throws Exception {
+        anotherTenantJob("PENDING");
+        given().auth().oauth2(login("operator", "operator123", "tenant-b"))
+                .get("/api/jobs/stats").then().statusCode(200)
+                .body("pending", org.hamcrest.Matchers.equalTo(0));
+    }
+
+    @Test
+    void negativeResourcesAreRejectedBeforePersistence() {
+        given().auth().oauth2(login("operator", "operator123", "tenant-a"))
+                .contentType(ContentType.JSON)
+                .body(new JobResource.JobRequest("negative", "d", -1, 1, 0, null, false, 0,
+                        "tenant-a", "default", "SHELL", "true"))
+                .post("/api/jobs").then().statusCode(400);
+    }
 }

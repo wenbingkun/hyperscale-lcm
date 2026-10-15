@@ -23,10 +23,19 @@ type fakeAPI struct {
 	logs                                  string
 	calls                                 []string
 	removed                               bool
+	pullDelay                             time.Duration
+	removeErr                             error
 }
 
-func (f *fakeAPI) ImagePull(context.Context, string, types.ImagePullOptions) (io.ReadCloser, error) {
+func (f *fakeAPI) ImagePull(ctx context.Context, _ string, _ types.ImagePullOptions) (io.ReadCloser, error) {
 	f.calls = append(f.calls, "pull")
+	if f.pullDelay > 0 {
+		select {
+		case <-time.After(f.pullDelay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return io.NopCloser(strings.NewReader("")), f.pullErr
 }
 func (f *fakeAPI) ContainerCreate(context.Context, *container.Config, *container.HostConfig, *network.NetworkingConfig, *specs.Platform, string) (container.ContainerCreateCreatedBody, error) {
@@ -57,7 +66,7 @@ func (f *fakeAPI) ContainerStop(context.Context, string, *time.Duration) error {
 }
 func (f *fakeAPI) ContainerRemove(context.Context, string, types.ContainerRemoveOptions) error {
 	f.removed = true
-	return nil
+	return f.removeErr
 }
 
 func TestRunContainerExitCodes(t *testing.T) {
@@ -112,5 +121,26 @@ func TestRunContainerOutputKeepsTail(t *testing.T) {
 	out, _, _ := (&Executor{cli: f}).RunContainer(context.Background(), "img", nil, time.Second)
 	if !strings.HasSuffix(out, "TAIL") || !strings.Contains(out, "truncated") || len(out) > MaxOutputBytes+100 {
 		t.Fatalf("len=%d", len(out))
+	}
+}
+
+func TestRunContainerTimeoutIncludesImagePull(t *testing.T) {
+	f := &fakeAPI{pullDelay: 200 * time.Millisecond}
+	started := time.Now()
+	_, code, err := (&Executor{cli: f}).RunContainer(context.Background(), "img", nil, 25*time.Millisecond)
+	if err == nil || code != -1 || time.Since(started) > 150*time.Millisecond {
+		t.Fatalf("timeout excluded pull: code=%d err=%v elapsed=%s", code, err, time.Since(started))
+	}
+	if len(f.calls) != 1 {
+		t.Fatalf("created a container after pull timeout: %v", f.calls)
+	}
+}
+
+func TestRunContainerCleanupFailureCannotReportSuccess(t *testing.T) {
+	f := &fakeAPI{removeErr: errors.New("remove denied")}
+	_, _, err := (&Executor{cli: f}).RunContainer(context.Background(), "img", nil, time.Second)
+	var cleanup *CleanupError
+	if err == nil || !errors.As(err, &cleanup) || !strings.Contains(err.Error(), "remove denied") {
+		t.Fatalf("cleanup failure hidden: %v", err)
 	}
 }

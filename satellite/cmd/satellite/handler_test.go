@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"github.com/sc-lcm/satellite/pkg/docker"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -94,5 +97,29 @@ func TestDockerUnavailableFails(t *testing.T) {
 	a.handleCommand(&pb.StreamResponse{CommandId: "job-3", CommandType: "EXEC_DOCKER", Payload: "alpine"}, s)
 	if got := s.terminals(); len(got) != 1 || got[0].Status != pb.JobStatus_FAILED {
 		t.Fatalf("got %v", got)
+	}
+}
+
+type uncertainDocker struct{ calls int }
+
+func (d *uncertainDocker) RunContainer(context.Context, string, []string, time.Duration) (string, int, error) {
+	d.calls++
+	return "partial", -1, &docker.CleanupError{Cause: errors.New("stop and remove denied")}
+}
+
+func TestUnconfirmedDockerCleanupDoesNotReleaseCapacityOrReExecute(t *testing.T) {
+	runner := &uncertainDocker{}
+	a := newAgent("sat", nil, time.Second)
+	a.dockerExec = runner
+	stream := &fakeStream{}
+	cmd := &pb.StreamResponse{CommandId: "uncertain-cleanup", CommandType: "EXEC_DOCKER", Payload: "alpine"}
+	a.handleCommand(cmd, stream)
+	a.handleCommand(cmd, stream)
+	if len(stream.terminals()) != 0 || runner.calls != 1 {
+		t.Fatalf("unsafe final status or re-execution: terminal=%v calls=%d", stream.terminals(), runner.calls)
+	}
+	last := stream.sent[len(stream.sent)-1]
+	if last.Status != pb.JobStatus_RUNNING || !strings.Contains(last.Message, "remove denied") {
+		t.Fatalf("uncertain cleanup must retain RUNNING for the Core sweeper: %v", last)
 	}
 }

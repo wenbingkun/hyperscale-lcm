@@ -159,6 +159,14 @@ public class JobExecutionService {
             return new ScheduledDispatchResult(false, null);
         }
 
+        // Retries may deliver an older solver result after another result already reserved this job.
+        // Placement is immutable once scheduled; moving it would skip reservation and orphan any in-flight command.
+        if (job.getStatus() == JobStatus.SCHEDULED
+                && !Objects.equals(job.getAssignedNodeId(), assignedNodeId)) {
+            log.info("Ignoring stale placement of scheduled job {} onto {}", jobId, assignedNodeId);
+            return new ScheduledDispatchResult(false, null);
+        }
+
         boolean updated = false;
         if (job.getStatus() == JobStatus.PENDING) {
             job.setStatus(JobStatus.SCHEDULED);

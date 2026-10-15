@@ -129,4 +129,17 @@ class SchedulingCapacityTest {
         assertEquals(JobDispatchSweeper.NO_CAPACITY_MESSAGE, failed.getErrorMessage());
         assertEquals(0, failed.getDispatchAttempt());
     }
+
+    @Test
+    void lateSolverResultCannotMoveAReservationToASaturatedNode() throws Throwable {
+        String first = node(8, 64, 0, null);
+        String saturated = node(8, 64, 0, null);
+        Job a = pending(8, 8, 0, null);
+        Job b = pending(8, 8, 0, null);
+        assertTrue(executionService.recordScheduledDispatchBlocking(a.getId(), first));
+        assertTrue(executionService.recordScheduledDispatchBlocking(b.getId(), saturated));
+
+        assertFalse(executionService.recordScheduledDispatchBlocking(a.getId(), saturated));
+        assertEquals(first, load(a.getId()).getAssignedNodeId());
+    }
 }

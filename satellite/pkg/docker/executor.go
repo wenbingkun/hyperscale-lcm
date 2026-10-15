@@ -3,6 +3,7 @@ package docker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -35,6 +36,12 @@ type api interface {
 	ContainerRemove(ctx context.Context, id string, options types.ContainerRemoveOptions) error
 }
 
+// CleanupError leaves container ownership unresolved; callers must retain capacity for manual verification.
+type CleanupError struct{ Cause error }
+
+func (e *CleanupError) Error() string { return e.Cause.Error() }
+func (e *CleanupError) Unwrap() error { return e.Cause }
+
 type Executor struct {
 	cli api
 }
@@ -51,8 +58,14 @@ func NewExecutor() (*Executor, error) {
 // its (tail-capped) combined output and real exit code. A non-nil error means
 // the run did not reach a normal exit (pull/create/start failure, timeout, or
 // lost wait); a non-zero exit code with nil error is a normal failed run. The
-// container is always removed.
-func (e *Executor) RunContainer(ctx context.Context, imageName string, cmd []string, timeout time.Duration) (string, int, error) {
+// container removal is attempted independently; CleanupError means ownership requires verification.
+func (e *Executor) RunContainer(ctx context.Context, imageName string, cmd []string, timeout time.Duration) (output string, exitCode int, runErr error) {
+	// Bound pull/create/start as well as wait; cleanup uses its own independent deadline.
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	log.Printf("🐳 Pulling image: %s", imageName)
 	reader, err := e.cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
 	if err != nil {
@@ -75,7 +88,8 @@ func (e *Executor) RunContainer(ctx context.Context, imageName string, cmd []str
 		cctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		if err := e.cli.ContainerRemove(cctx, id, types.ContainerRemoveOptions{Force: true}); err != nil {
-			log.Printf("⚠️ Failed to remove container %s: %v", id, err)
+			runErr = &CleanupError{Cause: errors.Join(runErr,
+				fmt.Errorf("container cleanup failed; state requires manual verification: %w", err))}
 		}
 	}()
 
@@ -84,15 +98,7 @@ func (e *Executor) RunContainer(ctx context.Context, imageName string, cmd []str
 		return "", -1, err
 	}
 
-	waitCtx := ctx
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		waitCtx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-	bodyCh, errCh := e.cli.ContainerWait(waitCtx, id, container.WaitConditionNotRunning)
-	var exitCode int
-	var runErr error
+	bodyCh, errCh := e.cli.ContainerWait(ctx, id, container.WaitConditionNotRunning)
 	select {
 	case body := <-bodyCh:
 		exitCode = int(body.StatusCode)
@@ -102,8 +108,8 @@ func (e *Executor) RunContainer(ctx context.Context, imageName string, cmd []str
 	case err := <-errCh:
 		runErr = e.interrupted(id, err)
 		exitCode = -1
-	case <-waitCtx.Done():
-		runErr = e.interrupted(id, waitCtx.Err())
+	case <-ctx.Done():
+		runErr = e.interrupted(id, ctx.Err())
 		exitCode = -1
 	}
 
