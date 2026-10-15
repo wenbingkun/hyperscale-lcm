@@ -251,7 +251,7 @@
 | 里程碑 | 状态 | 完成证据 |
 |---|---|---|
 | M0 基线与首批计划 | 进行中 | 基线：HEAD 9a43f8e、分支 fix/prod-grpc-mtls-dual-port、14 个已修改文件 + 2 个未跟踪（`.local/m0-baseline.patch`、`m0-status.txt`、`m0-untracked.sha256`）；已确认单写者；Codex 两轮意见见 `.local/claude-review-prod-grpc-mtls.md`，新 P1/P2 均已在工作区处理，待 Codex 复审；部署批次验证见 runbooks/deployment.md §5.3 |
-| M1 部署与真实主流程 | 进行中 | 批 1 #25（prod mTLS 双端口）、批 2 #26/#27/#28（真实 SSH 只读任务、审计、前端与真实后端验收）已合并；批 3 Satellite 证书身份见 runbooks/deployment.md §2.3 / §5.3；批 4：任务 6 PXE/发现默认关闭、任务 5 派发前复核 SSH 目标（执行端与目标的网络可达关系仍未建模，留给 M3/M4）；剩余：干净数据全流程验收记录 |
+| M1 部署与真实主流程 | 进行中 | 批 1 #25（prod mTLS 双端口）、批 2 #26/#27/#28（真实 SSH 只读任务、审计、前端与真实后端验收）已合并；批 3 Satellite 证书身份见 runbooks/deployment.md §2.3 / §5.3；批 4：任务 6 PXE/发现默认关闭、任务 5 派发前复核 SSH 目标（执行端与目标的网络可达关系仍未建模，留给 M3/M4）；批 5：单机实验环境干净启动验收见 lab-quickstart.md / deployment.md §5.3；批 5 已通过干净检出与空卷复审；M1 仍按原验收门槛收口，不关闭 Deployment Closure Step 5 |
 | M2 任务正确性与恢复 | 待执行 | — |
 | M3 调度边界与作品出口 A | 待执行 | — |
 | M4 团队试用出口 B | 待需求与环境确认 | — |
