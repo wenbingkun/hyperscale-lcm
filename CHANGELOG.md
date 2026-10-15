@@ -13,6 +13,7 @@ The format follows Keep a Changelog, and this project uses semver-style release 
 
 ### Changed
 
+- Satellite registration is now keyed by the TLS client certificate fingerprint: the first approved registration binds it to the device, later registrations with the same certificate keep the approval and the Satellite ID across IP changes, and other certificates are rejected. Added `scripts/issue_satellite_cert.sh` and Flyway V2.9.0 (nullable columns).
 - Frontend: job form can submit an SSH maintenance task against an approved device; the job detail page shows target and result output as plain text. Added an opt-in real-backend Playwright acceptance (`playwright.real.config.ts`).
 - SSH jobs now run fixed read-only tasks (`SYSTEM_INFO`) against approved devices (`targetDeviceId` + `task`); the Core builds a credential-free payload, the Satellite resolves the key and `known_hosts` locally, output is stored in `job.result_output`, and submission is audited. Inline password/private-key SSH payloads are rejected unless `lcm.ssh.inline-payload.enabled=true` (dev/test). Satellite image now ships `bash` and `openssh-client`.
 - Production gRPC now uses a dual-port layout: plaintext 8080 for REST/health/metrics and HTTPS 8443 with required client certificates for Satellite gRPC; plaintext gRPC is rejected by `GrpcTlsEnforcer` (`lcm.grpc.require-tls`). Default deployment image tag moves to the unreleased `v0.1.1`; `v0.1.0` images carry the old contract.
