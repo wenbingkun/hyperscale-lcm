@@ -34,6 +34,9 @@ public class JobDispatcher {
     @Inject
     JobExecutionService jobExecutionService;
 
+    @Inject
+    JobStateReader jobStateReader;
+
     /**
      * Consumes scheduled jobs from Kafka and dispatches them to Satellites via
      * gRPC.
@@ -53,8 +56,7 @@ public class JobDispatcher {
             return sshTargetVerifier.findMismatch(job)
                     .chain(mismatch -> {
                         if (mismatch == null) {
-                            send(job, nodeId);
-                            return Uni.createFrom().voidItem();
+                            return send(job, nodeId);
                         }
                         LOG.warnf("Refusing to dispatch SSH job %s: %s", job.getId(), mismatch);
                         return jobExecutionService.processJobStatusCallback(new JobStatusCallback(
@@ -64,11 +66,25 @@ public class JobDispatcher {
                     .onFailure().invoke(e -> LOG.errorf(e,
                             "Target verification or refusal recording failed for job %s; not dispatching", job.getId()));
         }
-        send(job, nodeId);
-        return Uni.createFrom().voidItem();
+        return send(job, nodeId);
     }
 
-    private void send(Job job, String nodeId) {
+    /** Only jobs still SCHEDULED in the database are sent; a job cancelled while its message was in flight is dropped. */
+    private Uni<Void> send(Job job, String nodeId) {
+        return jobStateReader.isScheduled(job.getId()).invoke(
+                scheduled -> {
+                    if (scheduled) {
+                        doSend(job, nodeId);
+                    } else {
+                        LOG.warnf("Not dispatching job %s: it is no longer SCHEDULED", job.getId());
+                    }
+                })
+                .onFailure().invoke(e -> LOG.errorf(e,
+                        "Could not confirm state of job %s; not dispatching", job.getId()))
+                .replaceWithVoid();
+    }
+
+    private void doSend(Job job, String nodeId) {
         ExecutionCommand executionCommand = resolveExecutionCommand(job);
 
         // Extract Context

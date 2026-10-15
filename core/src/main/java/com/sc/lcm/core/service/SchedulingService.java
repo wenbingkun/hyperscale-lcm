@@ -67,7 +67,10 @@ public class SchedulingService {
             job.setAssignedNodeId(nodeId);
             log.info("Job {} assigned to Node {} (Queuing to Kafka)", job.getId(), nodeId);
             try {
-                jobExecutionService.recordScheduledDispatchBlocking(job.getId(), nodeId);
+                if (!jobExecutionService.recordScheduledDispatchBlocking(job.getId(), nodeId)) {
+                    log.info("Job {} is no longer dispatchable (cancelled or finished); not queuing it", job.getId());
+                    return;
+                }
                 job.setStatus(Job.JobStatus.SCHEDULED);
                 Job dispatchJob = copyJob(job);
                 dispatchJob.setAssignedNode(null);

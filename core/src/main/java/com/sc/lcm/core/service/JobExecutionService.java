@@ -18,6 +18,7 @@ import io.quarkus.vertx.VertxContextSupport;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.persistence.LockModeType;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
@@ -104,28 +105,32 @@ public class JobExecutionService {
      * 记录作业已进入调度队列，避免 UI / API 仍停留在 PENDING。
      */
     public Uni<Void> recordScheduledDispatch(String jobId, String assignedNodeId) {
-        return persistScheduledDispatch(jobId, assignedNodeId);
+        return persistScheduledDispatch(jobId, assignedNodeId).replaceWithVoid();
     }
 
-    public void recordScheduledDispatchBlocking(String jobId, String assignedNodeId) {
+    /** @return true when the job may still be dispatched (false if it vanished or already left PENDING/SCHEDULED). */
+    public boolean recordScheduledDispatchBlocking(String jobId, String assignedNodeId) {
         try {
-            VertxContextSupport.subscribeAndAwait(() -> persistScheduledDispatch(jobId, assignedNodeId));
+            return VertxContextSupport.subscribeAndAwait(() -> persistScheduledDispatch(jobId, assignedNodeId));
         } catch (Throwable t) {
             throw new IllegalStateException("Failed to persist scheduled state for job " + jobId, t);
         }
     }
 
-    private Uni<Void> persistScheduledDispatch(String jobId, String assignedNodeId) {
-        return Panache.withTransaction(() -> Job.<Job>findById(jobId)
+    private record ScheduledDispatchResult(boolean dispatchable, ScheduledDispatchSnapshot snapshot) {
+    }
+
+    private Uni<Boolean> persistScheduledDispatch(String jobId, String assignedNodeId) {
+        return Panache.withTransaction(() -> Job.<Job>findById(jobId, LockModeType.PESSIMISTIC_WRITE)
                 .onItem().transform(job -> {
                     if (job == null) {
                         log.warn("Cannot mark job {} as scheduled because it does not exist", jobId);
-                        return null;
+                        return new ScheduledDispatchResult(false, null);
                     }
 
                     if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.SCHEDULED) {
-                        log.debug("Skipping schedule update for job {} because status is {}", jobId, job.getStatus());
-                        return null;
+                        log.info("Not dispatching job {} because its status is {}", jobId, job.getStatus());
+                        return new ScheduledDispatchResult(false, null);
                     }
 
                     boolean updated = false;
@@ -145,16 +150,17 @@ public class JobExecutionService {
                     }
 
                     if (!updated) {
-                        return null;
+                        return new ScheduledDispatchResult(true, null);
                     }
 
-                    return new ScheduledDispatchSnapshot(
+                    return new ScheduledDispatchResult(true, new ScheduledDispatchSnapshot(
                             job.getId(),
                             job.getName(),
                             job.getTenantId(),
-                            job.getAssignedNodeId());
+                            job.getAssignedNodeId()));
                 }))
-                .invoke(snapshot -> {
+                .invoke(result -> {
+                    ScheduledDispatchSnapshot snapshot = result.snapshot();
                     if (snapshot == null) {
                         return;
                     }
@@ -177,7 +183,7 @@ public class JobExecutionService {
                             .subscribe().with(v -> {
                             }, e -> log.error("Audit log failed", e));
                 })
-                .replaceWithVoid();
+                .map(ScheduledDispatchResult::dispatchable);
     }
 
     /**
@@ -241,13 +247,32 @@ public class JobExecutionService {
         // continues executing asynchronously.
         return Panache.withTransaction(() -> {
                     Scope scope = callbackSpan.makeCurrent();
-                    return Job.<Job>findById(callback.jobId())
+                    // Serialize callback and scheduling decisions with concurrent callbacks and cancellation.
+                    return Job.<Job>findById(callback.jobId(), LockModeType.PESSIMISTIC_WRITE)
                             .onItem().transformToUni(job -> {
                                 if (job == null) {
                                     log.warn("Job not found: {}, routing original message to DLQ",
                                             callback.jobId());
                                     if (rawMessage != null) {
                                         dlqEmitter.send(rawMessage);
+                                    }
+                                    return Uni.createFrom().nullItem();
+                                }
+
+                                CallbackDecision decision = decideCallback(job.getStatus(), finalCallbackStatus);
+                                if (decision != CallbackDecision.APPLY) {
+                                    if (job.getStatus() == finalCallbackStatus) {
+                                        log.debug("Ignoring repeated {} callback for job {}", finalCallbackStatus,
+                                                callback.jobId());
+                                    } else {
+                                        log.warn("Ignoring {} callback for job {}: current status {} ({})",
+                                                finalCallbackStatus, callback.jobId(), job.getStatus(), decision);
+                                    }
+                                    if (decision == CallbackDecision.IGNORE_FINAL
+                                            && job.getStatus() == JobStatus.CANCELLED
+                                            && isTerminal(finalCallbackStatus)) {
+                                        return recordLateResultAfterCancel(job, finalCallbackStatus, callback)
+                                                .replaceWith((JobStatusSnapshot) null);
                                     }
                                     return Uni.createFrom().nullItem();
                                 }
@@ -335,6 +360,34 @@ public class JobExecutionService {
     }
 
     static final int MAX_RESULT_OUTPUT_CHARS = 70_000;
+
+    enum CallbackDecision {
+        APPLY, IGNORE_FINAL, IGNORE_INVALID
+    }
+
+    /**
+     * Callback transition table (documentation/JOB_LIFECYCLE_CONTRACT.md): final states never change, and
+     * only RUNNING / COMPLETED / FAILED are valid reports from an executor.
+     */
+    static CallbackDecision decideCallback(JobStatus current, JobStatus reported) {
+        if (reported != JobStatus.RUNNING && reported != JobStatus.COMPLETED && reported != JobStatus.FAILED) {
+            return CallbackDecision.IGNORE_INVALID;
+        }
+        if (current == JobStatus.COMPLETED || current == JobStatus.FAILED || current == JobStatus.CANCELLED) {
+            return CallbackDecision.IGNORE_FINAL;
+        }
+        if (current == JobStatus.RUNNING && reported == JobStatus.RUNNING) {
+            return CallbackDecision.IGNORE_INVALID;
+        }
+        return CallbackDecision.APPLY;
+    }
+
+    private Uni<Void> recordLateResultAfterCancel(Job job, JobStatus reported, JobStatusCallback callback) {
+        String details = String.format("{\"action\":\"late_result_after_cancel\",\"reportedStatus\":\"%s\",\"exitCode\":%d}",
+                reported, callback.exitCode());
+        return auditService.logEvent(com.sc.lcm.core.domain.AuditLog.AuditEventType.JOB_CANCELLED, "JOB", job.getId(),
+                "SYSTEM", job.getTenantId(), details);
+    }
 
     private static boolean isTerminal(JobStatus status) {
         return status == JobStatus.COMPLETED || status == JobStatus.FAILED;

@@ -141,7 +141,11 @@ public class PartitionedSchedulingService {
                             originalJob.getId(), assignedNode.getId(), bestZone.zoneId);
 
                     try {
-                        jobExecutionService.recordScheduledDispatchBlocking(originalJob.getId(), assignedNode.getId());
+                        if (!jobExecutionService.recordScheduledDispatchBlocking(originalJob.getId(), assignedNode.getId())) {
+                            log.info("Job {} is no longer dispatchable (cancelled or finished); not queuing it",
+                                    originalJob.getId());
+                            return Collections.<String, Node>emptyMap();
+                        }
                         Job dispatchJob = cloneJob(originalJob);
                         dispatchJob.setAssignedNode(null);
                         dispatchJob.setAssignedNodeId(assignedNode.getId());
